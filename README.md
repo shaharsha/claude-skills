@@ -40,7 +40,7 @@ git clone https://github.com/shaharsha/claude-skill-gslides-sync ~/.claude/skill
 
 #### [presentation-generator](https://github.com/shaharsha/claude-skill-presentation-generator)
 
-Generate 16:9 PDF + PPTX decks where every slide is a custom AI-rendered image — not a templated layout with stock photos. Style locks globally via a reference image (palette, typography, motif); composition varies per slide (full-bleed photo, infographic, architecture flowchart, big-number callout, timeline, quote card, etc.). Research → narrative arc (SCQA / Duarte / Kawasaki) → style lock → parallel generation at concurrency 4 → QA → assemble. ~$3-5 in image-API spend for a 10-slide deck.
+Generate 16:9 PDF + PPTX decks where every slide is a custom AI-rendered image - not a templated layout with stock photos. Style locks globally via a reference image (palette, typography, motif); composition varies per slide (full-bleed photo, infographic, architecture flowchart, big-number callout, timeline, quote card, etc.). Research → narrative arc (SCQA / Duarte / Kawasaki) → style lock → parallel generation at concurrency 4 → QA → assemble. ~$3-5 in image-API spend for a 10-slide deck.
 
 ```bash
 git clone https://github.com/shaharsha/claude-skill-presentation-generator ~/.claude/skills/presentation-generator
@@ -66,7 +66,7 @@ git clone https://github.com/shaharsha/claude-skill-brand-assets ~/.claude/skill
 
 #### [image-generation](https://github.com/shaharsha/claude-skill-image-generation)
 
-Generate logos, icons, UI mockups, hero images, and product shots via **OpenAI gpt-image-2** (default since Apr 2026 — took #1 in Image Arena by +242 pts within 12 hours of release) or **Gemini Nano Banana 2 / Pro**. Packages model-selection logic, provider-specific prompt grammars (OpenAI wants labeled segments + negatives; Gemini wants narrative paragraphs + positives only — mixing them up degrades outputs), asset templates, a transparent-background pipeline (gpt-image-2 + `rembg`), Hebrew/RTL guidance, and an iteration loop where Claude reads the saved image with vision and decides ship/edit/rewrite before showing the user.
+Generate logos, icons, UI mockups, hero images, and product shots via **OpenAI gpt-image-2** (default since Apr 2026 - took #1 in Image Arena by +242 pts within 12 hours of release) or **Gemini Nano Banana 2 / Pro**. Packages model-selection logic, provider-specific prompt grammars (OpenAI wants labeled segments + negatives; Gemini wants narrative paragraphs + positives only - mixing them up degrades outputs), asset templates, a transparent-background pipeline (gpt-image-2 + `rembg`), Hebrew/RTL guidance, and an iteration loop where Claude reads the saved image with vision and decides ship/edit/rewrite before showing the user.
 
 ```bash
 git clone https://github.com/shaharsha/claude-skill-image-generation ~/.claude/skills/image-generation
@@ -100,7 +100,7 @@ A few of these are designed to work together:
 
 - `presentation-generator` calls `image-generation` for every slide.
 - `presentation-generator` consumes `brand-system`'s `BRAND.md` for palette / typography / motif lock when present in the directory.
-- `brand-system` (the document) and `brand-assets` (the pixels) are siblings — run both for a complete brand rollout.
+- `brand-system` (the document) and `brand-assets` (the pixels) are siblings - run both for a complete brand rollout.
 - `gdoc-sync` and `gslides-sync` share Google service-account setup; one SA works for both APIs.
 
 ---
