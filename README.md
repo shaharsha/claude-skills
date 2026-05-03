@@ -82,6 +82,16 @@ Expert prompt-engineering reference for AI agents on **Claude / GPT / Gemini** A
 git clone https://github.com/shaharsha/claude-skill-prompt-engineer ~/.claude/skills/prompt-engineer
 ```
 
+### Engineering decisions
+
+#### [tech-design-doc](https://github.com/shaharsha/claude-skill-tech-design-doc)
+
+Author technical design review documents - RFCs, ADRs, design docs, KEPs, partner-mode TDRs - sized correctly for the audience and the decision being made. Triages format first (1-2 page mini ADR vs 6-page standard RFC vs 10-20 page heavyweight KEP vs partner-mode for external dev partners), scaffolds from research-grounded templates, enforces load-bearing sections (BLUF summary, goals/non-goals with quantified targets, ≥3 alternatives, cross-cutting checklist, decision log), inserts mandatory C4 + sequence diagrams in mermaid, and runs a static audit against best-practice anti-patterns. Pairs with `gdoc-sync` to push the finished doc to a live Google Doc for stakeholder review.
+
+```bash
+git clone https://github.com/shaharsha/claude-skill-tech-design-doc ~/.claude/skills/tech-design-doc
+```
+
 ### Utilities
 
 #### [namecheap-domains](https://github.com/shaharsha/claude-skill-namecheap-domains)
@@ -102,6 +112,7 @@ A few of these are designed to work together:
 - `presentation-generator` consumes `brand-system`'s `BRAND.md` for palette / typography / motif lock when present in the directory.
 - `brand-system` (the document) and `brand-assets` (the pixels) are siblings - run both for a complete brand rollout.
 - `gdoc-sync` and `gslides-sync` share Google service-account setup; one SA works for both APIs.
+- `tech-design-doc` calls `gdoc-sync` at the end of the workflow to push the finished TDR to a live Google Doc for stakeholder comments.
 
 ---
 
