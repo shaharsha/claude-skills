@@ -1,0 +1,199 @@
+# {{TITLE}}
+
+| Field | Value |
+|---|---|
+| Version | v0.1 |
+| Authors | {{AUTHOR}} |
+| Created | {{DATE}} |
+| Last edited | {{DATE}} |
+| Status | Draft |
+| Approvers | {{APPROVERS}} |
+| Decision date | _(filled when accepted)_ |
+| Pre-read window | 1 week before first review |
+| Review cadence | multi-week, multiple sessions |
+
+## 1. Summary
+
+_BLUF in 1-2 paragraphs. The decision being requested + the headline trade-off + the deadline. A reader should know in 60 seconds why they're reading and what they're being asked to decide._
+
+## 2. Context
+
+_2-4 paragraphs. The business and technical landscape. Prior art (link previous RFCs). Why now. What's been tried before. Stakeholders and their constraints._
+
+## 3. Goals & Non-Goals
+
+### Goals
+_5-10 quantified outcomes. Each: what + number + measurement + source._
+
+- **G1.** …
+- **G2.** …
+
+### Non-Goals
+_5-15 explicit out-of-scope items._
+
+- **NG1.** …
+- **NG2.** …
+
+## 4. Proposal
+
+_Multi-section design. Lead with overview; per-component sub-sections cover decisions and trade-offs. Link to sibling specs for schemas/APIs._
+
+### 4.1 [Component]
+### 4.2 [Component]
+### 4.3 [Component]
+### 4.4 Data model
+_High-level schema decisions, not column-level detail._
+
+### 4.5 API surface
+_New endpoints, contracts, versioning strategy. Link to OpenAPI spec._
+
+## 5. Diagrams
+
+### System context (C4 level 1)
+
+```mermaid
+flowchart LR
+    %% System context — replace with actual diagram
+```
+
+### Container view (C4 level 2)
+
+```mermaid
+flowchart TB
+    %% Containers — replace with actual diagram
+```
+
+### Critical-flow sequence
+
+```mermaid
+sequenceDiagram
+    %% Sequence with retries, timeouts, failure paths
+```
+
+### Deployment topology (if non-trivial)
+
+```mermaid
+flowchart TB
+    %% Where each container runs (region, environment, scaling)
+```
+
+## 6. Alternatives Considered
+
+### Alternatives matrix
+
+| Axis | Status quo | Alt B | **Proposal** | Alt D | Alt E |
+|---|---|---|---|---|---|
+
+_Score every alternative on every axis. No row should be blank._
+
+### A1. Status quo
+**What:** _Don't make the change._
+**Why appealing:** _Zero effort, zero risk._
+**Why we reject it:** _Doesn't meet goals (specify which)._
+
+### A2. _Alt B_
+**What:** _…_
+**Why appealing:** _One real reason it's attractive._
+**Why we reject it:** _One real reason._
+
+### A3. **Proposal**
+**What:** _link back to §4._
+**Why appealing:** _…_
+**Trade-offs:** _Honest list of downsides we accept._
+
+### A4. _Alt D_
+**What:** _…_
+**Why appealing:** _…_
+**Why we reject it:** _…_
+
+### A5. _Alt E_ (optional)
+**What:** _…_
+**Why appealing:** _…_
+**Why we reject it:** _…_
+
+## 7. Cross-cutting concerns: Production Readiness Review
+
+### A. Feature enablement and rollback
+- _How can this feature be enabled/disabled at runtime?_
+- _Does enabling/disabling require a restart? A redeploy?_
+- _Tests for enablement/disablement?_
+- _If enabled then disabled, is the system back to a clean state?_
+
+### B. Rollout, upgrade, and rollback planning
+- _How can rollout fail? Can it impact already-running workloads?_
+- _What signals trigger a rollback?_
+- _Is the rollback plan tested in dev/staging?_
+- _Release-time migrations needed?_
+
+### C. Monitoring requirements
+- _Metrics emitted for success/failure?_
+- _Logs emitted? PII scrubbed?_
+- _Alerts configured?_
+- _Dashboards visualizing health?_
+
+### D. Dependencies
+- _External services / APIs? Failure behavior when each is down?_
+- _Contractual SLAs we depend on?_
+
+### E. Scalability
+- _Fastest-growing scaling vector?_
+- _Projected load at MVP launch / 6 months / year 1?_
+- _Bottlenecks (DB connections, LLM rate limits, memory, CPU)?_
+- _Plan when we hit 80% of any quota?_
+
+### F. Troubleshooting
+- _On-call diagnosis at 3am?_
+- _Most likely failure mode, what it looks like in dashboards?_
+- _Runbook location? Maintainer?_
+
+### G. Security and compliance
+- _New attack surface?_
+- _Auth model for new endpoints?_
+- _Privileged operations and who can perform them?_
+- _Audit events logged?_
+
+_Each item: filled in OR explicit N/A with reason. Silent absence forbidden._
+
+## 8. Open questions
+
+_Numbered, owner-tagged. These become the agenda._
+
+## 9. Success metrics & SLAs
+
+- **North-star metric.** Definition + measurement + target by date.
+- **Secondary metrics.** _List._
+- **SLAs.** _Numbers + breach consequences._
+
+## 10. Rollout / Migration plan
+
+| Phase | Owner | Window | Success criteria | Rollback trigger |
+|---|---|---|---|---|
+| Phase 1: dual-write | | week 1-2 | … | … |
+| Phase 2: cutover | | week 3 | … | … |
+| Phase 3: decommission | | week 4 | … | … |
+
+_Feature flag + kill switch per phase. Phase gate criteria explicit._
+
+## 11. Next steps
+
+- _Concrete actions with owners and dates._
+- _Linked follow-up RFCs/ADRs._
+- _First milestone date._
+
+---
+
+## Decision log row
+
+```
+| {{DATE}} | {{TITLE}} | Accepted | {{AUTHOR}} | drafts/{{FILENAME}} |
+```
+
+---
+
+## Review protocol
+
+- **Distribute:** ≥1 week before first review.
+- **Multi-session:** plan for 2-3 review sessions across 2-3 weeks.
+- **Async escalation:** if ≥2 round trips on any thread, schedule sync.
+- **PRR sign-off** required before status flips to Accepted.
+- **After Accepted:** decision-log row, follow-up RFCs filed, first phase scheduled.

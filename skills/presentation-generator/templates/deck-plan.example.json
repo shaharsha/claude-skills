@@ -1,0 +1,100 @@
+{
+  "title": "The Acme Concierge Master Plan",
+  "subtitle": "Reinventing customer support with a proactive personal assistant",
+  "audience": "Acme Retail product leaders and their tech leadership. Smart, practical, allergic to vague AI hype, and skeptical of anything that sounds like a chatbot replacement.",
+  "takeaway": "An intent-driven assistant that remembers shoppers across sessions, performs actions (not just talk), and degrades gracefully into a human handoff is a step-change beyond today's chatbots, and it ships in 90 days, not 9 months.",
+  "language": "en",
+  "narrative_arc": {
+    "situation": "Shoppers face a wall of fragmented chat interfaces, each forgetting them between sessions and shouting questions back at them.",
+    "complication": "Containment rates have plateaued; the chatbot-tour playbook has hit its ceiling, and serious teams are looking for what's next.",
+    "question": "What does an assistant that genuinely helps look like, and is it actually buildable in a quarter?",
+    "answer": "A hybrid agent: a fast cheap router for intent, a premium model for high-stakes interactions, tool calls instead of talk, and a graceful handoff to humans. Three milestones, MVP in 90 days."
+  },
+  "aesthetic": "modern dark UI infographic with a deep near-black background, single bright lime-accent color for emphasis and structure, white text, thin glowing card borders, line-art icons, and decorative dotted/wavy connector lines as background texture",
+  "palette": ["#0E1116", "#C5F542", "#FFFFFF", "#1F2530", "#7A8493"],
+  "motif": "thin glowing lime-green outlined cards with rounded corners; line-art icons in the same lime; faint dotted/wavy connector lines flowing across the background; small floating circular nodes in lime as decorative anchors",
+  "style_brief": "Every slide is a structured infographic on a near-black (#0E1116) background. The single accent color is bright lime green (#C5F542); use it sparingly for headlines, glowing borders, key numbers, and highlighted icons. Body text is white (#FFFFFF) for readable copy and slate (#7A8493) for secondary captions. Cards have rounded corners (~16px radius), 1px lime-green borders with a subtle outer glow. Icons are minimalist line-art in lime. Across every slide a faint background texture of curving dotted lines and small floating circular nodes ties the deck together. Typography is bold modern sans-serif (Inter or similar), large for headlines, regular for body, never serif. The deck is dark-mode-only, never use white or light backgrounds.",
+  "style_ref": "./refs/style-ref-1.png",
+  "slides": [
+    {
+      "id": "01",
+      "role": "cover, set up the deck's central premise with a memorable visual motif",
+      "composition": "title cover with central decorative motif and large title text",
+      "idea": "Open the deck with a striking motif that embodies the product's core idea (intent-driven, swinging into action) plus the title.",
+      "text_in_image": "The Acme Concierge Master Plan, Reinventing customer support with a proactive assistant, v0.3, April 2026",
+      "image_prompt": "Cover slide, 16:9, near-black background. Upper-third center: a Newton's cradle of five glowing lime-green orbs hanging from thin nearly-invisible cords from the top edge of the frame, with the leftmost orb pulled up and away as if about to swing, implying impending motion. Below the cradle, large bold white sans-serif title text on three lines: 'The Acme Concierge', 'Master Plan', then a smaller subtitle line in lighter gray: 'Reinventing customer support with a proactive assistant'. Bottom-right corner, very small text in slate-gray: 'v0.3, April 2026'. Generous margins around all elements. Faint dotted curving lines very subtly textured into the background.",
+      "speaker_notes": "Today's customer support is reactive: a wall of waiting, asking, and re-explaining. We're going to walk through what proactive looks like instead, why it matters now, and how a small team can ship the first version of it in ninety days. This is the master plan.",
+      "model": "openai"
+    },
+    {
+      "id": "02",
+      "role": "establish the problem with a visceral contrast",
+      "composition": "comparison split-screen (left = current chaotic state, right = proposed clean state)",
+      "idea": "Show the gap between today's fragmented chat hellscape and the focused intent-driven future in one frame.",
+      "text_in_image": "CURRENT: cognitive overload, VISION: Intent-Driven Assistant",
+      "image_prompt": "Split-screen 16:9, near-black background. Left half labeled at top in white sans-serif: 'CURRENT: cognitive overload'. The left half is filled with a chaotic dense scatter of dozens of small white message-bubble shapes overlapping each other, each containing a snippet of generic shopper question text, overwhelming, claustrophobic. Right half labeled at top in lime-green sans-serif: 'VISION: Intent-Driven Assistant'. The right half shows a single clean phone mockup centered, with one calm message bubble in lime-green saying 'Your last order shipped. Want me to set up auto-reorder for the supplements?'. Three small action chips below the bubble: 'Yes, set it up', 'Remind me later', 'Tell me more'. The right side has gentle lime-green wave lines flowing across, while the left side is denser and grayer. A thin vertical lime line separates the two halves.",
+      "speaker_notes": "On the left: the world your shopper lives in today. Every interaction is a fresh hostile interrogation. On the right: the same shopper, the same need, but the assistant already knows who they are, what's coming, and what to do about it. Same software category. Completely different first impression.",
+      "model": "openai"
+    },
+    {
+      "id": "03",
+      "role": "name the four core principles, codify the design philosophy",
+      "composition": "stacked principle cards (vertical list, 4 cards with icon + heading + body)",
+      "idea": "List the four UX principles that distinguish this kind of assistant from a chatbot.",
+      "text_in_image": "4 Core UX Principles, 1. One Thread, Persistent Context, 2. Stateful Memory, 3. Tool Use, Not Just Talk, 4. Graceful Degradation",
+      "image_prompt": "Stacked-card infographic, 16:9, near-black background. Title at top in white bold sans-serif: '4 Core UX Principles'. Below, four equal horizontal cards stacked vertically with small gaps between them. Each card has rounded corners and a thin glowing lime-green left edge. Inside each card, from left to right: a line-art lime-green icon (50px), then a bold lime-green heading, then a one-line white description. Card 1 icon = chat-bubble; heading = '1. One Thread, Persistent Context'; description = 'Single chat that flows between agents without forcing the user to choose'. Card 2 icon = brain-with-chip; heading = '2. Stateful Memory'; description = 'Agent always knows who you are and what you said last time'. Card 3 icon = wrench-and-gear; heading = '3. Tool Use, Not Just Talk'; description = 'Performs the action, not just describes it'. Card 4 icon = branching-path-to-headset; heading = '4. Graceful Degradation'; description = 'When the agent does not know, it hands off to a human cleanly'. Faint dotted background lines.",
+      "speaker_notes": "These four principles are the fence around the design space. One thread, never make the user choose which bot to ask. Stateful, the agent remembers. Tool use, actions, not advice. Graceful degradation, when it doesn't know, it hands off without asking the user to repeat themselves. If a feature violates one of these, it doesn't ship in v1.",
+      "model": "openai"
+    },
+    {
+      "id": "04",
+      "role": "land the headline metric, show the bar we're aiming for",
+      "composition": "big-number callout (single huge stat in center, supporting metric cards on the sides)",
+      "idea": "Anchor the audience on >60% containment as the primary success metric, with four supporting metrics around it.",
+      "text_in_image": ">60% Containment Rate, 70% Task Completion, 90% Escalation Quality, 7s First Response, 4.2/5 CSAT",
+      "image_prompt": "Big-number infographic, 16:9, near-black background. Center: a very large bold lime-green number '>60%' occupying ~35% of the canvas, with the words 'Containment Rate' immediately below in lime-green smaller text, then a one-line slate-gray caption: 'Conversations resolved by the agent without human handoff, 3-month target'. The center stat is enclosed in a glowing lime-green rounded rectangle. To its left and right, two stacked smaller stat cards each, total four supporting metrics. Top-left card: '>70%' in lime, label 'Task Completion'. Bottom-left card: '90%' in lime, label 'Escalation Quality'. Top-right card: '7s' in lime, label 'First-Response Time'. Bottom-right card: '4.2/5' in lime, label 'User Satisfaction (CSAT)'. Title at the top: 'Success Metrics' in white. Faint background dots and curves.",
+      "speaker_notes": "Sixty percent containment is the headline. Four out of every ten conversations may still need a human, and that's fine, but six should not. Around it: task completion shows we're actually finishing what users start. Escalation quality verifies we route hard cases well. Seven-second response time and a 4.2 CSAT keep the experience honest.",
+      "model": "openai"
+    },
+    {
+      "id": "05",
+      "role": "walk through the architecture, show how the system actually works",
+      "composition": "architecture flowchart with router and three branches",
+      "idea": "Make the technical architecture legible in one frame: a fast router fans out to specialized agents.",
+      "text_in_image": "Router & Orchestration, Shopper Profile + Message → The Router (Gemini Flash) → Branch A: Escalation / Branch B: Returns Intent / Branch C: Recommendations Intent",
+      "image_prompt": "Architecture flowchart, 16:9, near-black background. Title at top in white bold: 'Router & Orchestration Architecture'. Below the title, a system diagram. Top-center node: a thin-bordered rounded rectangle labeled 'Shopper Profile + Context' (loyalty tier, recent orders, app location). An arrow flows down to a larger glowing lime-green rounded rectangle labeled 'The Router (Gemini Flash), Evaluate intent and sentiment'. From the Router, three arrows fan downward and outward: leftmost arrow (gray, dashed) to a muted gray node 'Branch A: Escalation (high frustration / urgent issue) → Live agent handoff'; middle arrow (lime) to a node 'Branch B: Returns Intent → Returns Agent (Sonnet) → Order History + Policy KB (RAG)'; rightmost arrow (lime) to a node 'Branch C: Recommendations Intent → Recommendations Agent (Sonnet) → Tool Calling: Cart updates, Upsell, Loyalty redemption'. A caption at the bottom in white: 'Router enables accuracy, saves cost on simple queries, and keeps returns and recommendations context separate from the start.' All connectors are thin lines with arrowheads. Faint dotted background lines.",
+      "speaker_notes": "A single Sonnet call per message is expensive and unnecessary, most queries are simple. So we put a tiny fast Gemini Flash router in front. It reads intent and sentiment in 200ms, then dispatches to one of three branches: a Sonnet-powered returns agent, a Sonnet-powered recommendations agent, or escalation to humans. Eighty percent of cost goes away. Quality stays high.",
+      "model": "openai"
+    },
+    {
+      "id": "06",
+      "role": "show the roadmap, three milestones with MVP in focus",
+      "composition": "horizontal timeline with three milestone cards, the first highlighted",
+      "idea": "Make it concrete: v1 ships in 90 days; here's exactly what's in it.",
+      "text_in_image": "Roadmap, Milestone 1 (MVP, 1-3 months) HIGHLIGHTED, Milestone 2 (Expand), Milestone 3+ (Future)",
+      "image_prompt": "Horizontal timeline infographic, 16:9, near-black background. Title at top: 'Roadmap: Anchor on a Reliable MVP'. Below, three card-shaped milestones aligned horizontally, connected by a thin horizontal line with three lime-green circular nodes along it. The leftmost milestone card is the largest and has a brightly glowing lime-green border (it represents the focus). Its content: heading 'Milestone 1 (MVP, 1-3 months), Stable Reliable Returns Agent', then five bullets in white: 'Unified chat interface + Routing layer', 'Returns Q&A over Order History + Policy KB', 'Onboarding for new shoppers', 'Order-status tracking + delivery exception capture', 'Auto-eval infrastructure + live-agent handoff via Slack'. Middle milestone (gray border, less prominent): heading 'Milestone 2 (Expand)', short bullets: 'Full cart context, household members, recurring orders, Auto-Upsell'. Rightmost milestone (gray): 'Milestone 3+ (Future)', bullets: 'Native WhatsApp support, voice/text, Loyalty Concierge, continuous proactivity'. Bullets use a small lime-green check icon. Faint background dots.",
+      "speaker_notes": "Three milestones. M1 is what we ship in the first ninety days, returns agent, order Q&A, shopper onboarding, and the delivery exception flow. M2 expands to the full cart context and adds upsell. M3 extends to WhatsApp natively. Notice what's NOT in M1, household members, voice, full proactivity. We anchor on something reliable first.",
+      "model": "openai"
+    },
+    {
+      "id": "07",
+      "role": "name the brand voice and the anti-patterns to avoid",
+      "composition": "two-column do/don't comparison table (Brand Patterns vs Anti-Patterns)",
+      "idea": "Codify the voice that signals the brand, what to do, what NOT to do.",
+      "text_in_image": "Brand Voice, Trust > Velocity, Brand Patterns vs Anti-Patterns, Errors / Tone / Upsell",
+      "image_prompt": "Do/Don't comparison table, 16:9, near-black background. Title at top: 'Brand Voice: Personal, Reliable, Empathetic'. Below the title in a thin-bordered banner: 'Trust > Velocity. Retail is a relationship product. A correct, fast answer is not enough if something goes wrong.' Below that, a two-column comparison. Left column header: '✓ Brand Patterns' in lime-green with a check mark icon. Right column header: '✗ Anti-Patterns' in muted slate-gray with an X icon. Three rows below, each with a small category label in the leftmost gutter ('Errors', 'Tone', 'Upsell'). Errors row: left='Brand Apology, \"I am sorry, I gave you wrong information. The correct answer is...\" (taking responsibility)'; right='Self-corrects silently like a search engine'. Tone row: left='Humble Confidence, \"Let me check with the team\" in edge cases, definitive answers only when grounded in data'; right='Apologizes for existing (\"I am just an AI\")'. Upsell row: left='Detects severity, postpones the entire upsell flow during a complaint'; right='Offers Wellness perks to a shopper who just opened a return claim'. Thin horizontal divider lines between rows. Faint background dots.",
+      "speaker_notes": "Voice is non-negotiable in retail. Trust beats velocity every time. When the agent is wrong, it apologizes like a brand. When it's uncertain, it admits it without being self-deprecating. And when the shopper is upset, the upsell flow goes away, no exceptions.",
+      "model": "openai"
+    },
+    {
+      "id": "08",
+      "role": "closing CTA, name the unblocking decisions and what comes next",
+      "composition": "three-column checklist (categories of go/no-go decisions)",
+      "idea": "End with concrete blockers to clear so the team can start in two weeks.",
+      "text_in_image": "Toward Build, Go/No-go Decisions, Legal & InfoSec / Technical Architecture / Product & Brand, Working Session this week",
+      "image_prompt": "Closing checklist infographic, 16:9, near-black background. Title at top: 'Toward Build: Blockers and Next Steps (Go/No-go)'. Below, three columns of checkboxes. Column 1 header in white: 'Category 1: Legal & InfoSec'; two unchecked checkbox items below: 'Approval: shopper PII processing against external LLMs (Data Residency)', 'Approval: transparency disclosures (GDPR/CCPA) toward the user'. Column 2 header: 'Category 2: Technical Architecture'; two CHECKED green checkboxes: 'Full access to Dev environments and APIs (including the legacy CRM and the OMS)', 'Closing exact technical mechanism for live-agent handoff via Slack'. Column 3 header: 'Category 3: Product & Brand'; two CHECKED green checkboxes: 'Final glossary terms, exact wording and official tone register', 'Joint decision on agent name (\"A\" vs \"Concierge\" placeholder)'. Below the three columns, a wide glowing lime-green banner: 'Working Session for closing Scenarios and final v0.3 spec, this week.' Faint background curves and dots.",
+      "speaker_notes": "We have eight open decisions, color-coded by ownership. Six are technical and product, closeable in this week's working session. Two are legal and InfoSec, those need formal sign-off. Once those land, the team starts day-one of the ninety-day clock. We'll book the working session for Wednesday.",
+      "model": "openai"
+    }
+  ]
+}

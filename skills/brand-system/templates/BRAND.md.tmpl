@@ -1,0 +1,725 @@
+# {{PRODUCT}} — Brand & Design System
+
+> Source of truth for the {{PRODUCT}} brand. Governs the landing site,
+> the web app, marketing assets, and any future surface. Written as an
+> opinion, not a template — where this doc disagrees with a "best
+> practice," follow this doc.
+
+**Brand name**: {{PRODUCT}}.
+**Product**: {{POSITIONING}}
+**Primary locale(s)**: {{LOCALE}}.
+
+---
+
+## 0. The idea
+
+One sentence: **{{POSITIONING}}**
+
+{{SIGNATURE_PRIMITIVE_ONELINER}}
+
+Strip everything else — keep only the single load-bearing element — and
+the brand is still recognisable. That's the bar.
+
+{{TODO}} Flesh out: what remains when the mark and all chrome are removed?
+
+---
+
+## 1. Reading the mark
+
+The mark is {{MARK_DESCRIPTION}}.
+
+It is {{N_READINGS}} things at once, and the design system builds on each reading:
+
+1. **{{MARK_READING_1_TITLE}}.** {{MARK_READING_1_DESC}}
+2. **{{MARK_READING_2_TITLE}}.** {{MARK_READING_2_DESC}}
+3. **{{MARK_READING_3_TITLE}}.** {{MARK_READING_3_DESC}}
+
+**Construction notes**:
+
+- {{CONSTRUCTION_NOTE_1}}
+- {{CONSTRUCTION_NOTE_2}}
+- {{CONSTRUCTION_NOTE_3}}
+
+{{TODO}} Confirm each reading is real (the logo actually reads that way), not aspirational.
+
+---
+
+## 2. The {{SIGNATURE_PRIMITIVE}} system
+
+The {{SIGNATURE_PRIMITIVE}} is not a decoration — it is a **semantic primitive**
+that appears across the whole product. Rule: **{{PALETTE_ACCENT}} = {{SIGNATURE_PRIMITIVE_MEANING}}**.
+It is the only saturated color in the entire brand. When a user sees it,
+it means something consistent, everywhere.
+
+### Where the {{SIGNATURE_PRIMITIVE}} appears
+
+| Surface | Treatment |
+|---|---|
+| **The mark** | {{PRIMITIVE_IN_MARK}} |
+| **Loading / waiting** | {{PRIMITIVE_IN_LOADING}} |
+| **Active navigation** | {{PRIMITIVE_IN_NAV}} |
+| **Bullet replacement in prose** | {{PRIMITIVE_IN_BULLETS}} |
+| **Focus indicator** | {{PRIMITIVE_IN_FOCUS}} |
+| **Link hover / CTA accent** | {{PRIMITIVE_IN_CTA}} |
+| **Status pip / online indicator** | {{PRIMITIVE_IN_STATUS}} |
+| **Unsaved / in-progress indicator** | {{PRIMITIVE_IN_UNSAVED}} |
+
+Where the {{SIGNATURE_PRIMITIVE}} never appears:
+
+- {{NEVER_APPEARS_1}}
+- {{NEVER_APPEARS_2}}
+- {{NEVER_APPEARS_3}}
+
+{{TODO}} If you can't fill 8 use-sites above, the primitive isn't load-bearing enough. Rework §2 before continuing.
+
+---
+
+## 3. Signature moves
+
+The things that make a {{PRODUCT}} screen identifiable at a glance —
+without the logo.
+
+1. **{{SIGNATURE_MOVE_1}}**
+2. **{{SIGNATURE_MOVE_2}}**
+3. **{{SIGNATURE_MOVE_3}}**
+4. **{{SIGNATURE_MOVE_4}}**
+5. **{{SIGNATURE_MOVE_5}}**
+
+**One rule we deliberately break**: {{BROKEN_BEST_PRACTICE}}
+
+### Falsifiable principles
+
+Each of these is a rule a pull request can fail a review against. Not values.
+
+1. {{PRINCIPLE_1}}
+2. {{PRINCIPLE_2}}
+3. {{PRINCIPLE_3}}
+
+If a design decision violates any of these, it's wrong — even if it
+"looks nice." The signature is what you lose first when you try to
+please everyone.
+
+---
+
+## 4. Brand essence
+
+**What we are.** {{WHAT_WE_ARE}}
+
+**What we are not.** {{WHAT_WE_ARE_NOT}}
+
+**Tone.** {{TONE_ONELINER}}
+
+**Positioning sentence.** *{{POSITIONING}}*
+
+---
+
+## 5. Logo system
+
+### The mark
+
+{{MARK_ONE_LINER}} (see §1 for the deep reading)
+
+### Variants
+
+Canonical assets live at `public/brand/` and are referenced as `/brand/<file>`.
+SVG is primary; PNG is fallback.
+
+| Variant | SVG | PNG | Use |
+|---|---|---|---|
+| Icon (light) | `/brand/logo-icon.svg` | `/brand/logo-icon.png` | Default. Works on any background. |
+| Icon (dark) | `/brand/logo-icon-dark.svg` | `/brand/logo-icon-dark.png` | Dark surfaces only. |
+| Wordmark (light) | `/brand/logo-wordmark.svg` | `/brand/logo-wordmark.png` | Default wordmark on light surfaces. |
+| Wordmark (dark) | `/brand/logo-wordmark-dark.svg` | `/brand/logo-wordmark-dark.png` | Dark surfaces only. |
+
+### Favicon + PWA pack
+
+Generate via the [brand-assets](https://github.com/shaharsha/claude-skill-brand-assets)
+skill's `icon-pack.sh`. This section specs the **requirements**:
+
+| File | Size | Bg | Dark-aware | Notes |
+|---|---|---|---|---|
+| `favicon.svg` | vector | transparent | **yes** — via embedded `<style>@media (prefers-color-scheme: dark)` swapping fg fills; accent stays constant | Modern browsers (Chrome 111+, Firefox, Safari) |
+| `favicon-32x32.png` | 32×32 | transparent | no | PNG fallback for browsers that don't render SVG favicons |
+| `apple-touch-icon.png` | 180×180 | **opaque** {{PALETTE_BG}} | no | iOS auto-rounds corners; refuses transparency |
+| `icon-192.png` | 192×192 | transparent | no | PWA home-screen |
+| `icon-512.png` | 512×512 | transparent | no | PWA splash + large surfaces |
+| `icon-192-maskable.png` | 192×192 | opaque, 20% safe-area padding | no | Android may mask to any shape |
+| `icon-512-maskable.png` | 512×512 | opaque, 20% safe-area padding | no | Same, larger |
+| `og-image.png` (light) | 1200×630 | opaque {{PALETTE_BG}} | — | Social card for light-mode platforms |
+| `og-image-dark.png` | 1200×630 | opaque {{PALETTE_FG}} | — | Social card for dark-mode platforms and Discord |
+| `manifest.json` | — | — | — | Lists the above; `theme_color: {{PALETTE_BG}}`, `background_color: {{PALETTE_BG}}` |
+
+### The system-aware SVG favicon (2026 move)
+
+```xml
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <style>
+    .fg     { fill: {{PALETTE_FG}}; }     /* dark on light systems */
+    .accent { fill: {{PALETTE_ACCENT}}; } /* theme-constant */
+    @media (prefers-color-scheme: dark) {
+      .fg   { fill: {{PALETTE_BG}}; }     /* swap to light on dark systems */
+    }
+  </style>
+  <!-- mark geometry here -->
+</svg>
+```
+
+### Theme-color meta tags
+
+```html
+<meta name="theme-color" content="{{PALETTE_BG}}" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="{{PALETTE_FG}}" media="(prefers-color-scheme: dark)">
+```
+
+Without both, the browser chrome clashes in one of the two system
+themes.
+
+### Construction rules
+
+- **Clear space**: ≥ 1× the height of the mark on every side.
+- **Minimum size**: icon 24px, wordmark 120px wide.
+- **Colour lockdown**: accent is always `{{PALETTE_ACCENT}}`. Never recolour.
+- **Background**: `{{PALETTE_BG}}` or `{{PALETTE_FG}}`. White allowed with restraint.
+
+### Don'ts
+
+- Don't outline the mark. It's filled.
+- Don't rotate, skew, emboss, or shadow.
+- Don't swap the accent for a gradient or emoji.
+- Don't animate the mark in UI chrome — only in hero moments on first paint.
+
+---
+
+## 6. Colour system
+
+### The story
+
+{{COLOUR_STORY}}
+
+### Core (use daily)
+
+| Token | Hex | Role |
+|---|---|---|
+| `--color-bg` | `{{PALETTE_BG}}` | Primary light surface. Default everywhere. |
+| `--color-fg` | `{{PALETTE_FG}}` | Primary dark surface + default type colour on light. |
+| `--color-accent` | `{{PALETTE_ACCENT}}` | {{SIGNATURE_PRIMITIVE}}. CTAs. **The only saturated colour in the product.** ≤ 8% of any screen. |
+
+### Warm/cool neutrals
+
+| Token | Hex | Use |
+|---|---|---|
+| `--color-bg-50` | `{{PALETTE_BG_50}}` | Highest-light surface (cards, inputs) |
+| `--color-bg-200` | `{{PALETTE_BG_200}}` | Borders, dividers |
+| `--color-bg-300` | `{{PALETTE_BG_300}}` | Muted text on bg |
+| `--color-bg-500` | `{{PALETTE_BG_500}}` | Secondary text on bg |
+| `--color-fg-300` | `{{PALETTE_FG_300}}` | Hairline on dark |
+| `--color-fg-500` | `{{PALETTE_FG_500}}` | Elevated dark surfaces |
+| `--color-fg-700` | `{{PALETTE_FG_700}}` | Card bg in dark mode |
+
+### Semantic tokens
+
+Tuned inside the {{PRODUCT}} palette — not bootstrapped from a UI kit.
+
+| Token | Hex | Use |
+|---|---|---|
+| `--color-success` | `{{SEMANTIC_SUCCESS}}` | Success states |
+| `--color-warning` | `{{SEMANTIC_WARNING}}` | Warnings |
+| `--color-danger` | `{{SEMANTIC_DANGER}}` | Destructive / hard-block |
+| `--color-info` | `{{SEMANTIC_INFO}}` | Neutral notifications |
+
+### The 62/30/8 rule
+
+Every screen breaks down roughly:
+
+- **~62% bg or fg** (dominant surface)
+- **~30% neutrals** (text, borders, secondary surfaces)
+- **~8% accent** (CTAs, brand moments, {{SIGNATURE_PRIMITIVE}}s)
+
+When a screen feels "too branded," the accent is over 8%. Pull back.
+
+### Light vs dark — accent is constant
+
+Dark mode swaps bg and fg roles but **keeps the accent identical**. The
+brand's only pigment is its only pigment regardless of theme. This is
+non-negotiable.
+
+See §17 for the `@theme` + `:root` + `[data-theme="dark"]` implementation.
+
+---
+
+## 7. Typography
+
+### Face
+
+**Primary**: **{{PRIMARY_FONT}}** for {{SCRIPT_SUPPORT}}.
+
+{{TYPEFACE_RATIONALE}}
+
+```html
+<link href="https://fonts.googleapis.com/css2?family={{PRIMARY_FONT_URL}}&display=swap" rel="stylesheet">
+```
+
+### Tabular numerals
+
+```css
+.tabular { font-variant-numeric: tabular-nums; }
+```
+
+Prices and stats align cleanly in columns.
+
+### Font smoothing
+
+```css
+body { -webkit-font-smoothing: auto; }
+```
+
+**Never** `antialiased` — it renders heavier scripts (Hebrew, Arabic,
+Devanagari) unreadably thin on low-DPI Android.
+
+### The scale
+
+| Token | Size | LH | Weight | Use |
+|---|---|---|---|---|
+| `--text-mega` | `clamp(3rem, 12vw, 12rem)` | 0.95 | 700 | Hero moments — once per page max |
+| `--text-display` | `clamp(2.5rem, 5vw + 1rem, 4.5rem)` | 1.05 | 700 | Section heros |
+| `--text-h1` | `clamp(2rem, 3vw + 1rem, 3rem)` | 1.1 | 700 | Page titles |
+| `--text-h2` | `clamp(1.5rem, 2vw + 0.75rem, 2.25rem)` | 1.15 | 600 | Section titles |
+| `--text-h3` | `clamp(1.25rem, 1vw + 1rem, 1.5rem)` | 1.2 | 600 | Card titles |
+| `--text-lead` | `clamp(1.125rem, 0.5vw + 1rem, 1.375rem)` | 1.55 | 400 | Lead paragraphs |
+| `--text-body` | `1rem` | 1.75 | 400 | Default body |
+| `--text-body-sm` | `0.875rem` | 1.55 | 400 | Secondary body, captions |
+| `--text-ui` | `0.9375rem` | 1.4 | 500 | Buttons, nav, labels |
+| `--text-micro` | `0.75rem` | 1.3 | 500 | Meta, timestamps, legal |
+
+### Measure (line length)
+
+- Body prose: 45–75ch
+- Lead paragraphs: 55–65ch
+- Form inputs with help text: 55ch max
+
+### RTL-specific moves
+
+{{RTL_TYPE_MOVES}}
+
+---
+
+## 8. Iconography
+
+### Style
+
+Single-weight line icons, 1.75px stroke at 24×24. Rounded caps, rounded
+joins. Prefer Lucide (`lucide-react`) or a library with consistent
+construction.
+
+### Colour rules
+
+- Default icon color = `--text`. Inherits from surrounding text.
+- On CTAs: `currentColor` (never hard-coded white).
+- **Never tint icons {{PALETTE_ACCENT}}** — the accent is reserved for the
+  {{SIGNATURE_PRIMITIVE}} system. Icons stay monochrome.
+
+### Size tokens
+
+| Token | Size | Use |
+|---|---|---|
+| `--icon-xs` | 14px | Inline with small text |
+| `--icon-sm` | 16px | Inline with body |
+| `--icon-md` | 20px | Default UI |
+| `--icon-lg` | 24px | Section headers |
+| `--icon-xl` | 32px | Empty states |
+
+### RTL flipping
+
+Directional icons (arrows, chevrons, send/reply) flip via
+`.icon-flip { transform: scaleX(-1); }` in `[dir="rtl"]` scope.
+Non-directional (search, user, check, clock) stay upright.
+
+---
+
+## 9. Spacing & layout
+
+### 8-point grid
+
+| Token | Value | Use |
+|---|---|---|
+| `--spacing-1` | 4px | Icon gaps, inline micro-spacing |
+| `--spacing-2` | 8px | Tight clusters |
+| `--spacing-3` | 12px | Form control padding Y |
+| `--spacing-4` | 16px | Default gap |
+| `--spacing-6` | 24px | Between related blocks |
+| `--spacing-8` | 32px | Container padding on desktop |
+| `--spacing-12` | 48px | Between sub-sections |
+| `--spacing-16` | 64px | Between major sections |
+| `--spacing-24` | 96px | Hero padding, page rails |
+| `--spacing-32` | 128px | Editorial breathing room |
+
+### Containers
+
+- `--container-max`: 1080px — default
+- `--container-narrow`: 680px — long-form copy, legal, onboarding
+- `--container-wide`: 1280px — dashboards only
+
+Use logical properties so RTL and notch-safety are automatic:
+
+```css
+.rail { padding-inline: max(1rem, env(safe-area-inset-left)); }
+```
+
+### Radii
+
+| Token | Value | Use |
+|---|---|---|
+| `--radius-sm` | 6px | Inputs, badges |
+| `--radius-md` | 10px | Dropdowns, chips |
+| `--radius-lg` | 14px | Cards, modals |
+| `--radius-xl` | 20px | Feature panels |
+| `--radius-pill` | 9999px | Buttons, pills |
+
+**Concentric radii rule**: nested elements share curvature. A `--radius-lg`
+card holds children with `--radius-md`. Never mix arbitrary radii inside
+one composition.
+
+### Density — marketing vs dashboard
+
+Marketing pages use `--spacing-16` to `--spacing-32` between major
+blocks. Dashboards halve this. Tight is what everyone else does —
+marketing goes the other way.
+
+---
+
+## 10. Surfaces & materials
+
+{{SURFACES_INTRO}}
+
+### The default material
+
+{{DEFAULT_MATERIAL_DESCRIPTION}}
+
+### The floating material
+
+{{FLOATING_MATERIAL_DESCRIPTION}}
+
+### Hero backgrounds
+
+{{HERO_BG_DESCRIPTION}}
+
+---
+
+## 11. Motion
+
+### Principle
+
+**Static by default.** Motion serves two jobs only: confirming a user
+action (150–250ms), or embodying the signature primitive. Everything
+else is off.
+
+### Tokens
+
+| Token | Value | Use |
+|---|---|---|
+| `--ease-out` | `cubic-bezier(0.16, 1, 0.3, 1)` | Enters, hovers |
+| `--ease-in-out` | `cubic-bezier(0.65, 0, 0.35, 1)` | Bi-directional |
+| `--duration-fast` | 150ms | Hover, focus, small state changes |
+| `--duration-base` | 200ms | Dropdowns, tooltips |
+| `--duration-slow` | 320ms | Modals, sheets |
+
+### The signature animation
+
+```css
+@keyframes signature-pulse {
+  0%, 100% { transform: scale(1);    opacity: 1; }
+  50%      { transform: scale(0.92); opacity: 0.85; }
+}
+.{{SIGNATURE_PRIMITIVE_CLASS}} { animation: signature-pulse 1.8s var(--ease-in-out) infinite; }
+```
+
+### Reduced motion
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+```
+
+---
+
+## 12. Imagery & illustration
+
+### Photography
+
+{{PHOTOGRAPHY_RULES}}
+
+### Illustration
+
+{{ILLUSTRATION_RULES}}
+
+### Anti-patterns
+
+- Stock photography of "diverse smiling business people around a laptop."
+- 3D isometric rooms, gradient-mesh blobs.
+- AI-generated humans in production.
+- Emoji in marketing copy (fine in UI chat bubbles).
+
+---
+
+## 13. Voice & tone
+
+### The voice sample
+
+This is what {{PRODUCT}} sounds like. Not a description of the voice — the voice itself:
+
+> {{VOICE_SAMPLE}}
+
+### Core rules
+
+1. {{VOICE_RULE_1}}
+2. {{VOICE_RULE_2}}
+3. {{VOICE_RULE_3}}
+4. Short sentences. Concrete outcomes > capabilities.
+5. Numbers beat adjectives. "30 min saved/day" > "boost productivity."
+
+### Tone matrix by reader emotional state
+
+| Reader state | Formality | Warmth | Humour | Urgency | Example |
+|---|---|---|---|---|---|
+| Confused / lost | low | high | none | low | "No worries — let's retry that." |
+| Frustrated / blocked | low | medium | none | medium | "Here's what broke. Here's the fix." |
+| Relieved / fixed | low | high | light | low | "Back on track." |
+| Celebrating | low | high | light | low | "You did the thing." |
+| Learning | medium | medium | none | low | "Quick context, then the how." |
+| Error / hard-block | medium | low | none | high | "Can't continue until X. Contact: Y." |
+
+### Say this, not that
+
+| Instead of | Say |
+|---|---|
+| "Revolutionize your workflow" | "Give your inbox back." |
+| "AI-powered assistant" | "An agent that works for you." |
+| "Seamlessly integrated" | "Lives where you already are." |
+| "Learn more" | "See how it works." |
+| "Get started today" | "{{CTA_OPENING}}" |
+
+### RTL specifics
+
+{{RTL_VOICE_NOTES}}
+
+### Microcopy
+
+- **CTAs**: verb-first. `{{CTA_EXAMPLES}}`.
+- **Empty states**: explain what will appear; don't apologise for nothing being there.
+- **Errors**: what happened, what to do. Never blame the user.
+- **Loading**: show a loader only if the wait exceeds 400ms.
+
+---
+
+## 14. Accessibility
+
+### Contrast floors — WCAG 2.2 AA
+
+- **Body text**: 4.5:1
+- **Large text** (≥ 24px, or ≥ 19px bold): 3:1
+- **UI controls, focus rings, non-text**: 3:1
+- **Target size** (WCAG 2.2 new AA, 2.5.8): ≥ 24×24 CSS px, with exceptions for inline text links
+
+{{CONTRAST_MATRIX}}
+
+Run `~/.claude/skills/brand-system/scripts/audit-contrast.py \
+  --bg {{PALETTE_BG}} --fg {{PALETTE_FG}} --accent {{PALETTE_ACCENT}}`
+to refresh.
+
+### Focus rings
+
+```css
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: inherit;
+}
+```
+
+New in WCAG 2.2 (2.4.11 **Focus Not Obscured**): the focus ring cannot
+be fully hidden behind a sticky header, toast, or overlay. Audit with
+keyboard-only navigation.
+
+### Reduced motion
+
+See §11. All motion respects `prefers-reduced-motion: reduce`.
+
+### Forced colors (Windows high-contrast)
+
+```css
+@media (forced-colors: active) {
+  :root { --accent: CanvasText; --border: CanvasText; }
+}
+```
+
+### RTL equivalence
+
+Every feature works identically in RTL and LTR. Never ship a feature
+QA'd only in one direction. Logical CSS properties
+(`padding-inline-start`, `margin-block-end`) everywhere. Never
+`padding-left`.
+
+---
+
+## 15. Reference set
+
+The shelf {{PRODUCT}} sits on. Not to copy — to understand.
+
+{{REFERENCE_BRANDS}}
+
+What we are *not*:
+
+{{ANTI_REFERENCE_BRANDS}}
+
+---
+
+## 16. Anti-patterns
+
+Things {{PRODUCT}} does not do.
+
+{{ANTI_PATTERNS}}
+
+Don'ts from past mistakes:
+
+1. {{REAL_DONT_1}}
+2. {{REAL_DONT_2}}
+3. {{REAL_DONT_3}}
+
+---
+
+## 17. Implementation — Tailwind v4 `@theme`
+
+Drop into `src/index.css` (landing + app). Full source of the token file
+is `tokens.css` at the repo root — this section mirrors it for reference.
+
+```css
+@theme {
+  /* Primitives — see tokens.css for the full set */
+  --color-bg:     {{PALETTE_BG}};
+  --color-fg:     {{PALETTE_FG}};
+  --color-accent: {{PALETTE_ACCENT}};
+
+  --font-sans: '{{PRIMARY_FONT}}', system-ui, sans-serif;
+
+  --ease-out:      cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+}
+
+:root {
+  --bg:          var(--color-bg);
+  --bg-elevated: var(--color-bg-50);
+  --text:        var(--color-fg);
+  --border:      var(--color-bg-200);
+  --accent:      var(--color-accent);
+}
+
+[data-theme="dark"] {
+  --bg:          var(--color-fg-900);
+  --bg-elevated: var(--color-fg-700);
+  --text:        var(--color-bg);
+  --border:      var(--color-fg-500);
+  --accent:      var(--color-accent); /* unchanged — parity rule */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:          var(--color-fg-900);
+    --bg-elevated: var(--color-fg-700);
+    --text:        var(--color-bg);
+    --border:      var(--color-fg-500);
+  }
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: auto;
+  line-height: 1.75;
+}
+html[lang="he"] body, html[lang="ar"] body { line-height: 1.8; }
+```
+
+---
+
+## 18. Components
+
+Opinionated copy-paste primitives. All CSS below assumes the `@theme`
+block from §17 is loaded. Every component must document **four states**:
+default, loading, empty, error.
+
+### Buttons
+
+Five variants × three sizes. Max **one** `.btn-primary` per screen-fold.
+
+| Class | Use |
+|---|---|
+| `.btn-primary` | Accent fill, bg-coloured text. The "please click this" moment. |
+| `.btn-secondary` | Text on transparent, neutral border. Peer to primary, recessive. |
+| `.btn-ghost` | Text, no border until hover. Nav, toolbars, quiet actions. |
+| `.btn-glass` | On photographs. Uses the glass material (§10). |
+| `.btn-destructive` | Danger fill. Irreversible actions only. |
+
+| Size | Height | Padding-X | Font | Icon |
+|---|---|---|---|---|
+| `.btn-sm` | 36px | 14px | 0.875rem / 500 | 14px |
+| `.btn-md` (default) | 44px | 20px | 0.9375rem / 500 | 16px |
+| `.btn-lg` | 52px | 28px | 1rem / 600 | 18px |
+
+**Loading state**: replace button contents with a pulsing
+`{{SIGNATURE_PRIMITIVE}}`. Freeze width with `inline-size: <measured>;`
+so layout doesn't jump.
+
+### Inputs, Cards, Badges, Nav, Alerts, Dialogs, Menus, Prose
+
+{{COMPONENT_DETAILS}}
+
+### Landing primitives
+
+**Hero** — one per landing. Uses `--text-mega` (once per page).
+**Feature row** — 3 columns desktop, stack mobile. No cards — pure typography.
+**Pricing tier** — one card per plan. The period in the price is the
+  {{SIGNATURE_PRIMITIVE}}.
+**FAQ accordion** — native `<details>`/`<summary>`, no JS.
+**Footer** — minimal. No newsletter signup. No social icons unless used.
+
+---
+
+## 19. Migration plan
+
+Order of operations when the redesign kicks off. Status as of {{DATE}}:
+
+1. {{MIGRATION_STEP_1}}
+2. {{MIGRATION_STEP_2}}
+3. {{MIGRATION_STEP_3}}
+4. {{MIGRATION_STEP_4}}
+
+Legend: ✅ done / ⚠️ partial / ❌ not started.
+
+---
+
+## 20. What this document is not
+
+- Not a component library. Build components in the apps; this governs
+  *look*, not *API*.
+- Not a brand guidelines PDF for external partners — `BRAND.pdf` is the
+  derived distillation.
+- Not versioned as a product. Update in place. One source of truth.
+
+---
+
+## Decision log
+
+| Date | Decision |
+|---|---|
+| {{DATE}} | Approved initial {{PRODUCT}} brand system. |
+| {{DATE}} | Adopted {{PALETTE_ACCENT}} as the accent — the only saturated colour. |
+| {{DATE}} | Canonicalised the {{SIGNATURE_PRIMITIVE}} as the brand's semantic primitive. |
+| {{DATE}} | Adopted Tailwind v4 `@theme` + `:root` + `[data-theme="dark"]` as the token layer. |
+| {{DATE}} | Adopted WCAG 2.2 AA as the accessibility floor; audited via `audit-contrast.py`. |

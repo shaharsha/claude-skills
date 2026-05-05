@@ -1,0 +1,9 @@
+# macOS
+.DS_Store
+# editor
+*.swp
+*.swo
+.vscode/
+# python bytecode
+__pycache__/
+*.pyc

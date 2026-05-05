@@ -1,0 +1,170 @@
+# {{TITLE}}
+
+| Field | Value |
+|---|---|
+| Version | v0.1 |
+| Author | {{AUTHOR}} |
+| Created | {{DATE}} |
+| Last edited | {{DATE}} |
+| Status | Draft |
+| Approvers | {{APPROVERS}} |
+| Decision date | _(filled when accepted)_ |
+| Pre-read window | 24h before review |
+
+## 1. Summary
+
+_BLUF: one paragraph naming the decision being requested. Reader should know in 30 seconds why they're reading. Two sentences for the decision itself; max one paragraph total._
+
+_Example: "We propose migrating the chat-history store from MongoDB to Postgres by Q3 to bring p95 query latency below 200ms. Decision needed by 2026-05-15."_
+
+## 2. Context
+
+_2 paragraphs. What exists today, why this matters now, what business or technical pressure is driving the change. Link to the product plan or prior RFCs rather than re-stating their content._
+
+## 3. Goals & Non-Goals
+
+### Goals
+_3-7 quantified outcomes. Each: what + number + measurement + source._
+
+- **G1.** _Outcome with number, e.g. "p95 query latency ≤ 200ms, measured via dashboard X. Source: prior incident IR-2026-04 set the bar."_
+- **G2.** …
+- **G3.** …
+
+### Non-Goals
+_3-10 things explicitly out of scope. Each: what + brief why._
+
+- **NG1.** _Out of scope: …. Justification: …._
+- **NG2.** …
+
+## 4. Proposal
+
+_Lead with a 1-2 paragraph overview. Then go into details ONLY for parts relevant to the design and its trade-offs. Do not copy-paste schemas, full API specs, or function signatures — link to a sibling spec or the source code._
+
+### 4.1 Component A
+_What changes, key decisions, trade-offs._
+
+### 4.2 Component B
+_What changes, key decisions, trade-offs._
+
+## 5. Diagrams
+
+### System context
+
+```mermaid
+flowchart LR
+    user(["User"])
+    system["Your system<br/>(NEW)"]
+    extA["External system A"]
+    extB["External system B"]
+
+    user --> system
+    system --> extA
+    system --> extB
+```
+
+### Critical-flow sequence
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant S as System
+    participant D as Dependency
+
+    U->>S: request
+    S->>+D: call (timeout 5s, retry 2× exponential)
+    alt success
+        D-->>-S: response
+        S-->>U: 200
+    else timeout / 5xx
+        D--xS: error
+        S-->>U: 503 with retry hint
+        Note over S: alert fires after 3 consecutive failures
+    end
+```
+
+_Include retries, timeouts, failure paths. No happy-path-only diagrams._
+
+## 6. Alternatives Considered
+
+### Alternatives matrix
+
+| Axis | Status quo | Alt B (incremental) | **Proposal** | Alt D |
+|---|---|---|---|---|
+| Effort (engineer-weeks) | 0 | 2 | 6 | 10 |
+| Hits goal G1 (latency) | ❌ 800ms | ⚠️ 500ms | ✅ 200ms | ✅ 150ms |
+| Reversibility | trivial | easy | medium | hard |
+| Operational burden | low | low | medium | high |
+
+### A1. Status quo
+**What:** _Don't make the change._
+**Why appealing:** _Zero effort, zero risk._
+**Why we reject it:** _Doesn't meet goal G1._
+
+### A2. Incremental — _name_
+**What:** _…_
+**Why appealing:** _One real reason it's attractive._
+**Why we reject it:** _One real reason._
+
+### A3. Proposal — _name_
+**What:** _link back to §4._
+**Why appealing:** _…_
+**Trade-offs:** _Honest list of downsides we accept._
+
+### A4. _Optional fourth alternative_
+**What:** _…_
+**Why appealing:** _…_
+**Why we reject it:** _…_
+
+## 7. Cross-cutting concerns
+
+| Concern | Status | Notes |
+|---|---|---|
+| Security | ✅ / ⚠️ / N/A | _what we're doing or why N/A_ |
+| Privacy / PII | ✅ / ⚠️ / N/A | … |
+| Observability | ✅ / ⚠️ / N/A | … |
+| Rollout / Rollback | ✅ / ⚠️ / N/A | … |
+| Scalability | ✅ / ⚠️ / N/A | … |
+| Dependencies | ✅ / ⚠️ / N/A | … |
+| Failure modes | ✅ / ⚠️ / N/A | _top 3 failure modes + detection + recovery_ |
+| On-call / runbook | ✅ / ⚠️ / N/A | _who pages? where's the runbook?_ |
+
+_Mark explicit N/A with one-sentence reason. Silent absence is forbidden._
+
+## 8. Open questions
+
+1. _Numbered list. Tag each with an owner ("for Northwind") or N/A._
+2. …
+
+## 9. Success metrics & SLAs
+
+- **Metric 1.** _Quantified target + measurement plan + dashboard._
+- **SLA.** _p95 ≤ Xms, error rate ≤ Y%, availability ≥ Z%. Consequence of breach: rollback / page on-call / rate limit._
+
+## 10. Next steps
+
+- _Phase 1 by [date]: ___. Owner: ___._
+- _Phase 2 by [date]: ___. Owner: ___._
+- _Follow-up RFCs: link by ID._
+- _First milestone target date: ___._
+
+---
+
+## Decision log row
+
+After this RFC is Accepted, append to `DECISIONS.md`:
+
+```
+| {{DATE}} | {{TITLE}} | Accepted | {{AUTHOR}} | drafts/{{FILENAME}} |
+```
+
+(Use `~/.claude/skills/tech-design-doc/scripts/append-decision-log.py` to do this automatically.)
+
+---
+
+## Review protocol
+
+- **Distribute:** ≥24h before review.
+- **Comment window:** opens on distribution, closes at meeting start.
+- **Meeting:** 60 min for this doc length; 10 min silent re-read first.
+- **Async escalation:** if ≥2 round trips on any thread, schedule sync.
+- **After Accepted:** status updated, decision-log row appended, first milestone scheduled within 1 week.

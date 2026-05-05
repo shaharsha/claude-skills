@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<!--
+  {{PRODUCT}} Brand Book — source for BRAND.pdf.
+  Edit this file, then regenerate the PDF:
+
+    ~/.claude/skills/brand-system/scripts/render-pdf.sh BRAND.html BRAND.pdf
+
+  The brand book is itself an instance of the brand: it uses the product's
+  palette, typography, and signature primitive. If this document feels off
+  to the brand, the brand book contradicts itself.
+-->
+<html lang="{{LOCALE}}">
+<head>
+<meta charset="UTF-8">
+<title>{{PRODUCT}} — Brand Book</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family={{PRIMARY_FONT_URL}}&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:     {{PALETTE_BG}};
+    --bg-50:  {{PALETTE_BG_50}};
+    --bg-200: {{PALETTE_BG_200}};
+    --bg-500: {{PALETTE_BG_500}};
+    --fg:     {{PALETTE_FG}};
+    --fg-500: {{PALETTE_FG_500}};
+    --fg-700: {{PALETTE_FG_700}};
+    --accent: {{PALETTE_ACCENT}};
+    --success: {{SEMANTIC_SUCCESS}};
+    --warning: {{SEMANTIC_WARNING}};
+    --danger:  {{SEMANTIC_DANGER}};
+  }
+
+  @page { size: A4; margin: 0; }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    font-family: "{{PRIMARY_FONT}}", system-ui, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    font-weight: 400;
+    line-height: 1.5;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .page {
+    width: 210mm;
+    height: 297mm;
+    padding: 22mm 24mm;
+    page-break-after: always;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .page:last-child { page-break-after: auto; }
+  .page.dark { background: var(--fg); color: var(--bg); }
+
+  .eyebrow {
+    font-size: 10pt;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  h1 { font-size: 48pt; font-weight: 800; line-height: 1.05; letter-spacing: -0.02em; }
+  h2 { font-size: 28pt; font-weight: 700; line-height: 1.1; letter-spacing: -0.01em; margin-bottom: 6mm; }
+  h3 { font-size: 13pt; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 2mm; }
+  p  { font-size: 10.5pt; line-height: 1.55; max-width: 62ch; }
+  p + p { margin-top: 3mm; }
+  .lead { font-size: 14pt; line-height: 1.45; max-width: 56ch; color: var(--bg-500); }
+  .page.dark .lead { color: #B8A595; }
+  .muted { color: var(--bg-500); font-size: 9pt; }
+
+  .footer {
+    position: absolute;
+    bottom: 10mm; left: 24mm; right: 24mm;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 8.5pt;
+    font-weight: 500;
+    color: var(--bg-500);
+    letter-spacing: 0.04em;
+  }
+  .page.dark .footer { color: #B8A595; }
+
+  /* ── Cover ─────────────────── */
+  .cover {
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: flex-start;
+    padding: 30mm 24mm;
+    background-image:
+      radial-gradient(ellipse at 15% 70%, {{PALETTE_ACCENT}}22 0%, transparent 45%),
+      radial-gradient(ellipse at 85% 80%, {{PALETTE_ACCENT}}14 0%, transparent 40%),
+      linear-gradient(180deg, var(--fg) 0%, var(--fg-700, var(--fg)) 100%);
+  }
+  .cover .wordmark-placeholder {
+    font-size: 56pt;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    margin-bottom: 20mm;
+    color: var(--bg);
+  }
+  .cover .wordmark-placeholder .dot {
+    display: inline-block;
+    width: 0.18em; height: 0.18em;
+    background: var(--accent);
+    border-radius: 50%;
+    vertical-align: top;
+    margin-top: 0.05em;
+    margin-left: 0.02em;
+  }
+  .cover h1 { font-size: 38pt; max-width: 160mm; }
+  .cover .stamp {
+    margin-top: auto;
+    font-size: 9pt;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+
+  /* ── Mark page ───────────────── */
+  .mark-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10mm;
+    margin-top: 8mm;
+  }
+  .mark-card {
+    border-radius: 4mm;
+    padding: 12mm;
+    aspect-ratio: 1 / 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    font-size: 72pt;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+  .mark-card .label {
+    position: absolute;
+    bottom: 5mm; left: 5mm;
+    font-size: 8pt;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .mark-card .dot {
+    display: inline-block;
+    width: 0.18em; height: 0.18em;
+    background: var(--accent);
+    border-radius: 50%;
+    vertical-align: top;
+    margin-top: 0.05em;
+    margin-left: 0.02em;
+  }
+  .card-light { background: var(--bg-50); color: var(--fg); border: 1px solid var(--bg-200); }
+  .card-dark  { background: var(--fg); color: var(--bg); }
+
+  /* ── Signature primitive page ─────────── */
+  .primitive-hero {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 14mm 0 10mm;
+  }
+  .primitive-shape {
+    width: 22mm;
+    height: 22mm;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 10mm {{PALETTE_ACCENT}}1F;
+  }
+  .primitive-uses {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4mm 8mm;
+    margin-top: 6mm;
+    font-size: 9.5pt;
+  }
+  .primitive-uses .use {
+    padding: 4mm 5mm;
+    background: var(--bg-50);
+    border: 1px solid var(--bg-200);
+    border-radius: 2mm;
+    display: flex;
+    gap: 4mm;
+    align-items: baseline;
+  }
+  .primitive-uses .use-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+    transform: translateY(1px);
+  }
+  .primitive-uses .use strong { display: block; font-weight: 600; margin-bottom: 1mm; font-size: 10pt; }
+  .primitive-uses .use span { color: var(--bg-500); }
+
+  /* ── Colors ───────────────── */
+  .swatch-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6mm;
+    margin-top: 8mm;
+  }
+  .swatch { border-radius: 3mm; overflow: hidden; border: 1px solid var(--bg-200); }
+  .swatch .chip {
+    height: 38mm;
+    display: flex;
+    align-items: flex-end;
+    padding: 5mm;
+    color: var(--bg);
+  }
+  .swatch .chip.dark-text { color: var(--fg); }
+  .swatch .meta { padding: 4mm 5mm; background: #fff; }
+  .swatch .name { font-weight: 600; font-size: 10pt; }
+  .swatch .hex {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 8.5pt;
+    color: var(--bg-500);
+    margin-top: 1mm;
+  }
+  .tier-label {
+    font-size: 9pt;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--bg-500);
+    margin: 8mm 0 4mm;
+  }
+  .mini-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3mm; }
+  .mini { height: 18mm; border-radius: 2mm; position: relative; overflow: hidden; }
+  .mini .mini-label {
+    position: absolute; bottom: 2mm; left: 2mm;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 7pt; font-weight: 500;
+    color: rgba(255,255,255,0.85);
+    text-shadow: 0 1px 0 rgba(0,0,0,0.2);
+  }
+  .mini.light .mini-label { color: rgba(0,0,0,0.6); text-shadow: none; }
+
+  /* ── Typography ───────────── */
+  .type-row {
+    display: grid;
+    grid-template-columns: 34mm 1fr;
+    gap: 10mm;
+    align-items: baseline;
+    padding: 4mm 0;
+    border-bottom: 1px solid var(--bg-200);
+  }
+  .type-row:last-child { border-bottom: 0; }
+  .type-row .meta {
+    font-size: 8.5pt;
+    font-weight: 500;
+    color: var(--bg-500);
+    letter-spacing: 0.04em;
+  }
+  .type-row .sample { color: var(--fg); font-family: "{{PRIMARY_FONT}}", sans-serif; }
+
+  /* ── Do / Don't ───────────── */
+  .dos {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    margin-top: 6mm;
+  }
+  .dos .card {
+    padding: 8mm;
+    border-radius: 3mm;
+    background: var(--bg-50);
+    border: 1px solid var(--bg-200);
+  }
+  .dos .card h4 {
+    font-size: 12pt;
+    font-weight: 700;
+    margin-bottom: 3mm;
+    display: flex;
+    align-items: center;
+    gap: 4mm;
+  }
+  .dos .card.do   h4 { color: var(--success); }
+  .dos .card.dont h4 { color: var(--danger); }
+  .dos .card ul { list-style: none; font-size: 9.5pt; line-height: 1.6; }
+  .dos .card li { position: relative; padding-inline-start: 6mm; margin-bottom: 2mm; }
+  .dos .card li::before {
+    content: '';
+    position: absolute;
+    inset-inline-start: 0; top: 8px;
+    width: 5px; height: 5px; border-radius: 50%;
+  }
+  .dos .card.do   li::before { background: var(--success); }
+  .dos .card.dont li::before { background: var(--danger); }
+</style>
+</head>
+<body>
+
+<!-- ─── Cover ─────────────────────────── -->
+<section class="page dark cover">
+  <div class="wordmark-placeholder">{{PRODUCT_LOWER}}<span class="dot"></span></div>
+  <div class="eyebrow" style="margin-bottom: 8mm;">Brand Book · {{YEAR}}</div>
+  <h1>{{POSITIONING}}</h1>
+  <div class="stamp">{{LOCALE}} · v1</div>
+</section>
+
+<!-- ─── The Idea ──────────────────────── -->
+<section class="page">
+  <div class="eyebrow">01 — The idea</div>
+  <h2 style="margin-top: 4mm;">Strip everything else.<br><span style="color: var(--bg-500); font-weight: 600;">The brand is still recognisable.</span></h2>
+  <p style="font-size: 13pt; line-height: 1.55; margin-top: 6mm;">
+    {{SIGNATURE_PRIMITIVE_ONELINER}}
+  </p>
+  <p style="font-size: 13pt; line-height: 1.55; margin-top: 4mm; color: var(--accent); font-weight: 600;">
+    Every {{PRODUCT}} screen carries the {{SIGNATURE_PRIMITIVE}}. It is the brand's only saturated colour, and everywhere it appears it means the same thing.
+  </p>
+  <div class="footer"><span>{{PRODUCT}} Brand Book</span><span>01 / The idea</span></div>
+</section>
+
+<!-- ─── The Mark ──────────────────────── -->
+<section class="page">
+  <div class="eyebrow">02 — The mark</div>
+  <h2 style="margin-top: 4mm;">One glyph, multiple readings.</h2>
+  <p class="lead" style="margin-bottom: 8mm;">
+    {{MARK_ONE_LINER}}
+  </p>
+  <div class="mark-grid">
+    <div class="mark-card card-light">
+      {{MARK_GLYPH}}<span class="dot"></span>
+      <div class="label">Icon · light</div>
+    </div>
+    <div class="mark-card card-dark">
+      {{MARK_GLYPH}}<span class="dot"></span>
+      <div class="label">Icon · dark</div>
+    </div>
+  </div>
+  <div class="footer"><span>{{PRODUCT}} Brand Book</span><span>02 / The mark</span></div>
+</section>
+
+<!-- ─── The Signature Primitive ───────── -->
+<section class="page">
+  <div class="eyebrow">03 — The {{SIGNATURE_PRIMITIVE}}</div>
+  <h2 style="margin-top: 4mm;">A semantic primitive.</h2>
+  <p class="lead">
+    Accent <strong style="color: var(--accent);">{{PALETTE_ACCENT}}</strong> means {{SIGNATURE_PRIMITIVE_MEANING}}. The only saturated colour in the brand.
+  </p>
+  <div class="primitive-hero"><div class="primitive-shape"></div></div>
+  <div class="primitive-uses">
+    <div class="use"><div class="use-dot"></div><div><strong>The mark</strong><span>{{PRIMITIVE_IN_MARK}}</span></div></div>
+    <div class="use"><div class="use-dot"></div><div><strong>Loading state</strong><span>{{PRIMITIVE_IN_LOADING}}</span></div></div>
+    <div class="use"><div class="use-dot"></div><div><strong>Active nav</strong><span>{{PRIMITIVE_IN_NAV}}</span></div></div>
+    <div class="use"><div class="use-dot"></div><div><strong>Bullets</strong><span>{{PRIMITIVE_IN_BULLETS}}</span></div></div>
+    <div class="use"><div class="use-dot"></div><div><strong>Focus</strong><span>{{PRIMITIVE_IN_FOCUS}}</span></div></div>
+    <div class="use"><div class="use-dot"></div><div><strong>CTA accent</strong><span>{{PRIMITIVE_IN_CTA}}</span></div></div>
+    <div class="use"><div class="use-dot"></div><div><strong>Online pip</strong><span>{{PRIMITIVE_IN_STATUS}}</span></div></div>
+    <div class="use"><div class="use-dot"></div><div><strong>Unsaved</strong><span>{{PRIMITIVE_IN_UNSAVED}}</span></div></div>
+  </div>
+  <div class="footer"><span>{{PRODUCT}} Brand Book</span><span>03 / The {{SIGNATURE_PRIMITIVE}}</span></div>
+</section>
+
+<!-- ─── Colors ─────────────────────────── -->
+<section class="page">
+  <div class="eyebrow">04 — Colors</div>
+  <h2 style="margin-top: 4mm;">The palette.</h2>
+  <p class="lead">{{COLOUR_STORY}}</p>
+
+  <div class="swatch-grid">
+    <div class="swatch">
+      <div class="chip dark-text" style="background: var(--bg);"></div>
+      <div class="meta"><div class="name">Background</div><div class="hex">{{PALETTE_BG}}</div></div>
+    </div>
+    <div class="swatch">
+      <div class="chip" style="background: var(--fg);"></div>
+      <div class="meta"><div class="name">Foreground</div><div class="hex">{{PALETTE_FG}}</div></div>
+    </div>
+    <div class="swatch">
+      <div class="chip" style="background: var(--accent);"></div>
+      <div class="meta"><div class="name">Accent</div><div class="hex">{{PALETTE_ACCENT}}</div></div>
+    </div>
+  </div>
+
+  <div class="tier-label">Semantic</div>
+  <div class="mini-grid">
+    <div class="mini" style="background: var(--success);"><div class="mini-label">Success · {{SEMANTIC_SUCCESS}}</div></div>
+    <div class="mini" style="background: var(--warning);"><div class="mini-label">Warning · {{SEMANTIC_WARNING}}</div></div>
+    <div class="mini" style="background: var(--danger);"><div class="mini-label">Danger · {{SEMANTIC_DANGER}}</div></div>
+    <div class="mini" style="background: {{SEMANTIC_INFO}};"><div class="mini-label">Info · {{SEMANTIC_INFO}}</div></div>
+  </div>
+
+  <div class="footer"><span>{{PRODUCT}} Brand Book</span><span>04 / Colors</span></div>
+</section>
+
+<!-- ─── Typography ─────────────────────── -->
+<section class="page">
+  <div class="eyebrow">05 — Typography</div>
+  <h2 style="margin-top: 4mm;">{{PRIMARY_FONT}}.</h2>
+  <p class="lead">
+    One family, wide weight range. Display weights carry the brand; body weight stays honest.
+  </p>
+
+  <div style="margin-top: 10mm;">
+    <div class="type-row"><div class="meta">Mega · 800</div><div class="sample" style="font-size: 40pt; font-weight: 800; line-height: 0.95; letter-spacing: -0.03em;">{{PRODUCT_LOWER}}</div></div>
+    <div class="type-row"><div class="meta">Display · 700</div><div class="sample" style="font-size: 28pt; font-weight: 700; line-height: 1.05;">{{POSITIONING}}</div></div>
+    <div class="type-row"><div class="meta">H1 · 700</div><div class="sample" style="font-size: 20pt; font-weight: 700;">Stop guessing. Start measuring.</div></div>
+    <div class="type-row"><div class="meta">H2 · 600</div><div class="sample" style="font-size: 16pt; font-weight: 600;">Built with intent.</div></div>
+    <div class="type-row"><div class="meta">Lead · 400</div><div class="sample" style="font-size: 13pt; font-weight: 400; color: var(--bg-500);">This is what a lead paragraph feels like in {{PRODUCT}}. It sets context before the body text carries the details.</div></div>
+    <div class="type-row"><div class="meta">Body · 400</div><div class="sample" style="font-size: 10.5pt; font-weight: 400;">The agent learns your voice and carries your brand. Conversations stay on WhatsApp, context stays with you.</div></div>
+    <div class="type-row"><div class="meta">UI · 500</div><div class="sample" style="font-size: 10pt; font-weight: 500;">{{CTA_OPENING}} →</div></div>
+    <div class="type-row"><div class="meta">Micro · 500</div><div class="sample" style="font-size: 8.5pt; font-weight: 500; color: var(--bg-500); letter-spacing: 0.04em; text-transform: uppercase;">Updated {{MONTH_YEAR}}</div></div>
+  </div>
+
+  <div class="footer"><span>{{PRODUCT}} Brand Book</span><span>05 / Typography</span></div>
+</section>
+
+<!-- ─── Dos & Don'ts ───────────────────── -->
+<section class="page">
+  <div class="eyebrow">06 — Usage</div>
+  <h2 style="margin-top: 4mm;">Discipline is the asset.</h2>
+  <p class="lead">
+    The system only works if the accent stays rare. If every screen has an accent button, an accent banner, and an accent badge, the {{SIGNATURE_PRIMITIVE}} stops meaning {{SIGNATURE_PRIMITIVE_MEANING}} and starts meaning noise.
+  </p>
+
+  <div class="dos">
+    <div class="card do">
+      <h4><span style="width:8px;height:8px;border-radius:50%;background:var(--success);display:inline-block;"></span>Do</h4>
+      <ul>
+        <li>Use {{PALETTE_BG}} as the default background.</li>
+        <li>Use {{PALETTE_FG}} as default type colour on light.</li>
+        <li>Reserve {{PALETTE_ACCENT}} for ≤ 8% of any screen.</li>
+        <li>Let the {{SIGNATURE_PRIMITIVE}} replace bullets in editorial prose.</li>
+        <li>Keep ≥ 1× mark-height of clear space around the logo.</li>
+        <li>Lock minimum sizes: icon 24px, wordmark 120px wide.</li>
+      </ul>
+    </div>
+    <div class="card dont">
+      <h4><span style="width:8px;height:8px;border-radius:50%;background:var(--danger);display:inline-block;"></span>Don't</h4>
+      <ul>
+        <li>Recolour the {{SIGNATURE_PRIMITIVE}} — ever.</li>
+        <li>{{REAL_DONT_1}}</li>
+        <li>{{REAL_DONT_2}}</li>
+        <li>{{REAL_DONT_3}}</li>
+        <li>Use pure white outside of input fields and inline code.</li>
+        <li>Ship a feature QA'd in only one language direction.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div style="margin-top: 12mm; padding: 8mm; background: var(--fg); color: var(--bg); border-radius: 3mm;">
+    <div class="eyebrow" style="color: var(--accent);">Source of truth</div>
+    <p style="color: var(--bg); margin-top: 3mm; font-size: 11pt;">
+      This book is a summary. The full design system lives in <code style="background: rgba(255,255,255,0.08); padding: 1px 4px; border-radius: 2px;">BRAND.md</code> at the root of the {{PRODUCT}} repo. Where this doc disagrees with a "best practice," follow this doc.
+    </p>
+  </div>
+
+  <div class="footer"><span>{{PRODUCT}} Brand Book</span><span>06 / Usage · End</span></div>
+</section>
+
+</body>
+</html>

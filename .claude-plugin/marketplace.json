@@ -1,0 +1,79 @@
+{
+  "name": "shaharsha-skills",
+  "owner": {
+    "name": "Shahar Shavit",
+    "email": "me@shahar.sh"
+  },
+  "metadata": {
+    "description": "Agent skills by Shahar Shavit for Claude Code, Codex, Cursor, and other Agent-Skills-compatible harnesses",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "shaharsha-skills",
+      "description": "All 9 agent skills - gdoc-sync, gslides-sync, presentation-generator, brand-system, brand-assets, image-generation, prompt-engineer, tech-design-doc, namecheap-domains",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/gdoc-sync",
+        "./skills/gslides-sync",
+        "./skills/presentation-generator",
+        "./skills/brand-system",
+        "./skills/brand-assets",
+        "./skills/image-generation",
+        "./skills/prompt-engineer",
+        "./skills/tech-design-doc",
+        "./skills/namecheap-domains"
+      ]
+    },
+    {
+      "name": "documents-and-decks",
+      "description": "Sync Markdown to Google Docs, .pptx to Google Slides, and generate AI-rendered 16:9 presentation decks",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/gdoc-sync",
+        "./skills/gslides-sync",
+        "./skills/presentation-generator"
+      ]
+    },
+    {
+      "name": "brand-and-visuals",
+      "description": "Author production-grade brand books, run logo / favicon / icon-pack pipelines, and generate AI imagery via gpt-image-2 and Gemini Nano Banana",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/brand-system",
+        "./skills/brand-assets",
+        "./skills/image-generation"
+      ]
+    },
+    {
+      "name": "engineering-decisions",
+      "description": "Author technical design review documents - RFCs, ADRs, design docs, KEPs, and partner-mode TDRs",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/tech-design-doc"
+      ]
+    },
+    {
+      "name": "building-agents",
+      "description": "Expert prompt-engineering reference for AI agents on Claude, GPT, and Gemini APIs",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/prompt-engineer"
+      ]
+    },
+    {
+      "name": "utilities",
+      "description": "Domain availability via Namecheap API - single domain, batch up to 50, or TLD sweep",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/namecheap-domains"
+      ]
+    }
+  ]
+}

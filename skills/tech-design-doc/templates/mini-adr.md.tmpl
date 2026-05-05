@@ -1,0 +1,49 @@
+# ADR-{{NUMBER}}: {{TITLE}}
+
+| Field | Value |
+|---|---|
+| Status | Draft |
+| Author | {{AUTHOR}} |
+| Created | {{DATE}} |
+| Last edited | {{DATE}} |
+| Decision date | _(filled when accepted)_ |
+| Approvers | {{APPROVERS}} |
+
+## Context
+
+_What's the situation? What forces are at play (technical, business, organizational)? Two paragraphs max. Link to deeper docs rather than re-stating._
+
+## Decision
+
+_The decision, in one or two sentences. Active voice. "We will use X." Not "We're considering X."_
+
+## Consequences
+
+**Positive:**
+- _What gets better as a result of this decision._
+
+**Negative:**
+- _What gets worse, or what new problems we accept._
+
+**Neutral:**
+- _Things that change but aren't clearly better or worse._
+
+## Alternatives considered
+
+_For an ADR, brief is fine — 1-2 sentences per alternative._
+
+- **Status quo:** _what happens if we don't decide. Why we reject it._
+- **Alternative B:** _what + why we reject it._
+- **Alternative C:** _what + why we reject it._
+
+---
+
+## Decision log row
+
+After this ADR is accepted, append to `DECISIONS.md`:
+
+```
+| {{DATE}} | {{TITLE}} | Accepted | {{AUTHOR}} | drafts/{{FILENAME}} |
+```
+
+(Use `~/.claude/skills/tech-design-doc/scripts/append-decision-log.py` to do this automatically.)

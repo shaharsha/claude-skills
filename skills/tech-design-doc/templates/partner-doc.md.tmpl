@@ -1,0 +1,163 @@
+# {{TITLE}}
+
+_Technical design — for {{PARTNER_NAME}}_
+
+| Field | Value |
+|---|---|
+| Version | v0.1 |
+| Author(s) | {{AUTHOR}} |
+| Created | {{DATE}} |
+| Last edited | {{DATE}} |
+| Status | Draft for technical alignment |
+| Approvers | {{APPROVERS}} _(name people from both companies)_ |
+| Decision date | _(filled when accepted)_ |
+| Pre-read window | ≥48h before review |
+
+## 1. Summary
+
+_BLUF: 1-2 paragraphs. Decision being requested, what we propose, what we need from {{PARTNER_NAME}} in the meeting. Tone is collaborative-proposing, not directive._
+
+## 2. Glossary
+
+_Mandatory in partner-mode. Define every domain term, acronym, product name on first use._
+
+- **Term 1** — definition.
+- **Term 2** — definition.
+- **Acronym** — full form + meaning.
+
+## 3. Context
+
+_1-2 pages. Assume zero shared mental model. Cover:_
+
+- _What the product is (1 paragraph from the PRD/product plan)._
+- _Where this fits in the existing system._
+- _The user-facing surface (mockup or screenshot link)._
+- _Why this matters now._
+- _Prior art on each side._
+
+## 4. Goals & Non-Goals
+
+### Goals
+_3-7 quantified outcomes._
+
+- **G1.** …
+- **G2.** …
+
+### Non-Goals
+_3-10 explicit out-of-scope items._
+
+- **NG1.** …
+
+## 5. Proposal
+
+_Lead with overview. Per-component sub-sections. Trade-offs explicit. Link to sibling specs for schemas/APIs._
+
+### 5.1 [Component A]
+### 5.2 [Component B]
+### 5.3 [Component C]
+
+## 6. Diagrams
+
+### System context
+
+```mermaid
+flowchart LR
+    %% Replace with actual context diagram
+```
+
+### Critical-flow sequence
+
+```mermaid
+sequenceDiagram
+    %% Replace with actual sequence including retries/failure paths
+```
+
+## 7. Alternatives Considered
+
+| Axis | Status quo | Alt B | **Proposal** | Alt D |
+|---|---|---|---|---|
+
+### A1. Status quo
+**What:** _Don't make the change._
+**Why appealing:** _Zero effort, zero risk._
+**Why we reject it:** _Doesn't meet goals (specify which)._
+
+### A2. _Alt B_
+**What:** _…_
+**Why appealing:** _One real reason it's attractive._
+**Why we reject it:** _One real reason._
+
+### A3. **Proposal**
+**What:** _link back to §5._
+**Why appealing:** _…_
+**Trade-offs:** _Honest list of downsides we accept._
+
+### A4. _Alt D_
+**What:** _…_
+**Why appealing:** _…_
+**Why we reject it:** _…_
+
+_When stack preferences differ between us and the partner, acknowledge openly — see [reference/partner-mode.md#stack-tension-handling](../reference/partner-mode.md)._
+
+## 8. Decision ownership
+
+| Area | Owner | Notes |
+|---|---|---|
+| Backend architecture | We propose; joint final | _Code review approval required_ |
+| Auth scheme | _They own_ | _We integrate against their spec_ |
+| Frontend code | _Joint_ | _Boundaries explicit_ |
+| Deploy pipeline | _They own_ | _We follow their conventions_ |
+| Database / data model | _We propose; joint review_ | … |
+| Security / pen-testing window | _They own_ | _We coordinate dates_ |
+| _add row per area_ | | |
+
+_Every row has an owner. No blanks._
+
+## 9. Cross-cutting concerns
+
+| Concern | Status | Notes |
+|---|---|---|
+| Security | ✅ / ⚠️ / N/A | … |
+| Privacy / PII | ✅ / ⚠️ / N/A | … |
+| Observability | ✅ / ⚠️ / N/A | … |
+| Rollout / Rollback | ✅ / ⚠️ / N/A | … |
+| Scalability | ✅ / ⚠️ / N/A | … |
+| Dependencies | ✅ / ⚠️ / N/A | … |
+| Failure modes | ✅ / ⚠️ / N/A | … |
+| On-call / runbook | ✅ / ⚠️ / N/A | … |
+
+## 10. Open questions for {{PARTNER_NAME}}
+
+_Numbered, framed as questions that the meeting can close. Each with brief context._
+
+1. **Question 1** — context.
+2. **Question 2** — context.
+
+## 11. Success metrics & SLAs
+
+- **Metric 1.** Quantified, with measurement plan and dashboard owner.
+- **SLA.** Numbers + breach consequences.
+
+## 12. Next steps
+
+- **From {{PARTNER_NAME}}:** _what we need this week (dev access, repo access, auth docs, …)_.
+- **From us:** _what we'll deliver this week_.
+- **First milestone:** date + scope.
+
+---
+
+## Decision log row
+
+```
+| {{DATE}} | {{TITLE}} | Accepted | {{AUTHOR}} | drafts/{{FILENAME}} |
+```
+
+---
+
+## Review protocol
+
+- **Distribute:** ≥48h before review (different time zones / org calendars).
+- **Comment window:** opens on distribution, closes at meeting start.
+- **Meeting:** 60 min; 10-15 min silent re-read first.
+- **Async escalation:** if ≥2 round trips on any thread, schedule sync.
+- **After Accepted:** both-side approvers named, decision-log row appended, first milestone scheduled within 1 week.

@@ -1,0 +1,150 @@
+/*
+ * {{PRODUCT}} — design tokens
+ * Source of truth: BRAND.md §17
+ *
+ * Three layers (Nathan Curtis taxonomy):
+ *   @theme           — primitives (raw hex values, never vary between themes)
+ *   :root            — light-mode semantic tokens (--bg, --text, --border, --accent)
+ *   [data-theme=dark] — dark-mode semantic overrides (same keys, different primitives)
+ *
+ * Rule: the accent colour is IDENTICAL in light and dark modes.
+ * Only surface and text tokens swap. See BRAND.md §6 for the parity rule.
+ */
+
+@theme {
+  /* ── Primitives: core palette ────────────────────────────── */
+  --color-bg:      {{PALETTE_BG}};      /* primary light surface */
+  --color-fg:      {{PALETTE_FG}};      /* primary dark / text colour */
+  --color-accent:  {{PALETTE_ACCENT}};  /* the one saturated brand colour — {{SIGNATURE_PRIMITIVE}} */
+
+  /* ── Primitives: neutrals (ramp from bg → fg) ───────────── */
+  --color-bg-50:   {{PALETTE_BG_50}};   /* highest-light (cards, inputs) */
+  --color-bg-100:  {{PALETTE_BG}};      /* base */
+  --color-bg-200:  {{PALETTE_BG_200}};  /* borders, dividers */
+  --color-bg-300:  {{PALETTE_BG_300}};  /* muted text on bg */
+  --color-bg-500:  {{PALETTE_BG_500}};  /* secondary text on bg */
+
+  --color-fg-300:  {{PALETTE_FG_300}};  /* hairline on dark */
+  --color-fg-500:  {{PALETTE_FG_500}};  /* elevated dark surfaces */
+  --color-fg-700:  {{PALETTE_FG_700}};  /* card bg in dark mode */
+  --color-fg-900:  {{PALETTE_FG}};      /* base dark */
+
+  /* ── Primitives: semantic status colours ─────────────────── */
+  --color-success: {{SEMANTIC_SUCCESS}};
+  --color-warning: {{SEMANTIC_WARNING}};
+  --color-danger:  {{SEMANTIC_DANGER}};
+  --color-info:    {{SEMANTIC_INFO}};
+
+  /* ── Typography ──────────────────────────────────────────── */
+  --font-sans: '{{PRIMARY_FONT}}', system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --text-mega:    clamp(3rem, 12vw, 12rem);      /* hero — once per page max */
+  --text-display: clamp(2.5rem, 5vw + 1rem, 4.5rem);
+  --text-h1:      clamp(2rem, 3vw + 1rem, 3rem);
+  --text-h2:      clamp(1.5rem, 2vw + 0.75rem, 2.25rem);
+  --text-h3:      clamp(1.25rem, 1vw + 1rem, 1.5rem);
+  --text-lead:    clamp(1.125rem, 0.5vw + 1rem, 1.375rem);
+  --text-body:    1rem;
+  --text-body-sm: 0.875rem;
+  --text-ui:      0.9375rem;
+  --text-micro:   0.75rem;
+
+  /* ── Spacing (8-point grid) ─────────────────────────────── */
+  --spacing-1:  0.25rem;
+  --spacing-2:  0.5rem;
+  --spacing-3:  0.75rem;
+  --spacing-4:  1rem;
+  --spacing-6:  1.5rem;
+  --spacing-8:  2rem;
+  --spacing-12: 3rem;
+  --spacing-16: 4rem;
+  --spacing-24: 6rem;
+  --spacing-32: 8rem;
+
+  /* ── Radii ──────────────────────────────────────────────── */
+  --radius-sm:   6px;
+  --radius-md:   10px;
+  --radius-lg:   14px;
+  --radius-xl:   20px;
+  --radius-pill: 9999px;
+
+  /* ── Motion ─────────────────────────────────────────────── */
+  --ease-out:      cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out:   cubic-bezier(0.65, 0, 0.35, 1);
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+}
+
+/* ── Light-mode semantics (the default) ────────────────────── */
+:root {
+  --bg:          var(--color-bg);
+  --bg-elevated: var(--color-bg-50);
+  --text:        var(--color-fg);
+  --text-muted:  var(--color-bg-500);
+  --border:      var(--color-bg-200);
+  --accent:      var(--color-accent);  /* ← constant across themes */
+}
+
+/* ── Dark-mode semantics: same keys, different primitives ──── */
+[data-theme="dark"] {
+  --bg:          var(--color-fg-900);
+  --bg-elevated: var(--color-fg-700);
+  --text:        var(--color-bg);
+  --text-muted:  var(--color-bg-300);
+  --border:      var(--color-fg-500);
+  --accent:      var(--color-accent);  /* ← still the same! */
+}
+
+/* ── System preference fallback when no data-theme is set ───── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:          var(--color-fg-900);
+    --bg-elevated: var(--color-fg-700);
+    --text:        var(--color-bg);
+    --text-muted:  var(--color-bg-300);
+    --border:      var(--color-fg-500);
+    --accent:      var(--color-accent);
+  }
+}
+
+/* ── Body defaults ──────────────────────────────────────────── */
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: auto;  /* Never 'antialiased' — it thins Hebrew on low-DPI Android */
+  line-height: 1.75;
+}
+
+html[lang="he"] body,
+html[lang="ar"] body {
+  line-height: 1.8;  /* RTL scripts have heavier descenders */
+}
+
+/* ── The signature animation — tune name and timing per brand ── */
+@keyframes signature-pulse {
+  0%, 100% { transform: scale(1);    opacity: 1; }
+  50%      { transform: scale(0.92); opacity: 0.85; }
+}
+
+.{{SIGNATURE_PRIMITIVE_CLASS}} {
+  animation: signature-pulse 1.8s var(--ease-in-out) infinite;
+}
+
+/* ── Reduced-motion baseline ──────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Forced-colors (Windows high-contrast) ────────────────── */
+@media (forced-colors: active) {
+  :root {
+    --accent: CanvasText;
+    --border: CanvasText;
+  }
+}

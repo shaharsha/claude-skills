@@ -1,0 +1,136 @@
+# {{PRODUCT}} — Signature interview
+
+Fill this in **before** running `new-brand-book.sh`. The answers here
+feed directly into §0, §2, §3, §13, §15, §16 of `BRAND.md`. They are
+what separate a brand book from a template. Do not skip questions; if
+you don't have an answer yet, write `{{TODO}}` so the auditor catches it.
+
+---
+
+## 1. The one-sentence idea
+
+> *What is the brand's single load-bearing decision — the one thing that,
+> if stripped to it alone, still reads as this brand?*
+
+- **Positioning sentence** (one line, ≤ 12 words):
+  `{{POSITIONING}}`
+
+- **Strip-test**: if the mark and everything else is gone, what remains
+  that still says "this is us"?
+  > …
+
+---
+
+## 2. The signature primitive
+
+> *Name one visual or verbal element your brand calls by a name no one
+> else uses. This becomes §2 of the book.*
+
+- **Primitive name** (the invented proper noun):
+  `{{SIGNATURE_PRIMITIVE}}`
+
+- **What it means semantically** (one line — e.g. "the agent is here"):
+  > …
+
+- **At least 8 places it appears** (fill in, reject if fewer than 8):
+  1. …
+  2. …
+  3. …
+  4. …
+  5. …
+  6. …
+  7. …
+  8. …
+
+- **Where it never appears**:
+  > …
+
+---
+
+## 3. Three falsifiable principles
+
+> *Not values ("trust", "simple"). Rules a PR could fail a review against.
+> Each one must end with "…or the PR is wrong."*
+
+1. Principle one: **…** (e.g. "Hebrew is the default; English is
+   opt-in. If a feature is QA'd in English only, the PR is wrong.")
+2. Principle two: **…**
+3. Principle three: **…**
+
+---
+
+## 4. Three don'ts from real past mistakes
+
+> *Not hypotheticals ("don't stretch the logo"). Things your team has
+> actually regretted doing. These seed §16 of the book.*
+
+1. …
+2. …
+3. …
+
+---
+
+## 5. A 150-word voice sample, written AS the brand
+
+> *Pick one concrete surface — a welcome email, a 404 page, a cancellation
+> confirmation — and write it in the brand's actual voice. No descriptions
+> of the voice; the text itself is the voice. This seeds §13.*
+
+**Surface chosen**: `{{VOICE_SAMPLE_SURFACE}}` (e.g. "welcome email
+after first coupon redeem")
+
+**The passage** (aim for ~150 words, min 100):
+
+> …
+
+---
+
+## 6. One best-practice rule you deliberately break
+
+> *Linear uses two colors (breaks "document ≥5 neutral steps"). Stripe
+> labels gradients by emotion (breaks "keep brand language literal").
+> Agentleh uses paper grain at 2% (breaks "flat design ships faster").
+> What's yours?*
+
+- **The rule you break**: …
+- **Why it's right for this brand**: …
+
+---
+
+## 7. The shelf
+
+> *Not to copy — to understand what shelf the brand sits on. Seeds §15.*
+
+**2–3 reference brands we admire** (not peers — inspirations):
+- …
+- …
+
+**2–3 anti-references — brands we must never look like**:
+- …
+- …
+
+---
+
+## 8. Quick inputs for the scaffold
+
+These feed into `new-brand-book.sh` flags directly.
+
+| Key | Value |
+|---|---|
+| Product name | `{{PRODUCT}}` |
+| Primary font family | `{{PRIMARY_FONT}}` (e.g. Rubik, Inter, Source Serif) |
+| Primary surface (bg) | `{{PALETTE_BG}}` (hex) |
+| Primary text (fg) | `{{PALETTE_FG}}` (hex) |
+| Accent (the *one* saturated colour) | `{{PALETTE_ACCENT}}` (hex) |
+| Locale(s) | `{{LOCALE}}` (e.g. `he`, `en`, `ar`, `he,en`) |
+| RTL needed? | `{{RTL}}` (yes/no — inferred from locale) |
+
+---
+
+## After the interview
+
+1. Check every `{{…}}` placeholder is filled or explicitly marked `{{TODO}}`.
+2. Run `scripts/new-brand-book.sh` with the Section 8 inputs as flags.
+3. The scaffolded `BRAND.md` will have §0, §2, §3, §13, §15, §16 seeded
+   from this file. You still need to flesh out the other 14 chapters —
+   use the per-chapter `reference/*.md` files for guidance.

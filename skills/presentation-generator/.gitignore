@@ -1,0 +1,17 @@
+# Generated outputs from running the skill (only relevant if someone runs it from inside this dir)
+/slides/
+/refs/
+/output/
+deck-plan.json
+
+# OS & editor cruft
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
