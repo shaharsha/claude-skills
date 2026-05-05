@@ -6,9 +6,12 @@
 #              --slug <kebab-case-slug> \
 #              --title "Doc title" \
 #              [--author "Name"] [--approvers "Name1, Name2"] \
-#              [--partner "Partner name"] [--out drafts/] [--number 0042]
+#              [--partner "Partner name"] [--date YYYY-MM-DD] \
+#              [--out drafts/] [--out-file path/to/exact-name.md] \
+#              [--number 0042] [--force]
 #
-# Writes to: <out>/design-<slug>-v1.md (or drafts/adr-<NNNN>-<slug>.md for mini-adr)
+# Writes to: <out>/design-<slug>-v1.md (or drafts/adr-<NNNN>-<slug>.md for mini-adr).
+# Pass --out-file to write to an exact path instead.
 # Refuses to overwrite an existing file (use --force to override).
 
 set -euo pipefail
@@ -20,7 +23,9 @@ AUTHOR="${USER:-author}"
 APPROVERS="(TBD)"
 PARTNER="(partner)"
 OUT="drafts"
+OUT_FILE=""
 NUMBER=""
+DATE_OVERRIDE=""
 FORCE=false
 
 while [[ $# -gt 0 ]]; do
@@ -32,7 +37,9 @@ while [[ $# -gt 0 ]]; do
     --approvers) APPROVERS="$2"; shift 2 ;;
     --partner)   PARTNER="$2"; shift 2 ;;
     --out)       OUT="$2"; shift 2 ;;
+    --out-file)  OUT_FILE="$2"; shift 2 ;;
     --number)    NUMBER="$2"; shift 2 ;;
+    --date)      DATE_OVERRIDE="$2"; shift 2 ;;
     --force)     FORCE=true; shift ;;
     -h|--help)
       sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
@@ -67,31 +74,40 @@ if [[ ! -f "$TMPL_PATH" ]]; then
   exit 1
 fi
 
-mkdir -p "$OUT"
-
-if [[ "$TEMPLATE" == "mini-adr" ]]; then
-  if [[ -z "$NUMBER" ]]; then
-    # Auto-pick the next number based on existing adr-* files in OUT
-    LAST=$(ls "$OUT" 2>/dev/null | grep -E '^adr-[0-9]{4}-' | sed -E 's/^adr-([0-9]{4}).*/\1/' | sort -n | tail -1 || true)
-    if [[ -z "$LAST" ]]; then
-      NUMBER="0001"
-    else
-      NUMBER=$(printf "%04d" $((10#$LAST + 1)))
-    fi
-  fi
-  FILENAME="adr-$NUMBER-$SLUG.md"
+if [[ -n "$OUT_FILE" ]]; then
+  OUT_PATH="$OUT_FILE"
+  FILENAME="$(basename "$OUT_FILE")"
+  out_dir="$(dirname "$OUT_PATH")"
+  [[ -n "$out_dir" && "$out_dir" != "." ]] && mkdir -p "$out_dir"
 else
-  FILENAME="design-$SLUG-v1.md"
+  mkdir -p "$OUT"
+  if [[ "$TEMPLATE" == "mini-adr" ]]; then
+    if [[ -z "$NUMBER" ]]; then
+      # Auto-pick the next number based on existing adr-* files in OUT
+      LAST=$(ls "$OUT" 2>/dev/null | grep -E '^adr-[0-9]{4}-' | sed -E 's/^adr-([0-9]{4}).*/\1/' | sort -n | tail -1 || true)
+      if [[ -z "$LAST" ]]; then
+        NUMBER="0001"
+      else
+        NUMBER=$(printf "%04d" $((10#$LAST + 1)))
+      fi
+    fi
+    FILENAME="adr-$NUMBER-$SLUG.md"
+  else
+    FILENAME="design-$SLUG-v1.md"
+  fi
+  OUT_PATH="$OUT/$FILENAME"
 fi
-
-OUT_PATH="$OUT/$FILENAME"
 
 if [[ -f "$OUT_PATH" && "$FORCE" != true ]]; then
   echo "error: $OUT_PATH already exists. Use --force to overwrite, or bump --slug / version." >&2
   exit 1
 fi
 
-DATE=$(date +%Y-%m-%d)
+if [[ -n "$DATE_OVERRIDE" ]]; then
+  DATE="$DATE_OVERRIDE"
+else
+  DATE=$(date +%Y-%m-%d)
+fi
 
 # Substitute placeholders
 sed \
