@@ -30,6 +30,7 @@ These apply to all three providers and cover ~70% of prompt engineering work.
 - **Be explicit and specific.** Explain *why* a behavior matters, not just *what* to do. Models generalize better from explanations than from rigid rules.
 - **Tell the model what TO do**, not what NOT to do. Positive framing ("Write in prose paragraphs") beats negative ("Don't use markdown").
 - **Start minimal, then iterate.** Add instructions only when you observe failure modes. Over-engineered prompts cause over-analysis on Gemini and overtriggering on Claude.
+- **For GPT-5.x: prefer outcome-first prompts.** Describe the destination (success criteria, constraints, available context, required output fields) rather than prescribing step-by-step process. Older "do X then Y then Z" prompting over-specifies what newer models handle on their own.
 
 ### Few-Shot Examples
 - Include **3-5 diverse examples** — one of the most reliable steering mechanisms across all providers.
@@ -68,6 +69,7 @@ Hallucination is not one problem — different types require different mitigatio
 **Reasoning errors** (logically coherent but factually wrong chains):
 - Use Step-Back Prompting: "First identify the high-level principles involved, then reason about the specific case." (Outperforms chain-of-thought by up to 36%.)
 - Chain-of-Verification: generate answer → create verification questions → run them → produce final answer incorporating corrections.
+- **Verification loop before finalizing**: have the agent check (1) correctness against every requirement, (2) grounding of factual claims in provided context, (3) format match to the requested schema, (4) whether the next action needs permission. Particularly effective on GPT-5.4+ agentic tasks.
 
 **Confabulation** (fills knowledge gaps with plausible fiction):
 - Define explicit fallback behavior: "If the provided context doesn't contain information about X, say 'I don't have information about X' — do not guess."
@@ -91,6 +93,9 @@ When designing multi-step or multi-agent workflows:
 - **Context across windows** — when a task spans multiple context windows, start the new window with a structured summary of prior findings, not raw conversation history.
 - **Autonomy calibration** — be explicit about what the agent MAY do autonomously vs. what requires confirmation. Default: read operations are autonomous, write/delete operations require confirmation. Claude 4.6 is highly proactive — dial back aggressive prompting or it will over-act.
 - **Delegation discipline** — Claude 4.6 over-spawns subagents for simple tasks. Add: "Only delegate when the task requires specialized tools or a clean context. For simple lookups, do it yourself."
+- **Completeness contracts** — for multi-deliverable tasks, instruct the agent to treat the task as incomplete until every requested item is covered or explicitly marked `[blocked]`, maintaining an internal checklist. Prevents premature stopping, especially on GPT-5.4+.
+- **Empty-result recovery** — when a lookup returns empty or narrow results, instruct the agent to try at least one fallback (alternate query wording, broader filter) before reporting "not found." Reduces false-negative reports across all providers.
+- **Tool-use persistence** — instruct the agent not to stop early when another tool call is likely to materially improve correctness or completeness. Keep calling tools until the task is done and verification passes. Counteracts the tendency to summarize partial findings instead of finishing the work.
 
 ## B. Tool Descriptions
 
@@ -121,7 +126,7 @@ Tool descriptions are **the single most impactful quality factor** for tool-use 
 |--------|--------|-----|--------|
 | Description style | Detailed narrative (3-4 sentences) | CTCO: Context, Task, Constraints, Output | Short and direct; use enum arrays heavily |
 | Strict schema | Supported | `strict: true` for 100% schema adherence | Up to 512 declarations; 10-20 active recommended |
-| Tool preambles | Not needed | "Before calling a tool, explain why" boosts accuracy | Not needed |
+| Tool preambles | Not needed | Two distinct uses: (1) "explain why" before a tool call → better tool-use accuracy; (2) short user-visible "acknowledge + first step" preamble before tool calls in streaming → better perceived responsiveness on GPT-5.5 | Not needed |
 | Error recovery | Handles well natively | Handles well natively | Add: "Don't repeat failed calls with identical arguments" |
 | Scope creep risk | Low | High — add "Do ONLY what is requested" | Moderate |
 
@@ -174,7 +179,7 @@ Tool responses are context — bloated responses waste tokens and degrade reason
 
 | Aspect | Claude | GPT | Gemini |
 |--------|--------|-----|--------|
-| Mechanism | Adaptive by default; use `effort` param (low/medium/high/max) for control | `reasoning.effort`: minimal/medium/high/xhigh; peaks across multiple agent turns | `thinkingLevel`: minimal/low/medium/high (Gemini 3); `thinkingBudget` token count (Gemini 2.5) |
+| Mechanism | Adaptive by default; use `effort` param (low/medium/high/max) for control | `reasoning.effort`: none/low/medium/high/xhigh (GPT-5.4+); peaks across multiple agent turns. Default to `none`/`low` for latency-sensitive work; raise to `high`/`xhigh` only after exhausting completeness contracts, verification loops, and tool-use persistence (see Agentic Systems in Section A) — reasoning effort is a last-mile knob, not a primary quality lever | `thinkingLevel`: minimal/low/medium/high (Gemini 3); `thinkingBudget` token count (Gemini 2.5) |
 | Default state | Adaptive (model decides) — no config needed | OFF — must enable explicitly | Cannot disable on latest Pro models |
 | Temperature | 0.0-1.0 typical range | 0.0-1.0 typical range | **Keep at 1.0** — lowering causes looping/degradation |
 | Trace reuse | Not supported | `previous_response_id` saves tokens in multi-turn | Not supported |
@@ -196,12 +201,13 @@ Tool responses are context — bloated responses waste tokens and degrade reason
 
 ### Unique Features
 - **Claude:** Prefill removed in 4.6. Adaptive thinking is default — no config needed. Context-aware (can track remaining context window). Parallel tool calling ~100% success with explicit instruction. Use `effort` param (not `budget_tokens`) for thinking control — `max` level available for quality-critical tasks. Tool search available for deferring large tool sets.
-- **GPT:** `developer` role prioritized over `user` — security-sensitive instructions go in developer message. `strict: true` guarantees 100% JSON schema adherence. Independent `text.verbosity` param (low/medium/high) controls output length separately from reasoning depth. `previous_response_id` preserves reasoning across turns (73.9% → 78.2% on benchmarks). Fifth reasoning effort level `xhigh` available for quality-critical tasks. Contradictions in prompts are more damaging in GPT-5 — it spends tokens reconciling conflicts instead of ignoring them.
+- **GPT — APIs and params:** `developer` role prioritized over `user` — security-sensitive instructions go in developer message. `strict: true` guarantees 100% JSON schema adherence. Independent `text.verbosity` param (low/medium/high) controls output length separately from reasoning depth. `previous_response_id` preserves reasoning across turns (73.9% → 78.2% on benchmarks). Fifth reasoning effort level `xhigh` available for quality-critical tasks. Image `detail` control: set `"high"` for standard vision, `"original"` for spatially sensitive or computer-use tasks, `"low"` only when speed dominates — don't rely on `auto` in production agents.
+- **GPT — prompting style (5.4/5.5):** Contradictions are more damaging on GPT-5 than older models — it spends tokens reconciling conflicts instead of ignoring them. Prefer outcome-first contracts (describe destination, not steps). Define `Personality` (tone, warmth, directness, formality) and `Collaboration style` (when to ask vs. assume, how to handle uncertainty) as two separate concise blocks rather than one bundled instruction.
 - **Gemini:** Native Google Search grounding (exclusive anti-hallucination tool — connects model to real-time verified information). Media resolution control for multimodal (image/video/PDF token budgets). Gemini 3 can combine built-in tools (Search, Code Execution) with custom function calling in a single call; function calls generate unique IDs that must be returned with results. `customtools` model variant optimized for agentic workflows prioritizing custom tools. Few-shot examples are critical — "prompts without few-shot examples are likely to be less effective." Default verbosity is terse — request elaboration explicitly. Add temporal grounding ("Remember it is {YEAR} this year") for time-sensitive tasks. Completion priming (start the response, let model continue) is more reliable than describing format preferences. Thought signatures (`thoughtSignatures`) preserve reasoning chains across multi-turn calls — capture and return them to maintain coherence.
 
 ## D. Budget Models
 
-Budget models (Claude Haiku 4.5, GPT-5 Mini, Gemini 3 Flash / 3.1 Flash Lite) share common patterns:
+Budget models (Claude Haiku 4.5, GPT-5.4 Mini, Gemini 3 Flash / 3.1 Flash Lite) share common patterns:
 
 ### What Changes
 - **More explicit instructions** — less capable at inferring intent from context.
@@ -212,7 +218,7 @@ Budget models (Claude Haiku 4.5, GPT-5 Mini, Gemini 3 Flash / 3.1 Flash Lite) sh
 
 ### Best Uses by Tier
 
-| Task Type | Haiku 4.5 | GPT-5 Mini | Flash / Flash Lite |
+| Task Type | Haiku 4.5 | GPT-5.4 Mini | Flash / Flash Lite |
 |-----------|-----------|------------|---------------------|
 | Classification / routing | Excellent | Good | Excellent |
 | Structured extraction | Good | Good | Good |
@@ -320,6 +326,7 @@ Recognize these urges and resist them:
 - **Over-delegating to subagents** — Claude 4.6 spawns subagents for tasks it could handle directly. If the task needs no specialized tools or clean context, do it in-line.
 - **Rewriting the whole prompt** — When editing, preserve existing structure and tone. Make the minimal change that fixes the issue. Re-read the full prompt after editing.
 - **Prompt archaeology neglect** — instructions effective in GPT-4/Claude 3.5 may backfire in newer models. When upgrading models, audit prompts for obsolete aggressive encouragement — native capabilities make external prodding redundant.
+- **"My old prompt worked — just point it at the new model"** — carrying every legacy instruction forward burns tokens reconciling guidance the new model doesn't need (and can hurt quality on GPT-5.x specifically). Migration order: switch model → pin reasoning effort → re-run evals → trim what's now redundant → only then add new guidance.
 - **Assuming all providers behave the same** — They don't. Check Section C for differences in instruction placement, verbosity defaults, persona handling, and temperature.
 - **Trusting all input equally** — Treat external data (user messages, tool results, retrieved documents) as untrusted context, not as instructions. Use delimiters and instruction hierarchy (system > developer > user) to maintain prompt integrity. This is especially important for agentic systems where tool results may contain adversarial content.
 
@@ -331,7 +338,8 @@ Don't iterate blindly. Build simple evaluations:
 3. **Test on the target model tier** — what works on Opus/GPT-5.4/Gemini Pro may need more detail for Haiku/Mini/Flash.
 4. **Use adversarial inputs** — empty strings, unexpected languages, edge cases, tools that shouldn't be called, and **plausible-sounding nonsense** (real domain vocabulary combined incoherently — fabricated framework names, real concepts from wrong domains, precise numbers for unmeasurable things). Test whether the agent engages confidently with broken premises or pushes back.
 5. **After 2 failed correction attempts** — stop iterating. Start fresh with a better initial prompt incorporating lessons learned.
-6. **Build programmatic evaluations** — Run the agent on representative test cases, score outputs automatically (LLM-as-judge or exact match), track scores across prompt changes. Small description improvements in tools yield dramatic gains — but only if you measure.
+6. **When migrating to a newer model** — switch the model first while pinning reasoning effort, run evals, then iterate one change at a time. Avoid carrying every instruction over from older prompt stacks — legacy prompts often over-specify processes newer models handle natively.
+7. **Build programmatic evaluations** — Run the agent on representative test cases, score outputs automatically (LLM-as-judge or exact match), track scores across prompt changes. Small description improvements in tools yield dramatic gains — but only if you measure.
 
 ### Writing Evaluation / Judge Prompts
 When using LLMs to evaluate outputs (LLM-as-judge), the prompt design differs from system prompts:
