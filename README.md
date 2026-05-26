@@ -1,6 +1,6 @@
 # claude-skills
 
-Agent skills by [@shaharsha](https://github.com/shaharsha) - 9 production-grade [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills) that work in Claude Code, claude.ai, Codex, Cursor, and any other harness that reads the SKILL.md format.
+Agent skills by [@shaharsha](https://github.com/shaharsha) - 11 production-grade [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills) that work in Claude Code, claude.ai, Codex, Cursor, and any other harness that reads the SKILL.md format.
 
 MIT licensed. Built day-to-day; battle-tested in real projects.
 
@@ -15,13 +15,13 @@ MIT licensed. Built day-to-day; battle-tested in real projects.
 /plugin install shaharsha-skills@shaharsha-skills
 ```
 
-This installs all 9 skills as one plugin. Or pick a subset:
+This installs all 11 skills as one plugin. Or pick a subset:
 
 ```bash
-/plugin install documents-and-decks@shaharsha-skills    # gdoc-sync + gslides-sync + presentation-generator
+/plugin install documents-and-decks@shaharsha-skills    # gdoc-sync + gslides-sync + gsheets + presentation-generator
 /plugin install brand-and-visuals@shaharsha-skills      # brand-system + brand-assets + image-generation
 /plugin install engineering-decisions@shaharsha-skills  # tech-design-doc
-/plugin install building-agents@shaharsha-skills        # prompt-engineer
+/plugin install building-agents@shaharsha-skills        # prompt-engineer + writing-project-memory
 /plugin install utilities@shaharsha-skills              # namecheap-domains
 ```
 
@@ -48,6 +48,10 @@ Push a local `.md` to an existing Google Doc, then fix the four things Google's 
 #### [gslides-sync](skills/gslides-sync)
 
 Sister to `gdoc-sync` for `.pptx` -> existing Google Slides. Rewrites broken slide-anchor and cross-presentation links into native `pageObjectId` references, scales oversized images, applies RTL per text shape. Same service-account setup works for both.
+
+#### [gsheets](skills/gsheets)
+
+Comprehensive Sheets API v4 CLI - the Sheets-shaped sibling to `gdoc-sync` and `gslides-sync`. Read / write / append / clear cells; create / rename / duplicate / delete tabs; freeze rows, set column widths, merge ranges; style headers (bold + colored bg + frozen + filter as one atomic batch); apply borders, banding (zebra stripes), and conditional formatting; sort and filter; or drop to a `batch-update` escape hatch for charts, pivots, data-validation dropdowns, protected ranges, and gradient color scales. Same service-account auth as the other Google skills.
 
 #### [presentation-generator](skills/presentation-generator)
 
@@ -98,7 +102,7 @@ A few of these are designed to work together:
 - `presentation-generator` calls `image-generation` for every slide.
 - `presentation-generator` consumes `brand-system`'s `BRAND.md` for palette / typography / motif lock when present in the directory.
 - `brand-system` (the document) and `brand-assets` (the pixels) are siblings - run both for a complete brand rollout.
-- `gdoc-sync` and `gslides-sync` share Google service-account setup; one SA works for both APIs.
+- `gdoc-sync`, `gslides-sync`, and `gsheets` share Google service-account setup; one SA works for all three APIs.
 - `tech-design-doc` calls `gdoc-sync` at the end of the workflow to push the finished TDR to a live Google Doc for stakeholder comments.
 
 ---

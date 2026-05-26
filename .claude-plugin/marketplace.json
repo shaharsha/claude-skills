@@ -11,12 +11,13 @@
   "plugins": [
     {
       "name": "shaharsha-skills",
-      "description": "All 10 agent skills - gdoc-sync, gslides-sync, presentation-generator, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-memory, tech-design-doc, namecheap-domains",
+      "description": "All 11 agent skills - gdoc-sync, gslides-sync, gsheets, presentation-generator, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-memory, tech-design-doc, namecheap-domains",
       "source": "./",
       "strict": false,
       "skills": [
         "./skills/gdoc-sync",
         "./skills/gslides-sync",
+        "./skills/gsheets",
         "./skills/presentation-generator",
         "./skills/brand-system",
         "./skills/brand-assets",
@@ -29,12 +30,13 @@
     },
     {
       "name": "documents-and-decks",
-      "description": "Sync Markdown to Google Docs, .pptx to Google Slides, and generate AI-rendered 16:9 presentation decks",
+      "description": "Sync Markdown to Google Docs, .pptx to Google Slides, CSV / values to Google Sheets, and generate AI-rendered 16:9 presentation decks",
       "source": "./",
       "strict": false,
       "skills": [
         "./skills/gdoc-sync",
         "./skills/gslides-sync",
+        "./skills/gsheets",
         "./skills/presentation-generator"
       ]
     },
