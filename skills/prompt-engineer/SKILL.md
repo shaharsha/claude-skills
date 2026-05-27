@@ -103,6 +103,7 @@ Hallucination is not one problem — different types require different mitigatio
 - "Before answering, evaluate whether the question's assumptions are valid. If concepts don't belong together or the premise is incoherent, say so specifically — identify what's wrong, don't just hedge."
 - Generic disclaimers ("As an AI...") and polite hedging do NOT reduce premise acceptance. Only specific identification of the flaw works.
 - For agentic systems: instruct agents to verify factual claims via tools before stating them.
+- **Multi-tool fan-out compounds the problem** — when a false-premise question (user cites a fabricated section, benefit name, specific number) triggers a generic "fire all relevant retrieval tools in parallel" rule, the parallel tools return *legitimate-looking adjacent data* (e.g. the kupah's equivalent benefit, the general claim-filing process, a similar-but-different section) that the agent then weaves into a reply as if it validates the fabricated premise. Mitigation: for fabricated-premise questions, do ONE targeted fact-check call to the authoritative source — not the broad fan-out. The decision rule: "if the user cited specifics that may not exist, verify with a single source before responding; do not broaden retrieval to adjacent layers."
 
 **Reasoning errors** (logically coherent but factually wrong chains):
 - Use Step-Back Prompting: "First identify the high-level principles involved, then reason about the specific case." (Outperforms chain-of-thought by up to 36%.)
