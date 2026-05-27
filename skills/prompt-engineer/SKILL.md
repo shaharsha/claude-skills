@@ -1,6 +1,6 @@
 ---
 name: prompt-engineer
-description: "Use when writing or editing system prompts, tool/function descriptions, agent instructions, function-calling schemas, tool-response formats, or context flows for any LLM API; when an agent calls the wrong tool, over- or under-triggers, loops, or returns bloated output; when reviewing prompt quality, improving tool-use accuracy, making a prompt work across providers, or migrating a prompt to a newer model version. Covers Claude/Anthropic, GPT/OpenAI (including Azure OpenAI), and Gemini/Google (including Vertex AI)."
+description: "Use ANY time an LLM-powered agent, chatbot, or AI assistant is being built, debugged, reviewed, planned, or migrated — the user almost never says 'prompt.' They say 'the agent keeps calling the wrong tool,' 'why is it ignoring my instructions,' 'fix this bug,' or just paste a log. TRIGGER when (1) any file in scope contains a system prompt, tool/function description, function-calling schema, tools.json, agents/* file, or imports an LLM SDK (anthropic, openai, google.genai, AWS Bedrock, Vertex, Azure OpenAI); (2) an agent loops, picks the wrong tool, hallucinates arguments, runs verbose despite low-verbosity settings, over- or under-escalates, ignores instructions, or shifts behavior after a model upgrade; (3) the user is thinking through or planning agent architecture — subagents, orchestrator/worker splits, state passing, multi-agent workflows — before code is written; (4) the user is comparing providers, migrating a prompt to a newer model, or asking 'is this good enough.' Covers Claude/Anthropic, GPT/OpenAI (incl. Azure), and Gemini/Google (incl. Vertex). Invoke proactively the moment you see prompt-shaped text or an LLM SDK call in scope — do not wait for the user to ask. SKIP only when no LLM agent is in the loop (pure SQL, infra, normal code with no model in scope, human prose editing)."
 ---
 
 # Prompt Engineering for AI Agent APIs
@@ -9,7 +9,37 @@ description: "Use when writing or editing system prompts, tool/function descript
 
 Guidelines for writing system prompts, tool descriptions, and agent instructions for building AI agents via the Claude, GPT, and Gemini APIs. This covers both prompt engineering (crafting instruction text) and the broader discipline of context engineering (orchestrating everything the model sees — tools, memory, retrieved documents, state — to maximize the likelihood of desired behavior).
 
-> **Targeting one provider?** This file is the universal layer (~70% of the work) plus side-by-side comparison tables. After reading it, load the deep-dive for your model family: `${CLAUDE_SKILL_DIR}/references/claude.md`, `gpt.md`, or `gemini.md`. Split by **model family, not platform** — prompt engineering is identical whether GPT runs on the OpenAI API or Azure OpenAI, or whether Claude runs on the Anthropic API or AWS Bedrock. Azure OpenAI → `gpt.md`. Bedrock Claude → `claude.md`. Vertex AI → `claude.md` or `gemini.md` depending on the model. The reference files track current model versions and change as models ship; this file's principles are stable.
+## Step 0 — MANDATORY before anything else
+
+Before reading the rest of this skill, do these two things in order. They are not optional and they are not "later." Skipping them is the #1 failure mode of this skill: the user repeatedly has to ask "did you read the provider-specific md?" because the universal section below got read in isolation and the version-specific knobs were never loaded.
+
+### 0a. Identify the model family in scope
+
+Look at the code, the file being edited, the SDK being imported, or what the user just said. Match against these signals — first hit wins. Split by **model family, not platform**: prompt engineering is identical whether GPT runs on OpenAI or Azure, or whether Claude runs on Anthropic or AWS Bedrock.
+
+| Signal seen in code / file / prompt                                                                                                                            | Family   |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `from anthropic`, `Anthropic(`, `AsyncAnthropic(`, `@anthropic-ai/sdk`, model id matches `claude-*`, AWS Bedrock `anthropic.claude-*`, Vertex `claude-*`       | claude   |
+| `from openai`, `OpenAI(`, `AzureOpenAI(`, `chat.completions.create`, `responses.create`, model id matches `gpt-*` / `o1*` / `o3*` / `o4*` / `text-embedding-*` | gpt      |
+| `from google import genai`, `google.generativeai`, `GenerativeModel(`, model id matches `gemini-*`, Vertex `publishers/google/models/gemini-*`                 | gemini   |
+
+If you see **more than one** family (cross-provider code, comparison work, or a router), load all matching reference files. If you see **none** (the user is asking abstractly, e.g. "how should I structure a system prompt"), ask which provider/model they're targeting before continuing — do not guess. A wrong-provider answer is worse than one clarifying question.
+
+### 0b. Read the matching reference file(s) NOW
+
+- claude → read `${CLAUDE_SKILL_DIR}/references/claude.md`
+- gpt    → read `${CLAUDE_SKILL_DIR}/references/gpt.md`
+- gemini → read `${CLAUDE_SKILL_DIR}/references/gemini.md`
+
+Read the full file before giving advice or editing anything. The universal section below covers ~70% of prompt engineering, but the version-specific knobs (Opus 4.7 sampling removal, GPT-5.5 "stop doing" list, Gemini 3.5 thought signatures, caching mechanics, reasoning-effort defaults, migration breakages) live only in those files and change every release. Working from the universal section alone produces stale advice — the exact failure the user keeps catching.
+
+### Red flags — STOP and go back to 0a/0b
+
+- "I already know what Claude/GPT/Gemini wants here" — model behavior shifts every version; verify against the current reference file before recommending anything model-specific.
+- "The universal section is enough for this small change" — even small prompt edits interact with provider-specific defaults (reasoning effort, thinking, caching, sampling). Load the reference.
+- "I'll load it later if needed" — later never comes; the load is now, before the first recommendation.
+- "The user didn't mention a provider" — check the code, imports, model strings, or filename. If still unclear, ask. Do not guess.
+- "This is just a debugging question, not a prompt edit" — debugging prompts IS a prompt-engineer task. The reference file likely names the exact failure mode.
 
 ## Process
 
