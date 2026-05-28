@@ -418,6 +418,10 @@ When using LLMs to evaluate outputs (LLM-as-judge), the prompt design differs fr
 
 **Anti-pattern:** Vague criteria like "rate the quality 1-10" produce inconsistent results. Specific criteria ("Does the response identify the factual error in the premise? Score 0 if it engages without pushback, 1 if it flags concerns but still answers, 2 if it makes the error the central point.") produce reliable judgments.
 
+**Anti-pattern — judge prompt overriding the fixture's ground truth.** When fixtures carry explicit specs (e.g. `tools_required: [X, Y]`, `tools_forbidden: [Z]`, `expected_facts: [...]`), the judge prompt should treat those as the ground truth for that fixture — not as suggestions to weigh against its own opinion of what's correct. Concrete failure mode observed in a production bench: the judge prompt included "for procedure/test/dental queries: BOTH tools must be called in parallel" as a general rule. For 7+ adversarial fixtures that explicitly list `tools_required: [get_user_policy]` only (the test is "don't engage the fabricated premise"), the judge applied its own routing override and scored tool_use=0 even though the agent perfectly matched the fixture spec. Fix: remove the override, make the fixture's `tools_required` literally the ground truth. Result: 7 of 7 affected fixtures moved up (+0.8 to +2.2 each) with zero agent change. **When a judge has an opinion about what "should" be true, but the fixture spec says otherwise, the fixture wins** — otherwise the bench measures judge bias, not agent quality.
+
+**Where to look for this**: any judge-prompt clause that begins "for [topic] queries..." or "if the question involves [X], the answer should..." — these are universal overrides that fire across all fixtures regardless of their specific spec. Audit those clauses against fixtures of the matching topic; if some fixtures legitimately need different behavior than the override prescribes, the override is wrong.
+
 ## Templates and References
 
 Templates in `${CLAUDE_SKILL_DIR}/templates/`:
