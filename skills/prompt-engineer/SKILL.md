@@ -31,7 +31,7 @@ If you see **more than one** family (cross-provider code, comparison work, or a 
 - gpt    → read `${CLAUDE_SKILL_DIR}/references/gpt.md`
 - gemini → read `${CLAUDE_SKILL_DIR}/references/gemini.md`
 
-Read the full file before giving advice or editing anything. The universal section below covers ~70% of prompt engineering, but the version-specific knobs (Opus 4.7 sampling removal, GPT-5.5 "stop doing" list, Gemini 3.5 thought signatures, caching mechanics, reasoning-effort defaults, migration breakages) live only in those files and change every release. Working from the universal section alone produces stale advice — the exact failure the user keeps catching.
+Read the full file before giving advice or editing anything. The universal section below covers ~70% of prompt engineering, but the version-specific knobs (Opus 4.8 effort defaults + sampling removal, GPT-5.5 "stop doing" list, Gemini 3.5 thought signatures, caching mechanics, reasoning-effort defaults, migration breakages) live only in those files and change every release. Working from the universal section alone produces stale advice — the exact failure the user keeps catching.
 
 ### Red flags — STOP and go back to 0a/0b
 
@@ -145,7 +145,7 @@ When designing multi-step or multi-agent workflows:
 - **Token budgets** — for workloads where the agent should scope its work to an allowance, some providers expose an advisory budget the model can see and pace against (distinct from a hard `max_tokens` cap). See the provider reference file.
 
 ### Sampling Parameters and Determinism
-Frontier models are moving away from caller-controlled sampling. **Claude Opus 4.7 returns a 400 error** if `temperature`, `top_p`, or `top_k` are set to non-default values; **Gemini 3.x strongly recommends not setting them at all**; GPT still accepts them but the trend is the same. Two consequences:
+Frontier models are moving away from caller-controlled sampling. **Claude Opus 4.8 (and 4.7) returns a 400 error** if `temperature`, `top_p`, or `top_k` are set to non-default values; **Gemini 3.x strongly recommends not setting them at all**; GPT still accepts them but the trend is the same. Two consequences:
 - Don't reach for `temperature` to steer behavior — use explicit prompting, structured outputs, and the reasoning/effort knob instead.
 - `temperature = 0` never guaranteed identical outputs anyway. For determinism, constrain the output (structured outputs, enum fields, explicit format rules) rather than lowering temperature.
 
@@ -218,14 +218,14 @@ For depth on any one provider — including current model versions and migration
 | System role name | `system` | `developer` (prioritized over user) | `system_instruction` |
 | Instruction placement | Top works best | BOTH start AND end (recency bias) | Critical constraints go LAST |
 | Multi-turn drift | System prompt persists well | Reappend key instructions every 3-5 messages | System instruction persists well |
-| Default verbosity | Calibrates to task complexity (Opus 4.7); prompt explicitly for fixed verbosity | Direct by default; `text.verbosity` param (low often best) | Terse — request elaboration explicitly |
+| Default verbosity | Calibrates to task complexity (Opus 4.8); prompt explicitly for fixed verbosity | Direct by default; `text.verbosity` param (low often best) | Terse — request elaboration explicitly |
 
 ### Prompting Style
 
 | Aspect | Claude | GPT | Gemini |
 |--------|--------|-----|--------|
 | Aggressive language | **Avoid** — proactive by default; aggressive prompting causes overtriggering and over-action | Unnecessary on GPT-5 (most steerable model); contradictions actively harmful | Avoid — causes over-analysis |
-| Literal following | Opus 4.7 follows instructions literally — it will not silently generalize a rule; state instruction scope explicitly ("apply to every section") | Surgical precision; vague or conflicting instructions are more damaging than on older models | Follows well-structured prompts closely |
+| Literal following | Opus 4.8 follows instructions literally — it will not silently generalize a rule; state instruction scope explicitly ("apply to every section") | Surgical precision; vague or conflicting instructions are more damaging than on older models | Follows well-structured prompts closely |
 | Chain-of-thought | Not needed — use adaptive thinking | **Harmful** on reasoning models — degrades performance | Not needed — use `thinking_level` |
 | Prompt length | Medium-length prompts work well | Longer prompts tolerated | Short, direct prompts work best |
 | Structuring | XML tags (strongest support) | XML or markdown (JSON wrapping degrades perf) | XML, markdown, or plain text — be consistent |
@@ -237,8 +237,8 @@ For depth on any one provider — including current model versions and migration
 | Aspect | Claude | GPT | Gemini |
 |--------|--------|-----|--------|
 | Mechanism | Adaptive thinking; `effort`: low/medium/high/xhigh/max | `reasoning.effort`: none/low/medium/high/xhigh | `thinking_level`: minimal/low/medium/high |
-| Default state | Opus 4.7: thinking **OFF** unless `thinking:{type:"adaptive"}` is set; min `high` effort recommended for intelligence-sensitive work, `xhigh` for coding/agentic | Default effort per-model: GPT-5.5 `medium`, GPT-5.4/Mini/Nano `none` | Default `thinking_level` per-model: 3.1 Pro `high`, 3.5 Flash `medium` |
-| Sampling params | **Removed on Opus 4.7** — non-default `temperature`/`top_p`/`top_k` → 400 error | Accepted, but trending out | Don't set on Gemini 3.x — strongly discouraged |
+| Default state | Opus 4.8: thinking **OFF** unless `thinking:{type:"adaptive"}` is set; `effort` defaults to `high`, `xhigh` for coding/agentic | Default effort per-model: GPT-5.5 `medium`, GPT-5.4/Mini/Nano `none` | Default `thinking_level` per-model: 3.1 Pro `high`, 3.5 Flash `medium` |
+| Sampling params | **Removed on Opus 4.8/4.7** — non-default `temperature`/`top_p`/`top_k` → 400 error | Accepted, but trending out | Don't set on Gemini 3.x — strongly discouraged |
 | Trace reuse | Not supported | `previous_response_id` saves tokens in multi-turn | Thought signatures preserved automatically (Gemini 3.5) |
 
 Reasoning effort is a **last-mile knob, not a primary quality lever**. Before raising effort, exhaust completeness contracts, verification loops, and tool-use persistence (Section A). Higher effort is not automatically better — it can cause overthinking, especially with contradictory instructions or weak stopping criteria.
@@ -302,7 +302,7 @@ When writing prompts that must work across providers or when provider-switching 
 - System message role name (`system` vs `developer` vs `system_instruction`)
 - Caching strategy (manual breakpoints vs automatic prefix vs automatic)
 - Tool schema strictness and structured-output APIs (`strict: true` is GPT-specific)
-- Sampling parameters — Claude Opus 4.7 rejects non-default values outright and Gemini 3.x discourages them; the safest cross-provider default is to **omit `temperature`/`top_p`/`top_k` entirely** and steer with prompting + structured outputs.
+- Sampling parameters — Claude Opus 4.8 rejects non-default values outright and Gemini 3.x discourages them; the safest cross-provider default is to **omit `temperature`/`top_p`/`top_k` entirely** and steer with prompting + structured outputs.
 
 ### Cross-Provider Prompt Pattern
 Write the core prompt once using XML structure, then wrap provider-specific adjustments in your agent framework:
@@ -373,7 +373,7 @@ Recognize these urges and resist them:
 - **"CRITICAL: YOU MUST ALWAYS..."** — Aggressive language overtriggers on Claude and causes over-analysis on Gemini. Use calm, direct instructions.
 - **"Think step by step"** — Harmful on reasoning models (GPT o-series, high-effort Claude/Gemini). Unnecessary on standard models with thinking APIs enabled. If you need structured reasoning on standard models, **Step-Back Prompting** (abstract first, then reason) outperforms chain-of-thought by up to 36%.
 - **"Don't hallucinate"** — Negative framing is less effective, and hallucination isn't one problem. See "Reducing Hallucinations" in Section A for type-specific mitigations.
-- **Setting `temperature` to steer behavior** — Claude Opus 4.7 rejects it with a 400 error; Gemini 3.x discourages it. Steer with prompting and structured outputs instead.
+- **Setting `temperature` to steer behavior** — Claude Opus 4.8 rejects it with a 400 error; Gemini 3.x discourages it. Steer with prompting and structured outputs instead.
 - **Adding 20+ tools** — Too many overlapping tools is the #1 failure mode across all providers. If you can't choose between two tools as a human, the model can't either.
 - **Wrapping APIs as tools** — building 1:1 API-to-tool mappings instead of workflow-oriented tools. `schedule_event` beats separate `list_users` + `list_events` + `create_event`.
 - **Hand-writing JSON schemas in the prompt** — use the provider's structured-output feature instead; it's more reliable and removes the validation burden.
