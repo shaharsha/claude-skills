@@ -237,7 +237,7 @@ For depth on any one provider — including current model versions and migration
 | Aspect | Claude | GPT | Gemini |
 |--------|--------|-----|--------|
 | Mechanism | Adaptive thinking; `effort`: low/medium/high/xhigh/max | `reasoning.effort`: none/low/medium/high/xhigh | `thinking_level`: minimal/low/medium/high |
-| Default state | Opus 4.7: thinking **OFF** unless `thinking:{type:"adaptive"}` is set; min `high` effort recommended for intelligence-sensitive work, `xhigh` for coding/agentic | Default effort `medium`; `none` only for latency-critical no-reasoning tasks | Default `thinking_level: medium` (Gemini 3.5) |
+| Default state | Opus 4.7: thinking **OFF** unless `thinking:{type:"adaptive"}` is set; min `high` effort recommended for intelligence-sensitive work, `xhigh` for coding/agentic | Default effort `medium`; `none` only for latency-critical no-reasoning tasks | Default `thinking_level` per-model: 3.1 Pro `high`, 3.5 Flash `medium` |
 | Sampling params | **Removed on Opus 4.7** — non-default `temperature`/`top_p`/`top_k` → 400 error | Accepted, but trending out | Don't set on Gemini 3.x — strongly discouraged |
 | Trace reuse | Not supported | `previous_response_id` saves tokens in multi-turn | Thought signatures preserved automatically (Gemini 3.5) |
 
