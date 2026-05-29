@@ -1,8 +1,8 @@
 # GPT (OpenAI) — Provider Deep-Dive
 
-Applies to the **GPT model family** wherever it runs: the OpenAI API and Azure OpenAI. The platform does not change prompt engineering — the model version does. (Azure adds deployment-level content filters; those are deployment configuration, not prompt engineering, and are tuned in the Azure portal, not the prompt.)
+Applies to the **GPT model family** wherever it runs: the OpenAI API and Azure OpenAI / Microsoft Foundry. The platform does not change prompt engineering — the model version does — but Azure has real API and deployment differences worth knowing (see *Azure OpenAI / Foundry* below).
 
-**Current models (May 2026):** GPT-5.5 (`gpt-5.5`) is the frontier model; GPT-5.4 and the smaller GPT-5.4 Mini / Nano remain in use for cheaper tiers. GPT-5.5's default style is efficient, direct, and task-oriented, and it reaches strong results with **fewer reasoning tokens** than prior models at the same effort. Treat GPT-5.5 as a new model family to tune for — not a drop-in replacement for 5.4.
+**Current models (May 2026):** GPT-5.5 (`gpt-5.5`) is the frontier model; GPT-5.4 (`gpt-5.4`) and the smaller GPT-5.4 Mini / Nano (`gpt-5.4-mini`, `gpt-5.4-nano`) serve cheaper, faster tiers (mini/nano are aimed at coding, classification, extraction, ranking, and subagents). Context windows: **GPT-5.5 and 5.4 ≈ 1.05M tokens** (≈922K input / 128K output — input above ~272K is billed at 2× input and 1.5× output for the session, so chunk or cache rather than stuffing); **Mini and Nano = 400K** (272K input / 128K output). GPT-5.5's default style is efficient, direct, and task-oriented, reaching strong results with **fewer reasoning tokens** than prior models at the same effort. **Mind the reasoning-effort default — it differs by model (see *Reasoning effort*):** GPT-5.5 defaults to `medium`, but GPT-5.4 and its Mini/Nano default to **`none`**, so upgrading to 5.4 without explicitly setting effort silently turns reasoning off. Treat GPT-5.5 as a new model family to tune for — not a drop-in replacement for 5.4.
 
 ## Contents
 - Roles and instruction hierarchy
@@ -17,6 +17,7 @@ Applies to the **GPT model family** wherever it runs: the OpenAI API and Azure O
 - Personality and collaboration style
 - Small models (Mini / Nano)
 - Images
+- Azure OpenAI / Foundry
 - Migration: "stop doing" list
 
 ## Roles and instruction hierarchy
@@ -33,11 +34,11 @@ Prefer **decision rules over absolutes** for judgment calls. Replace ALWAYS/NEVE
 
 ## Reasoning effort
 
-`reasoning.effort`: `none` / `low` / `medium` / `high` / `xhigh`. Default is `medium`.
+`reasoning.effort`: `none` / `low` / `medium` / `high` / `xhigh`. **The default is per-model: GPT-5.5 defaults to `medium`; GPT-5.4 defaults to `none`** (the Mini/Nano tiers follow the 5.4 family — pin effort either way) — explicitly pass an effort level on 5.4 if you want it to reason, or it runs with reasoning off. (`minimal` existed only on the original GPT-5 models and is **not** available on 5.1+; on 5.4/5.5 the floor is `none`.)
 
 - `none` — latency-critical tasks with no reasoning need (lightweight classification, voice turns).
 - `low` — efficient reasoning when planning/tool use still matters but speed counts.
-- `medium` — the recommended starting point for quality/latency balance.
+- `medium` — the recommended starting point for quality/latency balance (GPT-5.5's default).
 - `high` / `xhigh` — raise only when evals show a measurable quality gain worth the latency.
 
 Reasoning effort is a **last-mile knob, not a primary quality lever**. Higher is not automatically better — it can cause overthinking when instructions conflict or stopping criteria are weak. Before raising effort, add completeness contracts, verification loops, and tool-use persistence rules. For execution-heavy work (workflow, extraction, triage) start low; for research/synthesis/review start at medium+.
@@ -48,7 +49,7 @@ Reasoning effort is a **last-mile knob, not a primary quality lever**. Higher is
 
 ## Structured outputs
 
-Do **not** hand-write JSON schemas in the prompt. Use the Structured Outputs API with `strict: true` — it guarantees 100% schema adherence and removes the validation burden from the model. For classification, use a tool/function with an enum field of valid labels.
+Do **not** hand-write JSON schemas in the prompt. Use the Structured Outputs API with `strict: true` — it guarantees 100% schema adherence and removes the validation burden from the model. For classification, use a tool/function with an enum field of valid labels. When you need **non-JSON** constrained output (a custom text grammar, a strict DSL), GPT-5 reasoning models expose a `custom` tool type and a built-in `lark_tool` (Python-lark grammars via `format: {type: "grammar", syntax: "lark"}`) to constrain raw-text generation — reach for that instead of describing the grammar in prose.
 
 ## Tool use and agentic patterns
 
@@ -101,6 +102,17 @@ Mini and Nano are more literal and make fewer assumptions. Adjust:
 
 Image `detail`: `auto`/unset now behaves as `original` (preserves detail up to ~10.24M pixels / 6000px). Use `high` for standard vision (up to ~2.5M pixels / 2048px); `low` for aggressive downscaling when speed/cost dominate. For spatially sensitive or computer-use tasks, prefer `original`; don't rely on `auto` in production agents where precision matters.
 
+## Azure OpenAI / Foundry
+
+Prompt engineering is identical to the OpenAI API — same model, same `reasoning.effort` / `text.verbosity` / Structured Outputs behavior — but the API surface and a few defaults differ. What to know when the deployment is Azure:
+
+- **Endpoint & model name.** Call `https://YOUR-RESOURCE.openai.azure.com/openai/v1/` and pass your **deployment name** as `model` (not the bare model slug). Auth is API key or Microsoft Entra ID (bearer token). GPT-5.5, 5.4, 5.4-mini, 5.4-nano are all available; GPT-5.5 may need a Tier-5/6 quota request.
+- **Roles.** The `developer` role is functionally equivalent to `system` on Azure reasoning models, and the latest models also accept `system` for easier migration — but **do not send both a developer and a system message in the same request.**
+- **Token limit parameter.** Reasoning models use **`max_completion_tokens`** on the Chat Completions API and **`max_output_tokens`** on the Responses API. `max_tokens` is **not** supported. Always set `reasoning.effort` explicitly — omitting it can sharply increase latency on complex prompts.
+- **Unsupported sampling knobs.** `temperature`, `top_p`, `presence_penalty`, `frequency_penalty`, `logprobs`, `top_logprobs`, `logit_bias` are all **unsupported on reasoning models** (the same omit-sampling discipline as elsewhere — steer with prompting + Structured Outputs).
+- **Reasoning summaries.** Get a summary of the chain of thought via `reasoning.summary` (`auto` / `detailed`; the GPT-5 series does **not** support `concise`). Summaries aren't guaranteed every turn. **Do not try to extract raw reasoning by other means** — it violates the Acceptable Use Policy and can trigger throttling/suspension.
+- **Foundry-exposed features.** `preamble` objects (the model's pre-tool-call plan — encourage via `instructions`), `allowed tools` (list several under `tool_choice`), the `custom`/`lark_tool` grammar tools, and per-deployment **content filters** (configured in the Azure portal, not the prompt) all live here.
+
 ## Migration to GPT-5.5: "stop doing" list
 
 When moving from GPT-5.4 (or older), start from a fresh baseline and remove:
@@ -109,5 +121,7 @@ When moving from GPT-5.4 (or older), start from a fresh baseline and remove:
 - **Hand-written output schemas** — use Structured Outputs instead.
 - **"THOROUGH / maximize context" prodding** — GPT-5.x is already introspective; this language causes over-tool-use. Use soft language on context gathering.
 - **The assumption that higher reasoning effort is better** — verify with evals.
+
+Watch the **`reasoning.effort` default trap** when the target is GPT-5.4 (or Mini/Nano): those default to `none`, so a prompt that relied on implicit medium-effort reasoning on an older model will silently run with reasoning off. Pin the effort explicitly. (`minimal` is also gone on 5.1+ — if an old config used it, move to `none` or `low`.)
 
 Migration order: switch the model slug → pin `reasoning.effort` → re-run evals → trim now-redundant instructions → only then add new guidance. Benchmark accuracy, token consumption, and end-to-end latency together.
