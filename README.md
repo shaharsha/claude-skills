@@ -1,6 +1,6 @@
 # claude-skills
 
-Agent skills by [@shaharsha](https://github.com/shaharsha) - 11 production-grade [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills) that work in Claude Code, claude.ai, Codex, Cursor, and any other harness that reads the SKILL.md format.
+Agent skills by [@shaharsha](https://github.com/shaharsha) - 13 production-grade [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills) that work in Claude Code, claude.ai, Codex, Cursor, and any other harness that reads the SKILL.md format.
 
 MIT licensed. Built day-to-day; battle-tested in real projects.
 
@@ -15,14 +15,14 @@ MIT licensed. Built day-to-day; battle-tested in real projects.
 /plugin install shaharsha-skills@shaharsha-skills
 ```
 
-This installs all 12 skills as one plugin. Or pick a subset:
+This installs all 13 skills as one plugin. Or pick a subset:
 
 ```bash
 /plugin install documents-and-decks@shaharsha-skills    # gdoc-sync + gslides-sync + gsheets + presentation-generator
 /plugin install brand-and-visuals@shaharsha-skills      # brand-system + brand-assets + image-generation
 /plugin install engineering-decisions@shaharsha-skills  # tech-design-doc
 /plugin install building-agents@shaharsha-skills        # prompt-engineer + writing-project-memory
-/plugin install utilities@shaharsha-skills              # namecheap-domains + office-render
+/plugin install utilities@shaharsha-skills              # namecheap-domains + office-render + viewing-videos
 ```
 
 ### Manual (any other harness)
@@ -96,6 +96,10 @@ Check domain availability via Namecheap's `domains.check` API. One domain, batch
 #### [office-render](skills/office-render)
 
 Render a Microsoft Office file (`.docx` / `.pptx` / `.xlsx`) to PDF and then to page images using the **real** installed Office app (Word / PowerPoint / Excel) on macOS — pixel-faithful, unlike LibreOffice, which substitutes fonts and re-flows complex tables and slide grids. One command produces page JPGs Claude can read, for previewing a doc or visually QA-ing a generated `.docx`/`.pptx`. Bakes in the macOS permission gotchas it took real debugging to find: Automation consent, the Office sandbox's per-file access prompt, Full Disk Access for the Office apps (and the quit-and-relaunch needed for it to apply), and the `with timeout` wrapper that prevents AppleEvent timeouts on PDF export.
+
+#### [viewing-videos](skills/viewing-videos)
+
+Claude can't watch video — this skill is how it sees one anyway: turn the file into the **fewest frames that answer the question** via ffmpeg. Three strategies (targeted seek for known timestamps, scene-change detection for screen shares / slides, interval sampling for continuous motion), frames renamed to their meeting timestamp, an ImageMagick contact sheet to triage 60+ frames in one look, and a crop+upscale recipe for table text at the edge of 720p legibility. Born from a real need: a 30-min Zoom recording whose transcript missed the numbers shown on screen.
 
 ---
 

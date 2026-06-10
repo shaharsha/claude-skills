@@ -11,7 +11,7 @@
   "plugins": [
     {
       "name": "shaharsha-skills",
-      "description": "All 12 agent skills - gdoc-sync, gslides-sync, gsheets, presentation-generator, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-memory, tech-design-doc, namecheap-domains, office-render",
+      "description": "All 13 agent skills - gdoc-sync, gslides-sync, gsheets, presentation-generator, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-memory, tech-design-doc, namecheap-domains, office-render, viewing-videos",
       "source": "./",
       "strict": false,
       "skills": [
@@ -26,7 +26,8 @@
         "./skills/writing-project-memory",
         "./skills/tech-design-doc",
         "./skills/namecheap-domains",
-        "./skills/office-render"
+        "./skills/office-render",
+        "./skills/viewing-videos"
       ]
     },
     {
@@ -73,12 +74,13 @@
     },
     {
       "name": "utilities",
-      "description": "Domain availability via Namecheap API; plus rendering Microsoft Office files (.docx/.pptx/.xlsx) to PDF/images via the real Office apps on macOS",
+      "description": "Domain availability via Namecheap API; rendering Microsoft Office files (.docx/.pptx/.xlsx) to PDF/images via the real Office apps on macOS; plus viewing video files (mp4/mov) by extracting the fewest frames that answer the question",
       "source": "./",
       "strict": false,
       "skills": [
         "./skills/namecheap-domains",
-        "./skills/office-render"
+        "./skills/office-render",
+        "./skills/viewing-videos"
       ]
     }
   ]
