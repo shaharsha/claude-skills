@@ -15,14 +15,14 @@ MIT licensed. Built day-to-day; battle-tested in real projects.
 /plugin install shaharsha-skills@shaharsha-skills
 ```
 
-This installs all 11 skills as one plugin. Or pick a subset:
+This installs all 12 skills as one plugin. Or pick a subset:
 
 ```bash
 /plugin install documents-and-decks@shaharsha-skills    # gdoc-sync + gslides-sync + gsheets + presentation-generator
 /plugin install brand-and-visuals@shaharsha-skills      # brand-system + brand-assets + image-generation
 /plugin install engineering-decisions@shaharsha-skills  # tech-design-doc
 /plugin install building-agents@shaharsha-skills        # prompt-engineer + writing-project-memory
-/plugin install utilities@shaharsha-skills              # namecheap-domains
+/plugin install utilities@shaharsha-skills              # namecheap-domains + office-render
 ```
 
 ### Manual (any other harness)
@@ -92,6 +92,10 @@ Author or audit a CLAUDE.md / AGENTS.md project-memory file (the file an AI codi
 #### [namecheap-domains](skills/namecheap-domains)
 
 Check domain availability via Namecheap's `domains.check` API. One domain, batches up to 50, or TLD sweeps (`com,io,ai,dev,co,app,xyz`). Surfaces premium and EAP fees so you don't fall in love with a `$2,999` "available" name. Stdlib-only Python; auto-chunks lists >50 (the API's hard cap).
+
+#### [office-render](skills/office-render)
+
+Render a Microsoft Office file (`.docx` / `.pptx` / `.xlsx`) to PDF and then to page images using the **real** installed Office app (Word / PowerPoint / Excel) on macOS — pixel-faithful, unlike LibreOffice, which substitutes fonts and re-flows complex tables and slide grids. One command produces page JPGs Claude can read, for previewing a doc or visually QA-ing a generated `.docx`/`.pptx`. Bakes in the macOS permission gotchas it took real debugging to find: Automation consent, the Office sandbox's per-file access prompt, Full Disk Access for the Office apps (and the quit-and-relaunch needed for it to apply), and the `with timeout` wrapper that prevents AppleEvent timeouts on PDF export.
 
 ---
 

@@ -11,7 +11,7 @@
   "plugins": [
     {
       "name": "shaharsha-skills",
-      "description": "All 11 agent skills - gdoc-sync, gslides-sync, gsheets, presentation-generator, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-memory, tech-design-doc, namecheap-domains",
+      "description": "All 12 agent skills - gdoc-sync, gslides-sync, gsheets, presentation-generator, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-memory, tech-design-doc, namecheap-domains, office-render",
       "source": "./",
       "strict": false,
       "skills": [
@@ -25,7 +25,8 @@
         "./skills/prompt-engineer",
         "./skills/writing-project-memory",
         "./skills/tech-design-doc",
-        "./skills/namecheap-domains"
+        "./skills/namecheap-domains",
+        "./skills/office-render"
       ]
     },
     {
@@ -72,11 +73,12 @@
     },
     {
       "name": "utilities",
-      "description": "Domain availability via Namecheap API - single domain, batch up to 50, or TLD sweep",
+      "description": "Domain availability via Namecheap API; plus rendering Microsoft Office files (.docx/.pptx/.xlsx) to PDF/images via the real Office apps on macOS",
       "source": "./",
       "strict": false,
       "skills": [
-        "./skills/namecheap-domains"
+        "./skills/namecheap-domains",
+        "./skills/office-render"
       ]
     }
   ]
