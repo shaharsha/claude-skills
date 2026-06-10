@@ -26,10 +26,11 @@ If you can't articulate the specific mistake the line prevents, cut the line.
 
 ## Length and structure
 
-- Target: **under 200 lines.** Boris Cherny's own CLAUDE.md is ~100 lines.
-- Past 200 lines, adherence drops. Past 400, the agent ignores half of it.
+- Target: **under 200 lines** per file — official docs guidance: "Longer files consume more context and reduce adherence."
+- Too long and Claude ignores half of it: important rules get lost in the noise.
 - Use markdown headers (`## Build`, `## Style`) and bullets — not dense prose.
 - If you cross 200 and can't trim, split conditional content into `.claude/rules/<topic>.md` with `paths:` frontmatter (loads only when matching files are read).
+- Splitting into `@path` imports does **not** save context — imported files load in full at launch. Only `paths:`-scoped rules and skills reduce startup context.
 
 ## Specificity — every rule must be falsifiable
 
@@ -50,7 +51,9 @@ A reviewer should be able to point at code and say "this rule was violated."
 | `~/.claude/CLAUDE.md` | You, all your projects | Every session |
 | `./.claude/rules/<topic>.md` with `paths:` | Per-glob | Only when matching files open |
 
-Subdirectory CLAUDE.md files load on demand, not at session start. Claude Code reads `CLAUDE.md`, **not** `AGENTS.md` — if your repo has AGENTS.md (because you also use Codex / Cursor / Gemini CLI), create a CLAUDE.md whose first line is `@AGENTS.md` plus any Claude-specific additions.
+Subdirectory CLAUDE.md files load on demand, not at session start. Claude Code reads `CLAUDE.md`, **not** `AGENTS.md` — if your repo has AGENTS.md (because you also use Codex / Cursor / Gemini CLI), create a CLAUDE.md whose first line is `@AGENTS.md` plus any Claude-specific additions (or symlink: `ln -s AGENTS.md CLAUDE.md`). `/init` reads an existing AGENTS.md (and `.cursorrules` etc.) when generating a CLAUDE.md.
+
+Claude also keeps its own **auto memory** at `~/.claude/projects/<project>/memory/` — loaded automatically every session. Division of labor: **CLAUDE.md = instructions you write** (team-shared, in git); **auto memory = learnings Claude writes** (personal, automatic). Don't hand-maintain session learnings in CLAUDE.md that auto memory already captures. Saying "remember X" lands in private auto memory — if the fact is team-relevant (a gotcha, env quirk, convention), say "add this to CLAUDE.md" instead so it's shared and versioned.
 
 ## Authoring workflow
 
@@ -70,7 +73,9 @@ Subdirectory CLAUDE.md files load on demand, not at session start. Claude Code r
 
 ## Compounding loop
 
-After Claude makes a non-obvious mistake, ask *"add this to CLAUDE.md so it doesn't happen again"* (or use the `#` shortcut). Commit to git; audit periodically and cut stale rules. The file compounds in value — each correction prevents the same mistake forever.
+After Claude makes a non-obvious mistake, end the correction with *"update your CLAUDE.md so you don't make that mistake again"* — Claude is good at writing rules for itself (use `/memory` to review what's loaded and edit). Commit to git; audit periodically and cut stale rules until the mistake rate measurably drops. The file compounds in value — each correction prevents the same mistake forever.
+
+Route each learning to the right home: applies-every-session fact → **CLAUDE.md**; sometimes-relevant workflow or domain knowledge → **skill** (rule of thumb: anything you do more than once a day becomes a skill or command); must-always-happen action → **hook**.
 
 ## Common mistakes
 
@@ -78,3 +83,4 @@ After Claude makes a non-obvious mistake, ask *"add this to CLAUDE.md so it does
 - **Reproducing the directory tree.** Agent can `ls`.
 - **`IMPORTANT` everywhere.** Reserve for ≤2 truly load-bearing rules (security, data loss).
 - **Embedded tutorials.** A 30-line auth explanation goes in `docs/auth.md`. Link, don't inline.
+- **Using CLAUDE.md for must-happen behavior.** CLAUDE.md is advisory (delivered as a user message, not the system prompt). Anything that must always run — formatters, lint gates, blocking dangerous commands — belongs in a hook, which is deterministic.
