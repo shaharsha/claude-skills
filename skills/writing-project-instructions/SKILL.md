@@ -1,6 +1,6 @@
 ---
-name: writing-project-memory
-description: Use when authoring or auditing a CLAUDE.md, AGENTS.md, or other project-level instruction file for an AI coding agent. Triggers on "write a CLAUDE.md", "draft a CLAUDE.md for this project", "audit my CLAUDE.md", "trim my CLAUDE.md", "is my CLAUDE.md too long", "what should go in my CLAUDE.md", "why isn't Claude following my CLAUDE.md", or the equivalent for AGENTS.md.
+name: writing-project-instructions
+description: Use when authoring, editing, updating, trimming, or adding rules to a CLAUDE.md, AGENTS.md, CLAUDE.local.md, or other project-level instruction file for an AI coding agent — including small one-line changes. Triggers on "write a CLAUDE.md", "audit my CLAUDE.md", "trim my CLAUDE.md", "is my CLAUDE.md too long", "what should go in my CLAUDE.md", "why isn't Claude following my CLAUDE.md", "add this to CLAUDE.md", "edit CLAUDE.md", "update CLAUDE.md", "put a rule in CLAUDE.md", "remember this in CLAUDE.md", or the equivalent for AGENTS.md. Always load this skill before modifying any CLAUDE.md/AGENTS.md, not just when explicitly asked.
 ---
 
 # Writing project memory

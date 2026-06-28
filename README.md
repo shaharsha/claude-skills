@@ -21,7 +21,7 @@ This installs all 13 skills as one plugin. Or pick a subset:
 /plugin install documents-and-decks@shaharsha-skills    # gdoc-sync + gslides-sync + gsheets + presentation-generator
 /plugin install brand-and-visuals@shaharsha-skills      # brand-system + brand-assets + image-generation
 /plugin install engineering-decisions@shaharsha-skills  # tech-design-doc
-/plugin install building-agents@shaharsha-skills        # prompt-engineer + writing-project-memory
+/plugin install building-agents@shaharsha-skills        # prompt-engineer + writing-project-instructions
 /plugin install utilities@shaharsha-skills              # namecheap-domains + office-render + viewing-videos
 ```
 
@@ -83,9 +83,9 @@ Author technical design review documents - RFCs, ADRs, design docs, KEPs, partne
 
 Expert prompt-engineering reference for AI agents on **Claude / GPT / Gemini** APIs. Covers system-prompt structure, tool descriptions (the single highest-leverage quality factor), context engineering, provider differences (instruction placement, verbosity defaults, persona handling, temperature, caching), budget-model patterns, cross-provider compatibility, anti-patterns, and evaluation/judge-prompt design. Use when writing system prompts, tool descriptions, function-calling schemas, agent instructions, or when an agent keeps misfiring.
 
-#### [writing-project-memory](skills/writing-project-memory)
+#### [writing-project-instructions](skills/writing-project-instructions)
 
-Author or audit a CLAUDE.md / AGENTS.md project-memory file (the file an AI coding agent reads at session start for project context). Encodes Anthropic's cardinal include/exclude rules, the under-200-line target, the falsifiability test, locations + loading semantics, AGENTS.md interop via `@import`, and Boris Cherny's compounding-engineering loop. Use when authoring a new CLAUDE.md, auditing an existing one for bloat, trimming a too-long file, or diagnosing why Claude isn't following its instructions.
+Author or audit a CLAUDE.md / AGENTS.md project-instruction file (the file an AI coding agent reads at session start for project context). Encodes Anthropic's cardinal include/exclude rules, the under-200-line target, the falsifiability test, locations + loading semantics, AGENTS.md interop via `@import`, and Boris Cherny's compounding-engineering loop. Use when authoring a new CLAUDE.md, auditing an existing one for bloat, trimming a too-long file, or diagnosing why Claude isn't following its instructions.
 
 ### Utilities
 

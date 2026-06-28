@@ -11,7 +11,7 @@
   "plugins": [
     {
       "name": "shaharsha-skills",
-      "description": "All 13 agent skills - gdoc-sync, gslides-sync, gsheets, presentation-generator, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-memory, tech-design-doc, namecheap-domains, office-render, viewing-videos",
+      "description": "All 13 agent skills - gdoc-sync, gslides-sync, gsheets, presentation-generator, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-instructions, tech-design-doc, namecheap-domains, office-render, viewing-videos",
       "source": "./",
       "strict": false,
       "skills": [
@@ -23,7 +23,7 @@
         "./skills/brand-assets",
         "./skills/image-generation",
         "./skills/prompt-engineer",
-        "./skills/writing-project-memory",
+        "./skills/writing-project-instructions",
         "./skills/tech-design-doc",
         "./skills/namecheap-domains",
         "./skills/office-render",
@@ -64,12 +64,12 @@
     },
     {
       "name": "building-agents",
-      "description": "Expert prompt-engineering reference for AI agents on Claude, GPT, and Gemini APIs, plus authoring CLAUDE.md / AGENTS.md project-memory files",
+      "description": "Expert prompt-engineering reference for AI agents on Claude, GPT, and Gemini APIs, plus authoring CLAUDE.md / AGENTS.md project-instruction files",
       "source": "./",
       "strict": false,
       "skills": [
         "./skills/prompt-engineer",
-        "./skills/writing-project-memory"
+        "./skills/writing-project-instructions"
       ]
     },
     {
