@@ -1,6 +1,6 @@
 # claude-skills
 
-Agent skills by [@shaharsha](https://github.com/shaharsha) - 13 production-grade [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills) that work in Claude Code, claude.ai, Codex, Cursor, and any other harness that reads the SKILL.md format.
+Agent skills by [@shaharsha](https://github.com/shaharsha) - 14 production-grade [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills) that work in Claude Code, claude.ai, Codex, Cursor, and any other harness that reads the SKILL.md format.
 
 MIT licensed. Built day-to-day; battle-tested in real projects.
 
@@ -15,14 +15,14 @@ MIT licensed. Built day-to-day; battle-tested in real projects.
 /plugin install shaharsha-skills@shaharsha-skills
 ```
 
-This installs all 13 skills as one plugin. Or pick a subset:
+This installs all 14 skills as one plugin. Or pick a subset:
 
 ```bash
 /plugin install documents-and-decks@shaharsha-skills    # gdoc-sync + gslides-sync + gsheets + presentation-generator
 /plugin install brand-and-visuals@shaharsha-skills      # brand-system + brand-assets + image-generation
 /plugin install engineering-decisions@shaharsha-skills  # tech-design-doc
 /plugin install building-agents@shaharsha-skills        # prompt-engineer + writing-project-instructions
-/plugin install utilities@shaharsha-skills              # namecheap-domains + office-render + viewing-videos
+/plugin install utilities@shaharsha-skills              # namecheap-domains + office-render + viewing-videos + proton-pass
 ```
 
 ### Manual (any other harness)
@@ -100,6 +100,10 @@ Render a Microsoft Office file (`.docx` / `.pptx` / `.xlsx`) to PDF and then to 
 #### [viewing-videos](skills/viewing-videos)
 
 Claude can't watch video — this skill is how it sees one anyway: turn the file into the **fewest frames that answer the question** via ffmpeg. Three strategies (targeted seek for known timestamps, scene-change detection for screen shares / slides, interval sampling for continuous motion), frames renamed to their meeting timestamp, an ImageMagick contact sheet to triage 60+ frames in one look, and a crop+upscale recipe for table text at the edge of 720p legibility. Born from a real need: a 30-min Zoom recording whose transcript missed the numbers shown on screen.
+
+#### [proton-pass](skills/proton-pass)
+
+Manage credentials and secrets from the CLI via **Proton Pass** (`pass-cli`): list vaults and items, view / create / update / delete logins, generate random passwords or passphrases, and resolve `pass://vault/item/field` secret references into template files or a command's environment. Bakes in the security guardrails (never print secrets to chat, prefer `inject` / `run` over inline values, always name the vault) and a load-bearing gotcha — the `run -- env X="pass://…"` form has been seen passing the literal URI instead of the resolved secret, so resolve explicitly with command substitution and length-check when correctness matters. macOS/Homebrew binary path.
 
 ---
 
