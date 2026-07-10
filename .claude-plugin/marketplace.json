@@ -6,12 +6,12 @@
   },
   "metadata": {
     "description": "Agent skills by Shahar Shavit for Claude Code, Codex, Cursor, and other Agent-Skills-compatible harnesses",
-    "version": "1.1.0"
+    "version": "1.2.0"
   },
   "plugins": [
     {
       "name": "shaharsha-skills",
-      "description": "All 14 agent skills - gdoc-sync, gslides-sync, gsheets, presentation-generator, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-instructions, tech-design-doc, namecheap-domains, office-render, viewing-videos, proton-pass",
+      "description": "All 15 agent skills - gdoc-sync, gslides-sync, gsheets, presentation-generator, narrating-pptx, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-instructions, tech-design-doc, namecheap-domains, office-render, viewing-videos, proton-pass",
       "source": "./",
       "strict": false,
       "skills": [
@@ -19,6 +19,7 @@
         "./skills/gslides-sync",
         "./skills/gsheets",
         "./skills/presentation-generator",
+        "./skills/narrating-pptx",
         "./skills/brand-system",
         "./skills/brand-assets",
         "./skills/image-generation",
@@ -33,14 +34,15 @@
     },
     {
       "name": "documents-and-decks",
-      "description": "Sync Markdown to Google Docs, .pptx to Google Slides, CSV / values to Google Sheets, and generate AI-rendered 16:9 presentation decks",
+      "description": "Sync Markdown to Google Docs, .pptx to Google Slides, CSV / values to Google Sheets, generate AI-rendered 16:9 presentation decks, and add per-slide ElevenLabs voice narration with autoplay to any pptx",
       "source": "./",
       "strict": false,
       "skills": [
         "./skills/gdoc-sync",
         "./skills/gslides-sync",
         "./skills/gsheets",
-        "./skills/presentation-generator"
+        "./skills/presentation-generator",
+        "./skills/narrating-pptx"
       ]
     },
     {

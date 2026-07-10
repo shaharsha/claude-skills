@@ -1,6 +1,6 @@
 # claude-skills
 
-Agent skills by [@shaharsha](https://github.com/shaharsha) - 14 production-grade [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills) that work in Claude Code, claude.ai, Codex, Cursor, and any other harness that reads the SKILL.md format.
+Agent skills by [@shaharsha](https://github.com/shaharsha) - 15 production-grade [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills) that work in Claude Code, claude.ai, Codex, Cursor, and any other harness that reads the SKILL.md format.
 
 MIT licensed. Built day-to-day; battle-tested in real projects.
 
@@ -15,10 +15,10 @@ MIT licensed. Built day-to-day; battle-tested in real projects.
 /plugin install shaharsha-skills@shaharsha-skills
 ```
 
-This installs all 14 skills as one plugin. Or pick a subset:
+This installs all 15 skills as one plugin. Or pick a subset:
 
 ```bash
-/plugin install documents-and-decks@shaharsha-skills    # gdoc-sync + gslides-sync + gsheets + presentation-generator
+/plugin install documents-and-decks@shaharsha-skills    # gdoc-sync + gslides-sync + gsheets + presentation-generator + narrating-pptx
 /plugin install brand-and-visuals@shaharsha-skills      # brand-system + brand-assets + image-generation
 /plugin install engineering-decisions@shaharsha-skills  # tech-design-doc
 /plugin install building-agents@shaharsha-skills        # prompt-engineer + writing-project-instructions
@@ -56,6 +56,10 @@ Comprehensive Sheets API v4 CLI - the Sheets-shaped sibling to `gdoc-sync` and `
 #### [presentation-generator](skills/presentation-generator)
 
 Generate 16:9 PDF + PPTX decks where every slide is a custom AI-rendered image - not a templated layout with stock photos. Style locks globally via a reference image; composition varies per slide (full-bleed photo, infographic, architecture flowchart, big-number callout, timeline, quote card, etc.). Research -> narrative arc (SCQA / Duarte / Kawasaki) -> style lock -> parallel generation at concurrency 4 -> QA -> assemble. ~$3-5 in image-API spend for a 10-slide deck.
+
+#### [narrating-pptx](skills/narrating-pptx)
+
+Turn any `.pptx` into a self-presenting deck: write presenter-style narration scripts in any language (Hebrew, English, mixed), generate speech via **ElevenLabs v3**, embed one clip per slide, and set autoplay-on-slide-entry through **real PowerPoint** — the one method that doesn't trigger the "found a problem / Repair" dialog (hand-written `<p:timing>` XML corrupts the file; this skill exists because it happened). Parallel TTS with 429 backoff and response-integrity checks, filename-targeted AppleScript (never `presentation 1`), hover-seekbar-sized speaker icons, and real-PowerPoint validation. macOS + PowerPoint for the autoplay step.
 
 ### Brand & visuals
 
@@ -116,6 +120,7 @@ A few of these are designed to work together:
 - `brand-system` (the document) and `brand-assets` (the pixels) are siblings - run both for a complete brand rollout.
 - `gdoc-sync`, `gslides-sync`, and `gsheets` share Google service-account setup; one SA works for all three APIs.
 - `tech-design-doc` calls `gdoc-sync` at the end of the workflow to push the finished TDR to a live Google Doc for stakeholder comments.
+- `narrating-pptx` narrates decks produced by `presentation-generator` (or any pptx) and uses `office-render` for the real-PowerPoint validation step.
 
 ---
 
