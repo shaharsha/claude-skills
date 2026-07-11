@@ -1,6 +1,6 @@
 # claude-skills
 
-Agent skills by [@shaharsha](https://github.com/shaharsha) - 15 production-grade [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills) that work in Claude Code, claude.ai, Codex, Cursor, and any other harness that reads the SKILL.md format.
+Agent skills by [@shaharsha](https://github.com/shaharsha) - 17 production-grade [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills) that work in Claude Code, claude.ai, Codex, Cursor, and any other harness that reads the SKILL.md format.
 
 MIT licensed. Built day-to-day; battle-tested in real projects.
 
@@ -15,10 +15,10 @@ MIT licensed. Built day-to-day; battle-tested in real projects.
 /plugin install shaharsha-skills@shaharsha-skills
 ```
 
-This installs all 15 skills as one plugin. Or pick a subset:
+This installs all 17 skills as one plugin. Or pick a subset:
 
 ```bash
-/plugin install documents-and-decks@shaharsha-skills    # gdoc-sync + gslides-sync + gsheets + presentation-generator + narrating-pptx
+/plugin install documents-and-decks@shaharsha-skills    # gdoc-sync + gslides-sync + gsheets + presentation-generator + narrating-pptx + deck-to-video + self-presenting-decks
 /plugin install brand-and-visuals@shaharsha-skills      # brand-system + brand-assets + image-generation
 /plugin install engineering-decisions@shaharsha-skills  # tech-design-doc
 /plugin install building-agents@shaharsha-skills        # prompt-engineer + writing-project-instructions
@@ -60,6 +60,14 @@ Generate 16:9 PDF + PPTX decks where every slide is a custom AI-rendered image -
 #### [narrating-pptx](skills/narrating-pptx)
 
 Turn any `.pptx` into a self-presenting deck: write presenter-style narration scripts in any language (Hebrew, English, mixed), generate speech via **ElevenLabs v3**, embed one clip per slide, and set autoplay-on-slide-entry through **real PowerPoint** — the one method that doesn't trigger the "found a problem / Repair" dialog (hand-written `<p:timing>` XML corrupts the file; this skill exists because it happened). Parallel TTS with 429 backoff and response-integrity checks, filename-targeted AppleScript (never `presentation 1`), hover-seekbar-sized speaker icons, and real-PowerPoint validation. macOS + PowerPoint for the autoplay step.
+
+#### [deck-to-video](skills/deck-to-video)
+
+Turn slides (a PDF or per-slide images) + per-slide narration audio into a **self-playing mp4**: each slide holds for exactly its narration's length plus a breath, then hard-cuts to the next — with a filling progress bar + seconds-remaining countdown (bottom-right) and an "N / M" slide counter (top-right). One bundled script does the whole build. The overlays are **baked per-second with PIL, never drawn by ffmpeg filters** — because `drawbox` width expressions silently render a full bar from frame 0 in several builds, and Homebrew's ffmpeg bottles ship without `drawtext` entirely (both learned the hard way). Encoding is dialed in (`apad` tail padding, `yuv420p`, `stillimage` tune, lossless concat, faststart) and validation is mandatory: extract early/late frames and *look*.
+
+#### [self-presenting-decks](skills/self-presenting-decks)
+
+The orchestration map for making a presentation explain itself: **content → narration → video**, which skill owns each stage (`pptx` authoring → `office-render` validation → `narrating-pptx` → `deck-to-video`), the three-artifacts-three-audiences rule (clean pptx for live presenting, narrated pptx for self-paced review, mp4 for zero-friction sharing), and an **update matrix** — exactly what to rebuild when slides change vs narration text vs pace vs video overlays. Encodes the seam rules that bite: the video renders from the *clean* deck's PDF (the narrated copy draws speaker icons), scripts get human approval *before* TTS spend, and regenerate only changed clips but always rebuild final artifacts from the full audio set.
 
 ### Brand & visuals
 
@@ -121,6 +129,8 @@ A few of these are designed to work together:
 - `gdoc-sync`, `gslides-sync`, and `gsheets` share Google service-account setup; one SA works for all three APIs.
 - `tech-design-doc` calls `gdoc-sync` at the end of the workflow to push the finished TDR to a live Google Doc for stakeholder comments.
 - `narrating-pptx` narrates decks produced by `presentation-generator` (or any pptx) and uses `office-render` for the real-PowerPoint validation step.
+- `deck-to-video` reuses `narrating-pptx`'s per-slide mp3s and `office-render`'s real-PowerPoint PDF — the pptx and the video sound and look identical.
+- `self-presenting-decks` is the map over the whole chain: pptx authoring → `office-render` → `narrating-pptx` → `deck-to-video`.
 
 ---
 
