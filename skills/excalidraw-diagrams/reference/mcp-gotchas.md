@@ -9,6 +9,7 @@ these — they're about the *tool*, not the element format.
 - Z-order: new elements land in index gaps, not on top
 - `textAlign:"center"` makes x the CENTER anchor
 - Bound labels are always vertically centered
+- Bound arrow labels: created only at `add` time, and invisible to text search
 - Can't delete a shape and its bound arrow in one call
 - Verify with `search_scene_content`, not just the screenshot
 - Verify element IDs before binding or updating (don't trust transcribed IDs)
@@ -98,6 +99,32 @@ the label will sit dead-center and the icon will overlap or float.
 **standalone** text element and position both yourself (the `place` subcommand of
 `scripts/excalidraw_tools.py` computes the two y-values so the pair is centered as
 one block). Use bound labels only when the text alone is centered in the shape.
+
+## Bound arrow labels: created only at `add` time, and invisible to text search
+
+A label on an arrow (`{"label":{"text":"…"}}`) is the clean way to put text *on* a
+line — Excalidraw draws it in a **gap** in the line, so it never strikes through. But
+two non-obvious rules bite:
+
+- **The label is created only when the arrow is `add`ed — never on `update`.** Passing
+  `label` in an `update` to an existing arrow returns `added:0` and silently no-ops;
+  the label never appears. To (re)label an existing arrow, **delete it and re-`add` it**
+  with the `label` field. (The arrow should also be **bound** to shapes for the label
+  to attach cleanly.) Symptom seen in practice: a label kept "vanishing" on every
+  update attempt until the arrow was deleted and re-added with the label inline.
+- **Bound-label texts do NOT appear in `search_scene_content(types:["text"])`** — they
+  carry a `containerId` and come back as the owning arrow's `labelText` instead. A text
+  search for the label string returns 0 matches even though the label exists. To
+  confirm/read an arrow's label, search `types:["arrow"]` and read `labelText` /
+  `boundElements`.
+
+Corollary — labelling a line: a **standalone** text on a line can't reproduce the gap,
+so it renders struck-through, and a masking rectangle behind it won't reliably win
+z-order (see z-order above). For a label *on* a line, use a bound label; for a label
+*near* a busy/overlapping line, place a standalone text in a pocket no line crosses.
+When two arrows overlap the same segment, a bound label on one is still struck by the
+other's line — draw it as one trunk + a branch (second arrow starts mid-trunk) so only
+one line runs under the label.
 
 ## Can't delete a shape and its bound arrow in one call
 

@@ -58,8 +58,11 @@ Full explanations in `reference/mcp-gotchas.md` — internalize these five:
   icon-above-label block, use a *standalone* label positioned yourself, not a bound
   `label`.
 - **Arrows pointing at shapes must be bound** (`startBinding`/`endBinding`, mode
-  `"inside"`), or they detach on the next edit. And you can't delete a shape and its
-  bound arrow in the same call — delete the arrow first.
+  `"inside"`), or they detach on the next edit. A **bound arrow label** (`label:{}`) is
+  created only at `add` time — adding one via `update` silently no-ops (`added:0`), so
+  re-add an arrow to (re)label it, and read the label as the arrow's `labelText` (it's
+  invisible to a `types:["text"]` search). You can't delete a shape and its bound arrow
+  in the same call — delete the arrow first.
 
 ## Verifying (do not claim done without this)
 

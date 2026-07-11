@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Agent skills by Shahar Shavit for Claude Code, Codex, Cursor, and other Agent-Skills-compatible harnesses",
-    "version": "1.4.0"
+    "version": "1.4.1"
   },
   "plugins": [
     {
