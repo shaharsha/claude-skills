@@ -27,9 +27,16 @@ Skip when you only need the **text** (use `pandoc -t plain` / `python -m markitd
 ## Usage
 
 ```bash
-uv run --with docx2pdf python3 ~/.claude/skills/office-render/scripts/office_render.py \
+uv run --no-project --with docx2pdf python3 ~/.claude/skills/office-render/scripts/office_render.py \
     "/path/to/file.pptx" --out /tmp/render --dpi 150
 ```
+
+`--no-project` is not optional cosmetics: without it, `uv run` tries to install
+the *surrounding* directory as a project, and if the CWD (or any parent) holds a
+`pyproject.toml` with no `[project]` table — common in tool-only repos — it aborts
+with `No 'project' table found` before the script ever runs. `--no-project` tells
+uv to just build an ephemeral env from `--with` and ignore whatever project it's
+sitting inside. Harmless when there's no pyproject either, so always pass it.
 
 It writes `file.pdf` + `file-1.jpg`, `file-2.jpg`, … into `--out` and prints the
 paths. Then `Read` the JPGs. Options: `--format png`, `--pdf-only`, `--dpi N`
@@ -69,6 +76,7 @@ Two **separate** macOS permissions are involved — and Full Disk Access on your
 | `AppleEvent timed out (-1712)` | PDF export slower than the default Apple-event timeout | Wrap the save in `with timeout of 600 seconds` (script does this). |
 | Word: `active document doesn't understand the "save as" message (-1708)` | Word's AppleScript `save as` is broken on several builds | Use **`docx2pdf`** for `.docx` (it uses a path that works), not raw `save as`. |
 | `not allowed to send Apple events` | **Automation** permission not granted | Approve the first-run prompt / enable it in the Automation pane (≠ Full Disk Access on the terminal). |
+| uv aborts: `No 'project' table found in …/pyproject.toml` | `uv run` adopted a stray `pyproject.toml` in the CWD/parent (tool-only repo, no `[project]` table) | Pass **`--no-project`** (see Usage) — build the env from `--with`, ignore the surrounding project. |
 | Grid/table renders as a vertical list; wrong font | You used **LibreOffice** | Use this skill (real Office). LibreOffice ≠ faithful for complex layouts. |
 
 ## How it works (reference)
