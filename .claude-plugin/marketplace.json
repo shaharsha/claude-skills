@@ -6,12 +6,12 @@
   },
   "metadata": {
     "description": "Agent skills by Shahar Shavit for Claude Code, Codex, Cursor, and other Agent-Skills-compatible harnesses",
-    "version": "1.3.0"
+    "version": "1.4.0"
   },
   "plugins": [
     {
       "name": "shaharsha-skills",
-      "description": "All 17 agent skills - gdoc-sync, gslides-sync, gsheets, presentation-generator, narrating-pptx, deck-to-video, self-presenting-decks, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-instructions, tech-design-doc, namecheap-domains, office-render, viewing-videos, proton-pass",
+      "description": "All 18 agent skills - gdoc-sync, gslides-sync, gsheets, presentation-generator, narrating-pptx, deck-to-video, self-presenting-decks, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-instructions, tech-design-doc, namecheap-domains, office-render, viewing-videos, proton-pass, excalidraw-diagrams",
       "source": "./",
       "strict": false,
       "skills": [
@@ -31,7 +31,8 @@
         "./skills/namecheap-domains",
         "./skills/office-render",
         "./skills/viewing-videos",
-        "./skills/proton-pass"
+        "./skills/proton-pass",
+        "./skills/excalidraw-diagrams"
       ]
     },
     {
@@ -51,13 +52,14 @@
     },
     {
       "name": "brand-and-visuals",
-      "description": "Author production-grade brand books, run logo / favicon / icon-pack pipelines, and generate AI imagery via gpt-image-2 and Gemini Nano Banana",
+      "description": "Author production-grade brand books, run logo / favicon / icon-pack pipelines, generate AI imagery via gpt-image-2 and Gemini Nano Banana, and build architecture / flow / system diagrams in Excalidraw",
       "source": "./",
       "strict": false,
       "skills": [
         "./skills/brand-system",
         "./skills/brand-assets",
-        "./skills/image-generation"
+        "./skills/image-generation",
+        "./skills/excalidraw-diagrams"
       ]
     },
     {

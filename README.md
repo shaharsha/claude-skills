@@ -1,6 +1,6 @@
 # claude-skills
 
-Agent skills by [@shaharsha](https://github.com/shaharsha) - 17 production-grade [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills) that work in Claude Code, claude.ai, Codex, Cursor, and any other harness that reads the SKILL.md format.
+Agent skills by [@shaharsha](https://github.com/shaharsha) - 18 production-grade [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills) that work in Claude Code, claude.ai, Codex, Cursor, and any other harness that reads the SKILL.md format.
 
 MIT licensed. Built day-to-day; battle-tested in real projects.
 
@@ -15,11 +15,11 @@ MIT licensed. Built day-to-day; battle-tested in real projects.
 /plugin install shaharsha-skills@shaharsha-skills
 ```
 
-This installs all 17 skills as one plugin. Or pick a subset:
+This installs all 18 skills as one plugin. Or pick a subset:
 
 ```bash
 /plugin install documents-and-decks@shaharsha-skills    # gdoc-sync + gslides-sync + gsheets + presentation-generator + narrating-pptx + deck-to-video + self-presenting-decks
-/plugin install brand-and-visuals@shaharsha-skills      # brand-system + brand-assets + image-generation
+/plugin install brand-and-visuals@shaharsha-skills      # brand-system + brand-assets + image-generation + excalidraw-diagrams
 /plugin install engineering-decisions@shaharsha-skills  # tech-design-doc
 /plugin install building-agents@shaharsha-skills        # prompt-engineer + writing-project-instructions
 /plugin install utilities@shaharsha-skills              # namecheap-domains + office-render + viewing-videos + proton-pass
@@ -82,6 +82,10 @@ The mechanical-pixel sibling to `brand-system`. Five pipelines that run locally 
 #### [image-generation](skills/image-generation)
 
 Generate logos, icons, UI mockups, hero images, and product shots via **OpenAI gpt-image-2** (default since Apr 2026 - took #1 in Image Arena by +242 pts within 12 hours of release) or **Gemini Nano Banana 2 / Pro**. Packages model-selection logic, provider-specific prompt grammars (OpenAI wants labeled segments + negatives; Gemini wants narrative paragraphs + positives only - mixing them up degrades outputs), asset templates, a transparent-background pipeline (gpt-image-2 + `rembg`), Hebrew/RTL guidance, and an iteration loop where Claude reads the saved image with vision and decides ship/edit/rewrite before showing the user.
+
+#### [excalidraw-diagrams](skills/excalidraw-diagrams)
+
+Build architecture, flow, and system diagrams on an Excalidraw+ canvas through its MCP - with real, recognizable tech/logo icons (Postgres, React, Docker, AWS services…) extracted live from the ~230-pack community icon catalog, no bundled asset data. Encodes the whole workflow (plan the visual argument -> frames -> nodes -> icons -> bound arrows -> verify), the element format, and layout/centering/alignment math - plus the MCP quirks that silently break a diagram: screenshots don't render text, the fractional-index z-order trap that hides icons/cards under fills *even on a fresh build* (fix: transparent-fill containers), arrows that detach unless bound, and verifying element IDs before binding. Ships a glyph-fallback recipe set for the brands the libs don't carry.
 
 ### Engineering decisions
 
