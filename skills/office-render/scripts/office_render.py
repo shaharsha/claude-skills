@@ -21,9 +21,10 @@ Requires (see SKILL.md for the one-time setup):
   - poppler for pdftoppm:  brew install poppler
   - For .docx: docx2pdf (run via `uv run --with docx2pdf`).
   - macOS Automation permission granted to the controlling terminal (one-time).
-  - Either the Office app has Full Disk Access, OR the file lives in a folder
-    the Office sandbox can read (Downloads/Documents/Desktop). This script
-    auto-stages through ~/Downloads if a direct convert hits the sandbox.
+  - No Full Disk Access needed: the script ALWAYS runs the Office app inside
+    ~/Downloads (which the sandbox can always reach), so the "Grant File Access"
+    powerbox never appears — regardless of where INPUT/--out live or whether the
+    app is already open.
 """
 from __future__ import annotations
 import argparse, os, shutil, subprocess, sys, tempfile
@@ -83,31 +84,32 @@ def to_pdf(inp: Path, pdf: Path):
     ext = inp.suffix.lower()
     if ext not in APP:
         sys.exit(f"unsupported file type: {ext}")
-    quit_app(APP[ext])  # start from a clean app state
+    # ALWAYS run the sandboxed Office app entirely inside ~/Downloads, which the
+    # Office sandbox can always reach — with or without Full Disk Access, and
+    # whether or not the app is already open. PowerPoint/Excel therefore never
+    # touch the caller's folder, so the macOS "Grant File Access" powerbox never
+    # appears. (Doing this only as an exception fallback does NOT work: the
+    # powerbox blocks/prompts instead of raising, so an on-error retry never
+    # fires.) Python — which is not sandboxed — then moves the finished PDF to
+    # wherever --out points.
+    stage = Path.home() / "Downloads" / ".office-render"
+    stage.mkdir(parents=True, exist_ok=True)
+    sin = stage / inp.name
+    spdf = stage / (inp.stem + ".pdf")
+    shutil.copy2(inp, sin)
+    quit_app(APP[ext])  # start from a clean app state (avoid a stale window)
     try:
-        convert_once(ext, str(inp), str(pdf))
-        return
-    except Exception as e1:
-        # Most common cause: the Office sandbox can't read INPUT's folder (e.g.
-        # /tmp) and pops a "Grant File Access" dialog -> the convert errors
-        # ("Message not understood"). Stage through ~/Downloads, which the
-        # sandbox can reach, then move the PDF back.
-        stage = Path.home() / "Downloads" / ".office-render"
-        stage.mkdir(parents=True, exist_ok=True)
-        sin = stage / inp.name
-        spdf = stage / (inp.stem + ".pdf")
-        shutil.copy2(inp, sin)
-        try:
-            quit_app(APP[ext])
-            convert_once(ext, str(sin), str(spdf))
-            shutil.move(str(spdf), str(pdf))
-        except Exception as e2:
-            sys.exit(f"conversion failed.\n  direct: {e1}\n  staged: {e2}\n"
-                     f"Fix: grant '{APP[ext]}' Full Disk Access "
-                     f"(System Settings > Privacy & Security > Full Disk Access), "
-                     f"or keep the file in Downloads/Documents/Desktop.")
-        finally:
-            sin.unlink(missing_ok=True)
+        convert_once(ext, str(sin), str(spdf))
+        pdf.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(spdf), str(pdf))
+    except Exception as e:
+        sys.exit(f"conversion failed: {e}\n"
+                 f"Check: '{APP[ext]}' is installed and signed in, and the "
+                 f"controlling terminal has Automation permission (System Settings "
+                 f"> Privacy & Security > Automation > enable {APP[ext]}).")
+    finally:
+        sin.unlink(missing_ok=True)
+        spdf.unlink(missing_ok=True)
 
 
 def to_images(pdf: Path, out: Path, dpi: int, fmt: str) -> list[str]:
