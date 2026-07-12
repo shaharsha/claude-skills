@@ -146,24 +146,40 @@ def main():
                 fr.paste(ov, (0, 0), ov)
             fr.save(os.path.join(seqdir, f"f{sec:03d}.jpg"), quality=90)
         seg = os.path.join(work, f"seg{i:02d}.mp4")
-        r = subprocess.run([ff, "-y", "-loglevel", "error",
+        cmd = [ff, "-y", "-loglevel", "error",
             "-framerate", "1", "-i", os.path.join(seqdir, "f%03d.jpg"),
             "-i", aud_path, "-af", f"apad=pad_dur={args.pad}",
             "-c:v", "libx264", "-preset", "medium", "-crf", str(args.crf),
             "-tune", "stillimage", "-pix_fmt", "yuv420p", "-r", "30",
             "-c:a", "aac", "-b:a", "160k", "-ar", "44100",
-            "-t", str(seg_dur), seg], capture_output=True, text=True)
-        if r.returncode:
+            "-t", str(seg_dur), seg]
+        # timeout + one retry: ffmpeg has been observed hanging at 0% CPU after
+        # finishing its output — a killed/timed-out attempt leaves an INVALID file
+        for attempt in (1, 2):
+            try:
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            except subprocess.TimeoutExpired:
+                print(f"slide {i:02d}: ffmpeg timed out (attempt {attempt}) — retrying", flush=True)
+                if os.path.exists(seg):
+                    os.remove(seg)
+                continue
+            if r.returncode == 0:
+                break
             sys.exit(f"slide {i} encode failed:\n{r.stderr[-800:]}")
+        else:
+            sys.exit(f"slide {i}: ffmpeg hung twice — giving up")
         segs.append(seg)
         print(f"slide {i:02d}: {seg_dur:.1f}s", flush=True)
 
     concat = os.path.join(work, "concat.txt")
     with open(concat, "w") as f:
         f.writelines(f"file '{s}'\n" for s in segs)
-    r = subprocess.run([ff, "-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
-                        "-i", concat, "-c", "copy", "-movflags", "+faststart", args.out],
-                       capture_output=True, text=True)
+    try:
+        r = subprocess.run([ff, "-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
+                            "-i", concat, "-c", "copy", "-movflags", "+faststart", args.out],
+                           capture_output=True, text=True, timeout=300)
+    except subprocess.TimeoutExpired:
+        sys.exit("concat timed out")
     if r.returncode:
         sys.exit(f"concat failed:\n{r.stderr[-800:]}")
 

@@ -63,6 +63,8 @@ Pick T1/T2 from the script's printed per-slide lengths (cumulative-sum them for 
 | Audio count ≠ slide count | desynced or missing slides | script hard-fails; fix inputs, don't skip slides |
 | Judging output by "it encoded fine" | static bar / wrong slide slips through | extract early/late frames and look |
 | Deck prints its own slide numbers | number appears twice (deck footer + counter) | render the video from a numberless deck variant, or pass `--no-counter` |
+| ffmpeg hangs at 0% CPU after writing a segment | build stalls forever; a killed attempt leaves an INVALID partial file | the script now times out each segment (300s) and retries once, deleting the partial first |
+| Piping the build through `\| tail` inside an `&&` chain | pipeline exit = tail's 0 — a failed build "succeeds" and stale artifacts get delivered | run the script unpiped (or `set -o pipefail`); keep delivery/sync in a separate step gated on verified output |
 
 ## Caveats
 
