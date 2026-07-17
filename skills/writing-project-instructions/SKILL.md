@@ -26,10 +26,14 @@ If you can't articulate the specific mistake the line prevents, cut the line.
 
 ## Length and structure
 
-- Target: **under 200 lines** per file — official docs guidance: "Longer files consume more context and reduce adherence."
+- Target: **under 200 lines** per file. Official wording: *"target under 200 lines per CLAUDE.md file. Longer files consume more context and reduce adherence."*
+- **It's a soft target, not a cliff — don't over-index on it.** CLAUDE.md is **never truncated**: *"CLAUDE.md files are loaded in full regardless of length, though shorter files produce better adherence."* Nothing breaks at line 201; adherence decays gradually. A 250-line file of real foot-guns beats a 190-line file that cut them to hit a number.
+- **Don't confuse it with the auto-memory cap.** The *hard* 200-line/25KB limit applies only to auto memory's `MEMORY.md`, where content past the limit is **silently dropped** at load. Different file, different rule.
 - Too long and Claude ignores half of it: important rules get lost in the noise.
 - Use markdown headers (`## Build`, `## Style`) and bullets — not dense prose.
+- **Run `/doctor`** (v2.1.206+) to get trims proposed against the real criteria: it cuts what Claude can derive from the codebase (directory layouts, dependency lists, architecture overviews) and keeps pitfalls, rationale, and conventions that differ from tool defaults. Prefer it to eyeballing.
 - If you cross 200 and can't trim, split conditional content into `.claude/rules/<topic>.md` with `paths:` frontmatter (loads only when matching files are read).
+- ⚠️ **`.claude/rules/` is Claude-only.** If the repo keeps instructions in `AGENTS.md` for cross-agent parity (Codex/Cursor/Gemini read it; Claude reaches it via `@AGENTS.md`), moving content into `.claude/rules/` makes it **invisible to every other agent**. Weigh the context saving against breaking the parity AGENTS.md exists for — usually not worth it for a few lines.
 - Splitting into `@path` imports does **not** save context — imported files load in full at launch. Only `paths:`-scoped rules and skills reduce startup context.
 
 ## Specificity — every rule must be falsifiable
