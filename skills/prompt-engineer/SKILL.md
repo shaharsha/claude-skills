@@ -82,6 +82,7 @@ These apply to all three providers and cover ~70% of prompt engineering work.
 - **Prefer the provider's structured-output feature** over describing a JSON schema in prose: OpenAI Structured Outputs (`strict: true`), Claude Structured Outputs, Gemini `responseSchema`. These constrain the response far more reliably than prompt text and remove the validation burden from the model.
 - When you must specify format in the prompt (markdown template, structured text), provide a concrete example of the expected output, not just a description.
 - Use **enum arrays** for valid values rather than prose descriptions — works on all providers and improves accuracy.
+- **When a task needs reasoning AND structured output, order the schema so a reasoning/scratchpad field comes *before* the answer field.** Forcing the answer token first makes the model commit before it thinks and can sharply cut accuracy; the loss is largest on small/local models, and well-ordered constrained decoding is otherwise neutral-to-positive (arXiv:2408.02442; JSONSchemaBench, arXiv:2501.10868).
 
 ### Context Engineering
 - Context window is working memory. Every token competes for attention — more is not always better. Find the smallest set of high-signal tokens that maximize the likelihood of your desired outcome.
