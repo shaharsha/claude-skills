@@ -15,7 +15,7 @@ Before reading the rest of this skill, do these two things in order. They are no
 
 ### 0a. Identify the model family in scope
 
-Look at the code, the file being edited, the SDK being imported, or what the user just said. Match against these signals — first hit wins. Split by **model family, not platform**: prompt engineering is identical whether GPT runs on OpenAI or Azure, or whether Claude runs on Anthropic or AWS Bedrock.
+Look at the code, the file being edited, the SDK being imported, or what the user just said. Match against these signals — first hit wins. Split by **model family, not platform**: prompt engineering is identical whether GPT runs on OpenAI or Azure, or whether Claude runs on Anthropic or AWS Bedrock. This matters more now that **each major platform hosts several families** — AWS Bedrock serves **GPT and Claude**, Vertex AI serves **Gemini and Claude**, and Microsoft Foundry serves **GPT and Claude** — so the platform alone never tells you which reference file to load; identify the model family and load *that* file.
 
 | Signal seen in code / file / prompt                                                                                                                            | Family   |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
@@ -147,7 +147,7 @@ When designing multi-step or multi-agent workflows:
 - **Multi-agent topology** — when you do split into multiple agents, pick the coordination shape deliberately: **supervisor** (a central agent routes to and aggregates specialized workers — predictable, debuggable, the orchestrator-workers pattern) vs **swarm** (peers hand off control directly to one another — flexible, no bottleneck, harder to trace). Supervisor is the safe default; reach for swarm only when peer-to-peer handoff genuinely fits. Either way, give each agent a focused prompt + minimal tools, and decide explicitly what shared state crosses the handoff. The framework reference (`${CLAUDE_SKILL_DIR}/references/langgraph.md`) shows how these map to concrete primitives.
 
 ### Sampling Parameters and Determinism
-Frontier models are moving away from caller-controlled sampling. **Claude Opus 4.8 (and 4.7) returns a 400 error** if `temperature`, `top_p`, or `top_k` are set to non-default values; **Gemini 3.x strongly recommends not setting them at all**; GPT still accepts them but the trend is the same. Two consequences:
+Frontier models are moving away from caller-controlled sampling. **Claude Opus 4.8/4.7, Sonnet 5, and Fable 5 return a 400 error** if `temperature`, `top_p`, or `top_k` are set to non-default values; **Gemini 3.x strongly recommends not setting them at all**; GPT still accepts them (except Azure/Foundry reasoning models, which reject them) but the trend is the same. Two consequences:
 - Don't reach for `temperature` to steer behavior — use explicit prompting, structured outputs, and the reasoning/effort knob instead.
 - `temperature = 0` never guaranteed identical outputs anyway. For determinism, constrain the output (structured outputs, enum fields, explicit format rules) rather than lowering temperature.
 
@@ -238,9 +238,9 @@ For depth on any one provider — including current model versions and migration
 
 | Aspect | Claude | GPT | Gemini |
 |--------|--------|-----|--------|
-| Mechanism | Adaptive thinking; `effort`: low/medium/high/xhigh/max | `reasoning.effort`: none/low/medium/high/xhigh | `thinking_level`: minimal/low/medium/high |
-| Default state | Opus 4.8: thinking **OFF** unless `thinking:{type:"adaptive"}` is set; `effort` defaults to `high`, `xhigh` for coding/agentic | Default effort per-model: GPT-5.5 `medium`, GPT-5.4/Mini/Nano `none` | Default `thinking_level` per-model: 3.1 Pro `high`, 3.5 Flash `medium` |
-| Sampling params | **Removed on Opus 4.8/4.7** — non-default `temperature`/`top_p`/`top_k` → 400 error | Accepted, but trending out | Don't set on Gemini 3.x — strongly discouraged |
+| Mechanism | Adaptive thinking; `effort`: low/medium/high/xhigh/max | `reasoning.effort`: none/low/medium/high/xhigh/max (+ `reasoning.mode` standard/pro) | `thinking_level`: minimal/low/medium/high |
+| Default state | Opus 4.8: thinking **OFF** unless `thinking:{type:"adaptive"}` is set (Sonnet 5: on by default; Fable 5: always on); `effort` defaults to `high`, `xhigh` for coding/agentic | Default effort per-model: GPT-5.6 std-mode `[unverified]` (pro `medium`), GPT-5.4/Mini/Nano `none` | Default `thinking_level` per-model: 3.1 Pro `high`, 3.5 Flash `medium`, 3.1 Flash-Lite `minimal` |
+| Sampling params | **Removed on Opus 4.8/4.7, Sonnet 5, Fable 5** — non-default `temperature`/`top_p`/`top_k` → 400 error | Accepted (except Azure/Foundry reasoning models), but trending out | Don't set on Gemini 3.x — strongly discouraged |
 | Trace reuse | Not supported | `previous_response_id` saves tokens in multi-turn | Thought signatures preserved automatically (Gemini 3.5) |
 
 Reasoning effort is a **last-mile knob, not a primary quality lever**. Before raising effort, exhaust completeness contracts, verification loops, and tool-use persistence (Section A). Higher effort is not automatically better — it can cause overthinking, especially with contradictory instructions or weak stopping criteria.
@@ -249,7 +249,7 @@ Reasoning effort is a **last-mile knob, not a primary quality lever**. Before ra
 
 | Aspect | Claude | GPT | Gemini |
 |--------|--------|-----|--------|
-| Mechanism | Developer-controlled cache breakpoints (`cache_control`) | Automatic prefix-based (≥1024 tokens); set `prompt_cache_key` for repeated traffic | Implicit (automatic) + explicit (`CachedContent` objects) |
+| Mechanism | Developer-controlled cache breakpoints (`cache_control`) | Automatic prefix-based (≥1024 tokens); **explicit breakpoints on 5.6** (`prompt_cache_options.mode:"explicit"`, 30-min min); set `prompt_cache_key` | Implicit (automatic) + explicit (`CachedContent` objects) |
 | Cost savings | Cache reads at 10% of input cost (90% savings) | Cache reads ~80% cheaper than standard input | Model-dependent; explicit caching reduces per-request cost |
 | TTL | 5 min (default) or 1 hour; reads reset TTL | ~5-10 min automatic; 24h with extended caching | 1 hour default; configurable per CachedContent |
 
@@ -432,8 +432,8 @@ Templates in `${CLAUDE_SKILL_DIR}/templates/`:
 - `tool-description-template.md` — Structured tool description format
 
 Provider deep-dives in `${CLAUDE_SKILL_DIR}/references/` — read the one matching your model family:
-- `claude.md` — Claude (Anthropic API, AWS Bedrock, Vertex AI)
-- `gpt.md` — GPT (OpenAI API, Azure OpenAI / Microsoft Foundry)
+- `claude.md` — Claude (Anthropic API, AWS Bedrock, Vertex AI, Microsoft Foundry)
+- `gpt.md` — GPT (OpenAI API, Azure / Microsoft Foundry, AWS Bedrock)
 - `gemini.md` — Gemini (Gemini API, Vertex AI)
 
 Framework deep-dive (provider-agnostic; read in addition to a provider file when the agent is built on it):

@@ -1,8 +1,16 @@
 # Claude (Anthropic) — Provider Deep-Dive
 
-Applies to the **Claude model family** wherever it runs: the Anthropic API, AWS Bedrock, and Google Vertex AI. The platform does not change prompt engineering — the model version does.
+Applies to the **Claude model family** wherever it runs: the Anthropic API, AWS Bedrock, Google Vertex AI, and Microsoft Foundry. The platform does not change prompt engineering — the model version does.
 
-**Current models (May 2026):** Claude Opus 4.8 (`claude-opus-4-8`), Claude Sonnet 4.6 (`claude-sonnet-4-6`), Claude Haiku 4.5 (`claude-haiku-4-5`). Opus 4.8 is the frontier model — strongest at long-horizon agentic work, coding, knowledge work, vision, and memory. It **builds on Opus 4.7 and runs existing 4.7 prompts unchanged — there are no breaking API changes from 4.7**; the items below are the behaviors and knobs that most often need tuning. (Most of this guidance carries forward from 4.7; the 4.8-specific deltas are called out inline and in the migration checklist. If your code is on Opus 4.6 or earlier, also apply the 4.7 migration steps — those *did* have breaking changes: sampling params rejected, extended-thinking budgets removed, new tokenizer.)
+**Current models (July 2026):** the **Claude 5 family** now tops the lineup, above the 4.x Opus tier:
+
+- **Claude Fable 5** (`claude-fable-5`) — Anthropic's **most capable widely-released model** ("Mythos-class"); reach for it on the most demanding reasoning and long-horizon agentic work. GA June 9 2026. $10 / $50 per MTok.
+- **Claude Mythos 5** (`claude-mythos-5`) — Fable 5's twin **without safety classifiers**, invitation-only via Project Glasswing (defensive-cyber); same specs/pricing/API as Fable 5. Use `claude-fable-5` unless the org is in Glasswing.
+- **Claude Opus 4.8** (`claude-opus-4-8`) — the **recommended default flagship** for complex agentic coding and enterprise work. $5 / $25.
+- **Claude Sonnet 5** (`claude-sonnet-5`, supersedes Sonnet 4.6) — best speed/intelligence balance, near-Opus on coding/agentic. $3 / $15 (intro $2 / $10 through Aug 31 2026).
+- **Claude Haiku 4.5** (`claude-haiku-4-5`) — fastest / budget tier. $1 / $5.
+
+All Claude 5 models + Opus 4.8 share a **1M context window, 128K max output, and a Jan 2026 knowledge cutoff** (Haiku 4.5 = 200K context, 64K output, Feb 2025 cutoff). This file is written around **Opus 4.8** (the practical default); the Fable 5 and Sonnet 5 sections below cover their deltas — most guidance here carries across the family. Opus 4.8 **builds on Opus 4.7 and runs existing 4.7 prompts unchanged — no breaking API changes from 4.7** (if your code is on Opus 4.6 or earlier, also apply the 4.7 migration steps — those *did* break: sampling params rejected, extended-thinking budgets removed, new tokenizer).
 
 ## Contents
 - Effort and thinking
@@ -22,8 +30,9 @@ Applies to the **Claude model family** wherever it runs: the Anthropic API, AWS 
 - Code review harnesses
 - Frontend design
 - Vision
-- Sonnet 4.6 and Haiku 4.5
-- Opus 4.7 → 4.8 migration checklist
+- Fable 5 and Mythos 5
+- Sonnet 5 and Haiku 4.5
+- Opus 4.7 → 4.8 migration checklist (and moving to Sonnet 5 / Fable 5)
 
 ## Effort and thinking
 
@@ -31,7 +40,8 @@ Opus 4.8 uses **adaptive thinking** and the `effort` parameter (low/medium/high/
 
 - **`effort` now defaults to `high`** on all surfaces (Claude API and Claude Code). If you set it explicitly, your value is unchanged. Effort is more consequential on 4.8 than on any prior Opus — experiment with it actively when you upgrade.
 - **Effort levels are recalibrated vs 4.7:** `medium` now allows somewhat *more* thinking, `high` somewhat *less*, and `xhigh` *substantially more*. If you tuned a level against 4.7 cost/latency, **re-baseline at the same level before adjusting**.
-- **Adaptive thinking is OFF by default.** A request with no `thinking` field runs with no thinking. Set `thinking: {type: "adaptive"}` explicitly to enable it. (`budget_tokens` extended thinking is removed — `thinking: {type:"enabled", budget_tokens:N}` returns a 400 error. Adaptive is the only thinking-on mode and outperforms extended thinking in Anthropic's evals.) On 4.8, adaptive thinking decides **per turn** whether to reason — responding directly on simple lookups, reasoning on hard multi-step problems — which cuts wasted thinking tokens on bimodal workloads vs 4.7 at the same effort.
+- **Adaptive thinking is OFF by default *on Opus 4.8/4.7*.** A request with no `thinking` field runs with no thinking. Set `thinking: {type: "adaptive"}` explicitly to enable it. (`budget_tokens` extended thinking is removed — `thinking: {type:"enabled", budget_tokens:N}` returns a 400 error. Adaptive is the only thinking-on mode and outperforms extended thinking in Anthropic's evals.) On 4.8, adaptive thinking decides **per turn** whether to reason — responding directly on simple lookups, reasoning on hard multi-step problems — which cuts wasted thinking tokens on bimodal workloads vs 4.7 at the same effort.
+- **This default is model-specific across the family** — don't assume it: **Sonnet 5** runs adaptive when you *omit* `thinking` (on by default); **Fable 5 / Mythos 5** have thinking **always on** (you cannot disable it — `thinking:{type:"disabled"}` returns 400); **Haiku 4.5** has no adaptive thinking at all (use extended thinking with `budget_tokens`). See the family sections below.
 - **Thinking content is omitted from responses by default.** Thinking blocks still stream but their `thinking` field is empty unless you opt in with `thinking: {type:"adaptive", display:"summarized"}`. If your product streams reasoning to users, the default looks like a long pause before output — set `display:"summarized"` to restore visible progress.
 
 Effort guidance for Opus 4.8:
@@ -106,6 +116,8 @@ Opus 4.8 offers **fast mode** (research preview on the Claude API): set `speed: 
 
 When Claude declines a request, the response carries a `stop_details` object (alongside the existing `refusal` stop reason) describing the **category** of refusal — now publicly documented (available since 4.7). Read it to tell apart classes of declined request and route the user to the right next step instead of treating every refusal identically. No beta header, no opt-out.
 
+**Fable 5 / Mythos 5 refusals go further:** their safety classifiers can return `stop_reason: "refusal"` (at HTTP 200, even mid-completion). Handle this stop reason explicitly and opt into a graceful `fallbacks` behavior rather than surfacing a raw truncated response — see the Fable 5 section for details.
+
 ## Agentic and long-horizon work
 
 - **Context awareness** — Claude 4.x tracks its remaining context window. If your harness compacts or saves state to files, tell the model so it doesn't wrap up early: *"Your context window will be compacted as it approaches its limit... do not stop tasks early due to token budget concerns. Save progress to memory before the window refreshes."*
@@ -129,17 +141,29 @@ Opus 4.8 has strong design instincts but a persistent default house style — wa
 
 High-resolution image support (introduced in Opus 4.7, retained in 4.8) — up to 2576px / 3.75MP, with model coordinates 1:1 to actual pixels (no scale-factor math). Strong at pointing, measuring, counting, and bounding-box localization. High-res images cost more tokens; downsample when the extra fidelity isn't needed. For computer use, 1080p is a good performance/cost balance (720p or 1366×768 for cost-sensitive workloads). A crop/"zoom" tool gives a consistent uplift on image tasks.
 
-## Sonnet 4.6 and Haiku 4.5
+## Fable 5 and Mythos 5
 
-Most of this file is written for Opus 4.8, but the two lighter current models share the same foundations with a few important differences. Use Opus 4.8 for the hardest, longest-horizon work (large migrations, deep research, extended autonomous runs); drop to Sonnet when turnaround and cost matter more; use Haiku for high-volume, latency-critical, bounded tasks.
+**Claude Fable 5** (`claude-fable-5`) is Anthropic's most capable widely-released model — the top of the "Mythos-class" tier — and it widens its lead over Opus 4.8 the longer and more complex the task. Same API surface as Opus 4.7/4.8, with a few Fable-specific points:
 
-**Claude Sonnet 4.6** (`claude-sonnet-4-6`) — the best speed/intelligence balance; 1M-token context, 64k output, $3/$15 per MTok, reliable knowledge cutoff Aug 2025. Supports **both adaptive thinking and extended thinking** (`budget_tokens`, but extended is deprecated — prefer adaptive). Like Opus 4.8 it **defaults to `effort: high`** (Sonnet 4.5 had no effort parameter) — set it explicitly or expect higher latency than you intend. Recommended: `medium` for most apps, `low` for high-volume/latency-sensitive; set a large `max_tokens` (64k) at medium/high so it has room to think and act. Best-in-class on computer use.
+- **Thinking is always on and cannot be disabled** — omit the `thinking` parameter; an explicit `thinking:{type:"disabled"}` returns a 400. The raw chain of thought is never returned; get summaries with `display:"summarized"`. `effort` still applies (low/medium/high/xhigh/max).
+- **Safety-classifier refusals:** Fable 5 may return `stop_reason:"refusal"` (HTTP 200, possibly mid-completion). Handle that stop reason and opt into a graceful `fallbacks` behavior rather than shipping a truncated response.
+- **No assistant prefill** (as with the whole 4.6+/5 family); non-default sampling params rejected; same tokenizer as Opus 4.8 (token counts roughly unchanged vs 4.7/4.8).
+- **Data-retention floor:** requires 30-day data retention — **not available under Zero Data Retention (ZDR)**. Factor this into any ZDR-bound deployment.
+- Pricing $10/$50 per MTok; 1M context, 128K max output. It's ~2× the price of Opus 4.8 — reserve it for genuinely hard, long-horizon work, not routine calls.
 
-**Claude Haiku 4.5** (`claude-haiku-4-5`, dated `…-20251001`) — the fastest model, with near-frontier intelligence; 200k-token context, 64k output, $1/$5 per MTok, reliable knowledge cutoff Feb 2025. **It does not support adaptive thinking** — use **extended thinking with `budget_tokens`** (`thinking: {type:"enabled", budget_tokens:N}`; ~16k is a sane starting budget). Excellent for classification, routing, extraction, and high-volume batch work. Apply the universal budget-model patterns: more explicit instructions, more (simpler) few-shot examples, a small clearly-bounded tool set, and "do the work" separated from "report it." It has context awareness (tracks its remaining window) like the other 4.x models.
+**Claude Mythos 5** (`claude-mythos-5`) — identical capabilities, pricing, limits, and API behavior to Fable 5; only the model ID differs, and it's **invitation-only through Project Glasswing** (defensive cybersecurity), where it succeeds the earlier `claude-mythos-preview`. Prompt it exactly like Fable 5; use `claude-fable-5` unless the org participates in Glasswing.
 
-Two cross-cutting notes: prefill on the last assistant turn is **unsupported on all 4.6+ models** (400), so the prefill-migration guidance above applies to Sonnet 4.6 and Haiku 4.5 too. The hard 400 on non-default `temperature`/`top_p`/`top_k` is documented only for Opus 4.7/4.8 — it isn't stated for Sonnet 4.6 or Haiku 4.5 — but omit sampling params anyway and steer with prompting + structured outputs (the determinism argument holds across the family). Model ID formats differ per platform (Bedrock `anthropic.claude-…`, Vertex `claude-…@date`).
+## Sonnet 5 and Haiku 4.5
 
-## Opus 4.7 → 4.8 migration checklist
+Most of this file is written for Opus 4.8, but the two lighter current models share the same foundations with a few important differences. Use Fable 5 / Opus 4.8 for the hardest, longest-horizon work; drop to Sonnet 5 when turnaround and cost matter more; use Haiku 4.5 for high-volume, latency-critical, bounded tasks.
+
+**Claude Sonnet 5** (`claude-sonnet-5`, supersedes Sonnet 4.6) — the best speed/intelligence balance, near-Opus on coding and agentic work; 1M-token context, 128k output, $3/$15 per MTok ($2/$10 intro through Aug 31 2026), Jan 2026 knowledge cutoff. **Adaptive thinking is ON by default** (omitting `thinking` runs adaptive — the *opposite* of Opus 4.8), and `budget_tokens` extended thinking is removed. Like Opus 4.8 it **defaults to `effort: high`** on the Claude API and Claude Code — set it explicitly (`effort` supports low/medium/high/xhigh/max) or expect higher latency than you intend; `medium` suits most apps, `low` for high-volume/latency-sensitive. Set a large `max_tokens` (64k) at medium/high so it has room to think and act. Uses the new tokenizer (~30% more tokens for the same text vs Sonnet 4.6) and high-resolution vision (2576px). (**Sonnet 4.6**, `claude-sonnet-4-6`, remains active as the previous-generation Sonnet — adaptive thinking, 1M context — but prefer Sonnet 5.)
+
+**Claude Haiku 4.5** (`claude-haiku-4-5`, dated `…-20251001`) — the fastest model, with near-frontier intelligence; 200k-token context, 64k output, $1/$5 per MTok, reliable knowledge cutoff Feb 2025. **It does not support adaptive thinking or the `effort` parameter** — use **extended thinking with `budget_tokens`** (`thinking: {type:"enabled", budget_tokens:N}`; ~16k is a sane starting budget). Excellent for classification, routing, extraction, and high-volume batch work. Apply the universal budget-model patterns: more explicit instructions, more (simpler) few-shot examples, a small clearly-bounded tool set, and "do the work" separated from "report it." It has context awareness (tracks its remaining window) like the other 4.x models.
+
+Two cross-cutting notes: prefill on the last assistant turn is **unsupported on all 4.6+ and 5 models** (400), so the prefill-migration guidance above applies to Sonnet 5, Fable 5, and Haiku 4.5 too. The hard 400 on non-default `temperature`/`top_p`/`top_k` is documented for Opus 4.7/4.8, Sonnet 5, and Fable 5 — for Haiku 4.5 it isn't explicitly stated, but omit sampling params anyway and steer with prompting + structured outputs (the determinism argument holds across the family). Model ID formats differ per platform (Bedrock `anthropic.claude-…`, Vertex `claude-…@date`).
+
+## Opus 4.7 → 4.8 migration checklist (and moving to Sonnet 5 / Fable 5)
 
 No breaking API changes — code on 4.7 runs unchanged. These are behavior/knob checks after swapping the model ID:
 
@@ -151,3 +175,5 @@ No breaking API changes — code on 4.7 runs unchanged. These are behavior/knob 
 6. Sampling params stay rejected (400 on non-default) and adaptive is still the only thinking-on mode — both unchanged from 4.7, so no action if you already migrated off them.
 
 **Coming from Opus 4.6 or earlier?** First apply the 4.7 migration, which *does* have breaking changes: remove `temperature`/`top_p`/`top_k` (non-default → 400); replace `thinking:{type:"enabled", budget_tokens:N}` with `thinking:{type:"adaptive"}` + `output_config:{effort:...}` (add `display:"summarized"` if you stream reasoning); bump `max_tokens`/compaction triggers for the ~1–1.35× tokenizer; replace prefill (see *Migrating away from prefill*); state instruction scope explicitly where you relied on generalization. Then apply the 4.7→4.8 steps above.
+
+**Moving to Sonnet 5?** From Sonnet 4.6 it's mostly a model-ID swap: `budget_tokens` extended thinking is gone (adaptive is on by default when you omit `thinking`), `effort` now defaults to `high` (set it explicitly), and the new tokenizer means ~30% more tokens — bump `max_tokens`. Non-default sampling params and last-turn prefill both 400. **Moving to Fable 5?** Same 4.7/4.8 baseline, plus: you cannot disable thinking (`thinking:{type:"disabled"}` → 400 — omit it), handle `stop_reason:"refusal"` with a `fallbacks` policy, and confirm your deployment allows 30-day retention (Fable 5 is **not** ZDR-eligible).
