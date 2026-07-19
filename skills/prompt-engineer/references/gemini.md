@@ -2,13 +2,21 @@
 
 Applies to the **Gemini model family** wherever it runs: the Gemini API (Google AI Studio) and Vertex AI. The platform does not change prompt engineering — the model version does.
 
-**Current models (May 2026):** the three current Gemini 3.x models are **Gemini 3.1 Pro** (`gemini-3.1-pro-preview`) — the most capable reasoning model, with better thinking, improved token efficiency, and stronger factual grounding than Gemini 3 Pro; **Gemini 3.5 Flash** (`gemini-3.5-flash`, released May 19 2026) — a fast, low-cost frontier model with strong agentic and multimodal performance; and **Gemini 3.1 Flash-Lite** (`gemini-3.1-flash-lite`) — the lowest-latency, cheapest tier for high-volume bounded tasks, which **now supports `thinking_level`** (earlier Flash-Lite models had no thinking knob). All three share a **1M-token input window, 65k max output, and a January 2025 knowledge cutoff**. Gemini 3 Pro/Flash and Gemini 2.5 remain in use. Gemini 3.x models are tuned for advanced reasoning and instruction following and respond best to prompts that are direct, well-structured, and explicit about the task and constraints.
+**Current models (July 2026):** the Gemini 3.x line leads — there is **no Gemini 4** (the I/O 2026 flagship was Gemini 3.5; "Gemma 4" is the separate open-weights model, not Gemini).
+
+- **Gemini 3.5 Flash** (`gemini-3.5-flash`, GA May 19 2026) — the current broadly-available frontier: fast, low-cost, strong agentic/multimodal, and it now **outperforms Gemini 3.1 Pro on coding**. Default `thinking_level` `medium`.
+- **Gemini 3.1 Pro** (`gemini-3.1-pro-preview`, Feb 19 2026) — the current GA Pro-tier reasoning model (default `thinking_level` `high`; a `gemini-3.1-pro-preview-customtools` variant prioritizes custom tools).
+- **Gemini 3.1 Deep Think** — a max-reasoning tier aimed at the hardest science / research / engineering problems.
+- **Gemini 3.1 Flash-Lite** (`gemini-3.1-flash-lite`) — cheapest, lowest-latency tier; **now supports `thinking_level`** (earlier Flash-Lite had no thinking knob; default `minimal`).
+
+Current models share a **~1M-token input window, ~64–65k max output, and a January 2025 knowledge cutoff** (verify the exact cutoff per model — official docs list Jan 2025 for the 3.x line). Gemini 3 Flash (`gemini-3-flash-preview`) and Gemini 2.5 remain in the API; **Gemini 2.0 shut down June 1 2026** and `gemini-3-pro-preview` was retired March 9 2026 (redirects to `gemini-3.1-pro-preview`). **Gemini 3.5 Pro is NOT yet available** — as of mid-July 2026 it has missed multiple launch targets, and rumored specs (e.g. a 2M context, a "Deep Think Reasoning Layer") are `[unverified]`; treat it as *coming*, not shippable, and don't build against it until Google publishes a model card. Gemini 3.x models respond best to prompts that are direct, well-structured, and explicit about the task and constraints.
 
 ## Contents
 - System instructions and placement
 - Sampling parameters (don't set them)
 - Thinking level
 - Thought preservation and signatures
+- Stateful mode (Interactions API)
 - Few-shot examples
 - Completion priming
 - Verbosity
@@ -21,7 +29,7 @@ Applies to the **Gemini model family** wherever it runs: the Gemini API (Google 
 - Non-English output
 - Temporal grounding
 - Multimodal
-- Flash tier
+- Flash tier and inference tiers (Flex / Priority)
 - Migration to Gemini 3.5
 
 ## System instructions and placement
@@ -55,6 +63,10 @@ On Gemini 3.5, **thought preservation is on by default** — the model carries i
 
 Also pass the matching per-call `id` back in each `functionResponse` (see *Function calling*).
 
+## Stateful mode (Interactions API)
+
+The signature round-tripping above is the **stateless** path (you resend the `thought` blocks yourself). Gemini now offers a **stateful** alternative — the **Interactions API** with `store: true` + `previous_interaction_id`: the server manages thoughts and signatures across turns, so you don't resend them. The official SDKs also auto-handle signatures for ordinary function calling. Use stateful mode to avoid manual signature bookkeeping; keep to the stateless round-trip rules when you manage history yourself or work over raw REST.
+
 ## Few-shot examples
 
 Few-shot examples are **critical** on Gemini — "prompts without few-shot examples are likely to be less effective." Include several diverse input/output examples with clear `INPUT:` / `OUTPUT:` labels. Keep formatting, spacing, tags, and delimiters identical across every example — inconsistency confuses the model. Use enough examples to establish the pattern but not so many that responses overfit to the samples.
@@ -69,12 +81,12 @@ Gemini 3.x defaults to **terse, efficient answers**. If you want a detailed or c
 
 ## Grounding and built-in tools
 
-Gemini has native **Google Search grounding** — the exclusive anti-hallucination tool, connecting the model to real-time verified information. Enable it for current or obscure facts; enable code execution for calculations. Gemini 3 can combine built-in tools (Search, URL context, code execution) with custom function calling in a single request.
+Gemini has native **Google Search grounding** — the exclusive anti-hallucination tool, connecting the model to real-time verified information. The built-in tool set has grown to **Google Search, Maps grounding, File Search, Code Execution, and URL Context**, and Gemini 3 can combine any of them with custom function calling **in a single request** (shipped March 2026). Enable Search for current or obscure facts and Code Execution for calculations.
 
 ## Function calling
 
 - Gemini 3 generates a **unique `id` per function call** — each function response must include that matching `id`, a matching `name`, and exactly one response per call.
-- Place multimodal content (images, audio) **inside** function-response parts, not alongside them.
+- **Function responses can carry multimodal content** (images, audio) — place it **inside** the function-response parts, not alongside them.
 - Append extra runtime guidance to the function-response text (separated by two newlines), not as a separate part.
 - **Calling modes** (`function_calling_config.mode`): `AUTO` (default when only declarations are set — model chooses text or a call), `VALIDATED` (default when built-in tools are combined with custom functions; constrains output to the schema), `ANY` (force a function call every turn), `NONE` (disable calls). Use `ANY` when a call is mandatory, `NONE` to suppress.
 - Keep the active tool set to **10-20** declarations; beyond that, selection accuracy drops (curate or load dynamically). Only a **subset of OpenAPI schema** is supported, and very large or deeply nested schemas may be rejected (especially under `ANY`/`VALIDATED`).
@@ -126,18 +138,21 @@ Treat text, images, audio, and video as equal-class inputs and reference each cl
 
 **Multimodal troubleshooting.** If the model misses relevant details, hint *which* aspects of the image to draw from. If output is too generic or you can't tell comprehension from reasoning failure, ask it to **describe the image first**, then answer. To curb fabrication, ask for **shorter descriptions** — *the legacy "lower the temperature" tip is superseded on 3.x; keep temperature at the default 1.0.*
 
-Image segmentation is unsupported on Gemini 3.x (use Gemini 2.5 Flash or Robotics-ER); Computer Use is not yet supported on Gemini 3.5 Flash (use Gemini 3 Flash Preview).
+Image segmentation is unsupported on Gemini 3.x (use Gemini 2.5 Flash or Robotics-ER). **Computer Use now runs on Gemini 3.5 Flash** (public preview, June 24 2026) with simplified intent-based actions across browser / mobile / desktop, and it's integrated — no separate model needed.
 
-## Flash tier
+## Flash tier and inference tiers (Flex / Priority)
 
 Gemini 3.5 Flash / 3 Flash / 3.1 Flash-Lite are the budget tier — excellent for classification, routing, translation, and high-volume multimodal batch work; Flash-Lite is the best value for high-volume bounded tasks. Note that **Gemini 3.1 Flash-Lite now supports `thinking_level`**, so it's no longer a strictly no-thinking model — raise its level for a cheap accuracy boost on tasks that benefit from a little reasoning, keep it low/minimal for raw throughput. Give Flash-tier models more explicit instructions and more (simpler) few-shot examples than you would a Pro model, and keep the tool set small and clearly bounded.
+
+Beyond model choice, Gemini exposes **Flex and Priority inference tiers** (added April 1 2026) as a separate cost/latency lever: **Flex** trades latency for lower cost on batch-tolerant work; **Priority** buys faster, steadier latency at a premium. Pick the tier to match the workload's latency sensitivity, independent of which model you run.
 
 ## Migration to Gemini 3.5
 
 - Update the model ID to `gemini-3.5-flash` (or the relevant 3.x model).
 - Remove `temperature`, `top_p`, `top_k` from the request config.
-- Replace `thinking_budget` (numeric) with `thinking_level` (`minimal`/`low`/`medium`/`high`).
+- Replace `thinking_budget` (numeric) with `thinking_level` (`minimal`/`low`/`medium`/`high`). `thinking_budget` is kept only for backward compat — and **don't send both in one request (400)**.
 - Delete chain-of-thought scaffolding that forced reasoning — use `thinking_level` instead.
-- Expect thought preservation on by default; ensure thought signatures round-trip with function results.
+- Expect thought preservation on by default; ensure thought signatures round-trip with function results (or use the stateful **Interactions API** to have the server manage them).
 - If moving a no-thinking Flash-Lite workload up to `gemini-3.1-flash-lite`, you can now set `thinking_level` on it — start `minimal`/`low` and raise only where accuracy needs it.
+- **Pin explicit model IDs, not `-latest` aliases** — alias targets shift and `gemini-3-pro-preview` was already retired (→ `gemini-3.1-pro-preview`).
 - Re-test: Gemini 3.x is terser and more direct — prompts written for a chattier older model may need an explicit elaboration request.
