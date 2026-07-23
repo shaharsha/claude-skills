@@ -4,10 +4,12 @@ Applies to the **Gemini model family** wherever it runs: the Gemini API (Google 
 
 **Current models (July 2026):** the Gemini 3.x line leads — there is **no Gemini 4** (the I/O 2026 flagship was Gemini 3.5; "Gemma 4" is the separate open-weights model, not Gemini).
 
-- **Gemini 3.5 Flash** (`gemini-3.5-flash`, GA May 19 2026) — the current broadly-available frontier: fast, low-cost, strong agentic/multimodal, and it now **outperforms Gemini 3.1 Pro on coding**. Default `thinking_level` `medium`.
+- **Gemini 3.6 Flash** (`gemini-3.6-flash`, ~July 21 2026) — the current stable Flash flagship: "balances speed with intelligence" for agentic/multimodal work. Supersedes 3.5 Flash as the go-to Flash. Pricing (ai.google.dev/gemini-api/docs/pricing): **$1.50 / 1M input, $7.50 / 1M output (thinking tokens billed at the output rate)**.
+- **Gemini 3.5 Flash-Lite** (`gemini-3.5-flash-lite`, ~July 21 2026) — the current stable cheapest / fastest tier for high-throughput classification, routing, extraction. Supersedes 3.1 Flash-Lite. Default `thinking_level` `minimal` (supports the full `minimal`/`low`/`medium`/`high` knob — raise it for a cheap accuracy boost when a terse/ambiguous input needs domain reasoning; it stays cheap because the classifier is usually low-volume). Pricing: **$0.30 / 1M input, $2.50 / 1M output (incl. thinking)**.
+- **Gemini 3.5 Flash** (`gemini-3.5-flash`, GA May 19 2026) — prior-gen Flash, still in the API. Default `thinking_level` `medium`.
 - **Gemini 3.1 Pro** (`gemini-3.1-pro-preview`, Feb 19 2026) — the current GA Pro-tier reasoning model (default `thinking_level` `high`; a `gemini-3.1-pro-preview-customtools` variant prioritizes custom tools).
 - **Gemini 3.1 Deep Think** — a max-reasoning tier aimed at the hardest science / research / engineering problems.
-- **Gemini 3.1 Flash-Lite** (`gemini-3.1-flash-lite`) — cheapest, lowest-latency tier; **now supports `thinking_level`** (earlier Flash-Lite had no thinking knob; default `minimal`).
+- **Gemini 3.1 Flash-Lite** (`gemini-3.1-flash-lite`) — prior-gen cheapest tier (superseded by 3.5 Flash-Lite), still in the API; **supports `thinking_level`** (default `minimal`).
 
 Current models share a **~1M-token input window, ~64–65k max output, and a January 2025 knowledge cutoff** (verify the exact cutoff per model — official docs list Jan 2025 for the 3.x line). Gemini 3 Flash (`gemini-3-flash-preview`) and Gemini 2.5 remain in the API; **Gemini 2.0 shut down June 1 2026** and `gemini-3-pro-preview` was retired March 9 2026 (redirects to `gemini-3.1-pro-preview`). **Gemini 3.5 Pro is NOT yet available** — as of mid-July 2026 it has missed multiple launch targets, and rumored specs (e.g. a 2M context, a "Deep Think Reasoning Layer") are `[unverified]`; treat it as *coming*, not shippable, and don't build against it until Google publishes a model card. Gemini 3.x models respond best to prompts that are direct, well-structured, and explicit about the task and constraints.
 
@@ -50,6 +52,8 @@ Gemini 3.x uses `thinking_level` (`minimal` / `low` / `medium` / `high`), replac
 - `high` — hard reasoning, math, and the most difficult code or agent tasks.
 
 Start at the model's default; drop a level for faster/cheaper responses; escalate only for genuinely hard work. If an older prompt used chain-of-thought text to force reasoning, delete that scaffolding and raise `thinking_level` with a simpler prompt instead. **Do not send both `thinking_level` and the legacy `thinking_budget` in one request — it returns a 400 error.**
+
+**Cost:** thinking tokens are billed **at the output-token rate** (Google's pricing table lists a single "output price including thinking tokens"), so raising the level raises the bill — often more than switching model does. That's fine for **low-volume** calls (a twice-weekly discovery classifier over a few dozen candidates: MEDIUM vs LOW is a fraction of a cent), but on a **high-throughput** path (per-request classification at scale) keep it `minimal`/`low` and recover accuracy via the prompt/examples first. The knob is per-request, so run the same model `minimal` for the hot path and `medium`/`high` for the occasional hard call.
 
 ## Thought preservation and signatures
 
