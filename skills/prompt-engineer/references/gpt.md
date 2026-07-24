@@ -4,7 +4,7 @@ Applies to the **GPT model family** wherever it runs: the OpenAI API, Azure Open
 
 **Current models (July 2026):** **GPT-5.6** is the current frontier generation (GA July 9 2026), and it introduces a **new naming scheme — the number is the generation, and Sol / Terra / Luna are durable capability tiers** that can each advance on their own cadence (this replaces the old numeric-suffix + Mini/Nano scheme *for the frontier family*):
 
-- **GPT-5.6 Sol** (`gpt-5.6-sol`; the bare `gpt-5.6` alias routes to Sol) — flagship, for the hardest problems (complex coding, security research). The only tier that unlocks the top-end `max` effort and `pro` mode. $5 / $30 per 1M (cached input $0.50). Knowledge cutoff Feb 16 2026.
+- **GPT-5.6 Sol** (`gpt-5.6-sol`; the bare `gpt-5.6` alias routes to Sol) — flagship, for the hardest problems (complex coding, security research); the highest-capability tier and the highest ceiling for `max` effort and `pro` mode — though both are now settable on **all three tiers** via the API (see *Reasoning effort* / *Reasoning mode*). $5 / $30 per 1M (cached input $0.50). Knowledge cutoff Feb 16 2026.
 - **GPT-5.6 Terra** (`gpt-5.6-terra`) — balanced everyday-business tier (support, internal tools, document analysis); ≈ GPT-5.5 quality at ~2× cheaper. $2.50 / $15.
 - **GPT-5.6 Luna** (`gpt-5.6-luna`) — fast, low-cost tier for summarization, drafting, routine automation. $1 / $6. Note this is a budget *frontier* tier, **not** a nano replacement.
 
@@ -36,13 +36,13 @@ GPT-5 follows instructions with surgical precision, which makes **contradictions
 
 ## Outcome-first prompting
 
-GPT-5.5 is strongest when the prompt defines the **target outcome** and lets the model choose the path. Specify: expected outcome, success criteria, allowed side effects, evidence/citation rules, output shape, and stopping conditions. Avoid step-by-step process instructions unless the exact path is product-critical — process-heavy prompt stacks from older models over-specify what GPT-5.5 handles natively and can hurt quality.
+GPT-5.5 is strongest when the prompt defines the **target outcome** and lets the model choose the path. Specify: expected outcome, success criteria, allowed side effects, evidence/citation rules, output shape, and stopping conditions. Avoid step-by-step process instructions unless the exact path is product-critical — process-heavy prompt stacks from older models over-specify what GPT-5.5 handles natively and can hurt quality. GPT-5.6 goes further — it infers the user's underlying goal and intended level of work from context, so prescribe even less; still supply domain context, hard constraints, approval boundaries, and success criteria, and **say explicitly when an important ambiguity should make the model stop and ask** rather than assume (it won't ask on its own unless told to).
 
 Prefer **decision rules over absolutes** for judgment calls. Replace ALWAYS/NEVER with "if X, do Y; otherwise Z." Reserve hard rules for policy and safety, which remain binding regardless of user instructions.
 
 ## Reasoning effort
 
-`reasoning.effort`: `none` / `low` / `medium` / `high` / `xhigh` / `max`. GPT-5.6 **adds `max`** at the top of the ladder — the deepest reasoning tier, available on **Sol** (the top-end knob doesn't apply to Terra/Luna). **The default is per-model:** GPT-5.5 defaults to `medium`; GPT-5.4 (and its Mini/Nano) default to **`none`** — pin effort explicitly on 5.4 or it runs with reasoning off. GPT-5.6's standard-mode default isn't stated in the model guidance `[unverified]`; `pro` mode defaults to `medium` (see next section). (`minimal` existed only on the original GPT-5 models and is **not** on 5.1+; the floor on 5.4/5.5/5.6 is `none`.)
+`reasoning.effort`: `none` / `low` / `medium` / `high` / `xhigh` / `max`. GPT-5.6 **adds `max`** at the top of the ladder — the deepest reasoning tier, and it's settable on **all three tiers** (Sol/Terra/Luna); Sol just has the highest ceiling. **The default is per-model:** GPT-5.5 defaults to `medium`; GPT-5.4 (and its Mini/Nano) default to **`none`** — pin effort explicitly on 5.4 or it runs with reasoning off. **GPT-5.6 defaults to `medium` in both standard and `pro` mode** (confirmed in OpenAI's model guidance). (`minimal` existed only on the original GPT-5 models and is **not** on 5.1+; the floor on 5.4/5.5/5.6 is `none`.)
 
 - `none` — latency-critical tasks with no reasoning need (lightweight classification, voice turns).
 - `low` — efficient reasoning when planning/tool use still matters but speed counts.
@@ -54,7 +54,7 @@ Reasoning effort is a **last-mile knob, not a primary quality lever**. Higher is
 
 ## Reasoning mode (standard / pro) and multi-agent
 
-GPT-5.6 adds `reasoning.mode` = `"standard"` | `"pro"` as an axis **separate from** `reasoning.effort`: mode selects standard vs. pro execution, while effort controls how much reasoning happens *within* that mode. `pro` does more model work (higher cost, higher ceiling) and is the Sol-tier capability; if you omit effort in `pro` mode it defaults to `medium`. Use `pro` only when evals show the hardest tasks need it — it isn't a free quality bump.
+GPT-5.6 adds `reasoning.mode` = `"standard"` | `"pro"` as an axis **separate from** `reasoning.effort`: mode selects standard vs. pro execution, while effort controls how much reasoning happens *within* that mode. `pro` does more model work (higher cost, higher ceiling) and is **settable on any tier** via `reasoning.mode` — no separate `-pro` model slug needed; ChatGPT surfaces it as "Sol Pro," but on the API it applies to Sol, Terra, or Luna alike. If you omit effort in `pro` mode it defaults to `medium`. `pro` bills at the same per-token rate as standard mode but typically consumes more tokens, so use it only when evals show the hardest tasks need it — it isn't a free quality bump. Keep your normal outcome-focused prompt in `pro` mode — OpenAI's guidance is explicit that you do **not** need to add "think harder" or ask for several candidate answers; the mode handles the extra work.
 
 Above pro sits a **multi-agent** capability: in ChatGPT it's exposed as `ultra` (runs ~4 agents in parallel — e.g. Terminal-Bench 2.1 88.8% → 91.9%); the API equivalent is the **multi-agent beta in the Responses API**, where one GPT-5.6 instance coordinates parallel subagents and synthesizes their results. Reserve it for genuinely decomposable, high-value work — it multiplies token cost.
 
@@ -81,7 +81,7 @@ Do **not** hand-write JSON schemas in the prompt. Use the Structured Outputs API
 
 ## Programmatic tool calling
 
-GPT-5.6 adds **programmatic tool calling** — instead of the model emitting one tool call per turn and waiting for each result, you add a `programmatic_tool_calling` tool and opt eligible tools in via **`allowed_callers`**; the model then writes a lightweight **program (JavaScript in an isolated V8 runtime, no network access)** that orchestrates those tools, loops, and filters/aggregates intermediate results, returning only the distilled output. This cuts tool-call round-trips and keeps large intermediate payloads out of context (OpenAI-cited 38–63.5% token reductions). You handle the `program` and `program_output` items in the Responses API. Reach for it on multi-step / batch / filter-heavy tool work (fan out across many records, return only the matches); prefer plain tool calls for simple, transparent steps where you want to reason over each result. (This is OpenAI's counterpart to the "expose tools as a code API" pattern in SKILL.md Section B.)
+GPT-5.6 adds **programmatic tool calling** — instead of the model emitting one tool call per turn and waiting for each result, you add a `programmatic_tool_calling` tool and opt eligible tools in via **`allowed_callers`**; the model then writes a lightweight **program (JavaScript in an isolated V8 runtime, no network access)** that orchestrates those tools, loops, and filters/aggregates intermediate results, returning only the distilled output. This cuts tool-call round-trips and keeps large intermediate payloads out of context (OpenAI-cited 38–63.5% token reductions). You handle the `program` and `program_output` items in the Responses API. Reach for it on multi-step / batch / filter-heavy tool work (fan out across many records, return only the matches); prefer plain tool calls for simple, transparent steps where you want to reason over each result. When both routes are available, **make the routing task-specific** — name the bounded stage, the eligible tools, the output schema, the retry limit, and the stop condition; OpenAI's guidance warns that a generic "use programmatic tool calling efficiently" won't produce the right route. It's ZDR-compatible with no extra container cost. (This is OpenAI's counterpart to the "expose tools as a code API" pattern in SKILL.md Section B.)
 
 ## Agentic eagerness control
 
@@ -89,6 +89,7 @@ Steer the agent's exploration depth in **both** directions:
 
 - **Reduce eagerness** (over-exploring, too many tool calls): lower `reasoning.effort`; set an explicit tool-call budget ("use at most 2 tool calls before answering"); define clear exploration criteria; give an escape hatch ("if you can't fully verify, proceed with your best answer and note the assumption").
 - **Increase eagerness** (stops too early): persistence prompts ("keep going until the query is completely resolved; do not hand back a partial result"); instruct the model to deduce a reasonable approach rather than ask for clarification, documenting assumptions for the user afterward.
+- **Don't over-repeat the approval policy** — state the autonomy rule once (safe local actions proceed; external/destructive/costly/scope-expanding actions need confirmation). OpenAI's own guidance warns that repeating "ask first" / "wait for approval" / "do not mutate" across the prompt makes GPT-5.6 pause for confirmation on safe, expected actions.
 
 ## Self-reflection rubrics
 
@@ -123,6 +124,14 @@ The small tier stayed on the 5.4 generation — `gpt-5.4-mini` and `gpt-5.4-nano
 
 Image `detail`: `auto`/unset now behaves as `original` (preserves detail up to ~10.24M pixels / 6000px). Use `high` for standard vision (up to ~2.5M pixels / 2048px); `low` for aggressive downscaling when speed/cost dominate. For spatially sensitive or computer-use tasks, prefer `original`; don't rely on `auto` in production agents where precision matters.
 
+## Safeguards and runtime safety classifiers
+
+GPT-5.6 runs **real-time cyber- and bio-misuse classifiers over the output as it streams**, so two behaviors surface at runtime that older models didn't: some requests are refused/blocked mid-completion, and others **pause for several seconds mid-stream** while a classifier synchronously reviews the partial output (a latency spike, not a hang). These can fire on **legitimate dual-use work** — code review, vulnerability research, patch development, security education, defensive testing — where offensive and defensive activity look alike early on. Two mitigations: (1) if you serve individual end users, send a stable, privacy-preserving **`safety_identifier`** on every request so enforcement scopes to bad actors instead of your whole app; (2) handle refusals and truncated/partial completions gracefully rather than assuming a clean finish, and frame genuinely defensive tasks explicitly as such. (This is GPT's analogue to Claude's `stop_details`/refusal handling — build for it in the harness, not just the prompt.)
+
+## Frontend and design
+
+GPT-5.6 has notably stronger design judgment than 5.5 — with only high-level direction it produces tasteful, functional interfaces, and its improved computer use lets it inspect and refine the **rendered** result (catching visual/functional issues), not just emit code. It also infers and follows an existing **design system or reference template** — layouts, typography, spacing, tokens, even PowerPoint Slide Master rules — faithfully. Prompt accordingly: give the design system/tokens plus high-level intent and let it self-refine, rather than piling on the anti-"AI-slop" scaffolding older GPT models needed. (Contrast Claude, whose frontend default has a persistent house style to steer away from — see `claude.md`.)
+
 ## Azure Foundry and AWS Bedrock
 
 **GPT is no longer OpenAI/Azure-exclusive:** AWS Bedrock now serves the GPT-5 family (GA 2026-04-28, after the OpenAI–Microsoft exclusivity clause was dropped), so the same model can run on the OpenAI API, Azure, or Bedrock. As always, prompt engineering follows the **model version, not the platform** — on Bedrock, GPT is reached through the OpenAI-compatible endpoint (check the Bedrock docs for exact model IDs). The rest of this section covers **Azure OpenAI / Microsoft Foundry** specifics: prompting is identical to the OpenAI API — same model, same `reasoning.effort` / `text.verbosity` / Structured Outputs behavior — but the API surface and a few defaults differ. What to know when the deployment is Azure:
@@ -142,7 +151,7 @@ When moving from GPT-5.5 / 5.4 (or older), start from a fresh baseline and remov
 - **Hand-written output schemas** — use Structured Outputs instead.
 - **"THOROUGH / maximize context" prodding** — GPT-5.x is already introspective; this language causes over-tool-use. Use soft language on context gathering.
 - **The assumption that higher reasoning effort is better** — verify with evals, and test **one effort level lower** than you ran on 5.5 (5.6 often matches quality with less reasoning).
-- **Repeated instructions and redundant examples** — 5.6 follows a single clear statement; repetition wastes tokens and can conflict.
+- **Repeated instructions and redundant examples** — 5.6 follows a single clear statement; repetition wastes tokens and can conflict. (OpenAI's own evals: stripping repeated instructions from the system prompt lifted eval scores ~10–15% while cutting tokens 41–66% and cost 33–67% — leaner prompts measurably win on 5.6.)
 - **Over-detailed tool descriptions** — simplify; 5.6's tool use is more precise, so hand-holding written for weaker models can hurt.
 - **Broad brevity lines** ("Be concise") — 5.6 is already terser than 5.5; re-check before keeping them (see *Verbosity*).
 - **The old cache param** — rename `prompt_cache_retention` → `prompt_cache_options.ttl` (see *Caching*), and if you replay Responses state with `store:false`, make sure you resend every prior output item including encrypted reasoning.
