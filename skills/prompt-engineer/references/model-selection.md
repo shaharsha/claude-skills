@@ -10,6 +10,7 @@ Sorted by aggregate intelligence. Coding = AA Coding Index; Agentic = TerminalBe
 
 | Model | Intel | Coding | Agentic | $/1M blended | tok/s |
 |-------|:-----:|:------:|:-------:|:------------:|:-----:|
+| **Claude Opus 5** (new, Jul 24) | 60.7 | 78 | 89% | $10.00 | 44 |
 | **Claude Fable 5** | 59.9 | 77 | 85% | $20.00 | 59 |
 | **GPT-5.6 Sol** | 58.9 | 77 | 88% | $11.25 | 62 |
 | **Claude Opus 4.8** | 55.7 | 74 | 85% | $10.00 | 61 |
@@ -21,7 +22,7 @@ Sorted by aggregate intelligence. Coding = AA Coding Index; Agentic = TerminalBe
 | **Gemini 3.5 Flash-Lite** | 36.5 | 49 | 54% | $0.85 | 357 |
 | **Claude Haiku 4.5** | 29.6 | 44 | 44% | $2.00 | 135 |
 
-For context, non-provider frontier models cluster in the same top band (Kimi K3 ≈ 57, Grok 4.5 ≈ 53) — six labs now field a model above 50. This file covers the three families the skill supports.
+**Claude Opus 5 (GA July 24) is the new AA #1 on both intelligence (60.7) and coding (78) — at Opus 4.8's $5/$25, ~half Fable 5's price** (Anthropic frames it as ~2× Opus 4.8's intelligence for the same cost; May-2026 cutoff, ZDR-eligible). For context, non-provider frontier models cluster in the same top band (Kimi K3 ≈ 57, Grok 4.5 ≈ 53) — six labs now field a model above 50. This file covers the three families the skill supports.
 
 ## What each is good at
 
@@ -29,7 +30,8 @@ For context, non-provider frontier models cluster in the same top band (Kimi K3 
 - **GPT-5.6 Terra** — the **value standout**: coding (77) ties Fable/Sol and agentic (88%) ties Sol, at **$5.63** (½ Sol, ¼ Fable). The strongest price/coding point in the frontier band.
 - **GPT-5.6 Luna** — cheap *frontier-family* coding (71) at $2.25 / 170 tok/s. A budget frontier tier, not a nano.
 - **Claude Fable 5** — **#1 aggregate intelligence (59.9)** and **#1 on human preference (LMArena)**; its edge compounds on the longest, most ambiguous, multi-hour work. But Sol nearly ties it on benchmarks at half the price, and Fable is the **slowest (59 tok/s) and priciest ($20)** — reserve for genuinely hard long-horizon work.
-- **Claude Opus 4.8** — strong all-rounder (55.7 / coding 74), the **recommended default flagship**; cheaper than Sol and ranks far higher on human preference (LMArena top ~5).
+- **Claude Opus 5** — the **new default flagship and AA #1** (60.7 intelligence, 78 coding, 89% agentic), at $5/$25 — half Fable 5's price and ~2× Opus 4.8's intelligence for the same cost. ZDR-eligible; **thinking on by default**, so no 4.8-style tool-hallucination trap. Top objective pick for hard coding/agents with Claude's ecosystem + human-preference strengths. Not on LMArena yet (released Jul 24).
+- **Claude Opus 4.8** — now the *previous* flagship (55.7 / coding 74) at the same price as Opus 5 — prefer Opus 5. Ranks LMArena Agent top ~5 (with thinking on).
 - **Claude Sonnet 5** — best **balance** (53.4 / coding 72) at $4 — near-Opus coding for a third of Sol's cost.
 - **Claude Haiku 4.5** — cheapest Claude; high-volume, latency-critical, bounded tasks (classification, routing, extraction).
 - **Gemini 3.6 Flash** — the **fast multimodal/knowledge workhorse**: 255 tok/s, GPQA 93%, $3 blended, ~17% more token-efficient than 3.5 Flash. Best per-dollar for high-throughput agentic + multimodal.
@@ -38,7 +40,7 @@ For context, non-provider frontier models cluster in the same top band (Kimi K3 
 
 ## LMArena — pick the arena that matches your task (it has ~13)
 
-LMArena runs a **separate human-vote leaderboard per task**: Agent, Text (chat), WebDev/Code, Vision, Search, Document, and image/video arenas. Citing the wrong one misleads — the general **Text (chat)** arena scatters these agentic models (Fable 5 #1, but Sol #11, Opus 4.8-Thinking #13, Sonnet 5 #38) because open-chat preference ≠ agentic capability. Once you use the *task-matched* arena, **LMArena agrees with AA** (the "AA vs arena" gap in older notes was an artifact of reading the chat arena). Snapshot Jul 21 2026:
+LMArena runs a **separate human-vote leaderboard per task**: Agent, Text (chat), WebDev/Code, Vision, Search, Document, and image/video arenas. Citing the wrong one misleads — the general **Text (chat)** arena scatters these agentic models (Fable 5 #1, but Sol #11, Opus 4.8-Thinking #13, Sonnet 5 #38) because open-chat preference ≠ agentic capability. Once you use the *task-matched* arena, **LMArena agrees with AA** (the "AA vs arena" gap in older notes was an artifact of reading the chat arena). Snapshot Jul 21 2026 — **predates Opus 5's Jul 24 launch, so Opus 5 isn't rated in any arena yet**; expect it near the top of Agent/WebDev once votes accumulate, and note it sidesteps the Opus-4.8 thinking-off trap below by defaulting thinking on:
 
 - **Agent Arena** (real-world tool orchestration — the right lens for agent/coding products; ~1.2M sessions): **#1 Fable 5, #2 GPT-5.6 Sol, #3 Opus 4.8 (Thinking), #4 Kimi K3, #5 Sonnet 5, #6 GPT-5.5.** Per-signal leaders — steerability & user-praise → **Fable 5**; bash-recovery → **GPT-5.5**; task-confirmation → **Kimi K3**.
 - **⚠️ On Opus 4.8, thinking is load-bearing for tool use.** With adaptive thinking ON it ranks **#3 at 0.22% tool-hallucination**; the *same model with thinking OFF (the API default)* falls to **#15 at ~19% tool-hallucination**. For any tool-using agent on Opus 4.8, set `thinking:{type:"adaptive"}` — don't rely on the default. Fable 5 (always-on) and Sonnet 5 (on by default) don't have this trap.
@@ -50,13 +52,13 @@ LMArena runs a **separate human-vote leaderboard per task**: Agent, Text (chat),
 
 ## Picking a model — decision rules
 
-- **Hardest long-horizon / highest ceiling** → **Fable 5** (its lead widens with task length; note ZDR-ineligible, always-on thinking). If objective coding-per-dollar matters more than its human-preference edge, **GPT-5.6 Sol** is ~equal on benchmarks at half the cost.
-- **Default agentic coding** → **Sol** (benchmarks) or **Opus 4.8** (human preference + ecosystem). If cost matters, **Terra** nearly matches on coding at ½ Sol's price.
+- **Highest ceiling** → **Opus 5** (new AA #1, $5/$25, ZDR-eligible) is now the default top pick. **Fable 5** may still edge it on the longest, most ambiguous multi-hour work + human preference, but at 2× the price and ZDR-ineligible. **GPT-5.6 Sol** is ~equal on benchmarks and more token-efficient.
+- **Default agentic coding** → **Opus 5** (AA #1 on coding *and* intelligence at $5/$25) or **GPT-5.6 Sol** (near-tie, more token-efficient). If cost matters, **Terra** nearly matches on coding at ½ Sol's price.
 - **Everyday business / support / internal tools** → **Terra** or **Sonnet 5**.
 - **Fast multimodal / knowledge work at scale** → **Gemini 3.6 Flash**.
 - **High-volume classification / routing / extraction** → **Gemini 3.5 Flash-Lite** (cheapest + fastest) or **Luna**; **Haiku 4.5** for the cheapest Claude.
 - **Strict instruction-following / adherence** → **Gemini 3.1 Pro**.
-- **Multi-tier pipeline** (the usual pattern): cheap/fast tier for extract-classify-route (Flash-Lite / Haiku / Luna) → frontier tier for analysis/generation (Sol / Opus 4.8 / Fable 5). See SKILL.md Section D.
+- **Multi-tier pipeline** (the usual pattern): cheap/fast tier for extract-classify-route (Flash-Lite / Haiku / Luna) → frontier tier for analysis/generation (Opus 5 / Sol / Fable 5). See SKILL.md Section D.
 
 ## Cost-per-task ≠ per-token price
 

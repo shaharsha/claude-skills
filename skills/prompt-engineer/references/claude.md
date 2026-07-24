@@ -6,13 +6,15 @@ Applies to the **Claude model family** wherever it runs: the Anthropic API, AWS 
 
 - **Claude Fable 5** (`claude-fable-5`) — Anthropic's **most capable widely-released model** ("Mythos-class"); reach for it on the most demanding reasoning and long-horizon agentic work. GA June 9 2026. $10 / $50 per MTok.
 - **Claude Mythos 5** (`claude-mythos-5`) — Fable 5's twin **without safety classifiers**, invitation-only via Project Glasswing (defensive-cyber); same specs/pricing/API as Fable 5. Use `claude-fable-5` unless the org is in Glasswing.
-- **Claude Opus 4.8** (`claude-opus-4-8`) — the **recommended default flagship** for complex agentic coding and enterprise work. $5 / $25.
+- **Claude Opus 5** (`claude-opus-5`, GA July 24 2026) — the **recommended default flagship** and current **#1 on the AA Intelligence & Coding indices** (~60.7 / 78, above Fable 5), at **$5 / $25** (same as Opus 4.8, ~½ of Fable 5) with a **May 2026 knowledge cutoff**. Replaces Opus 4.8 as the default — see the *Opus 5* section for its behavioral deltas.
+- **Claude Opus 4.8** (`claude-opus-4-8`) — the previous flagship, still available at the same $5 / $25; prefer Opus 5 unless you specifically want 4.8's thinking-off-by-default behavior.
 - **Claude Sonnet 5** (`claude-sonnet-5`, supersedes Sonnet 4.6) — best speed/intelligence balance, near-Opus on coding/agentic. $3 / $15 (intro $2 / $10 through Aug 31 2026).
 - **Claude Haiku 4.5** (`claude-haiku-4-5`) — fastest / budget tier. $1 / $5.
 
-All Claude 5 models + Opus 4.8 share a **1M context window, 128K max output, and a Jan 2026 knowledge cutoff** (Haiku 4.5 = 200K context, 64K output, Feb 2025 cutoff). This file is written around **Opus 4.8** (the practical default); the Fable 5 and Sonnet 5 sections below cover their deltas — most guidance here carries across the family. Opus 4.8 **builds on Opus 4.7 and runs existing 4.7 prompts unchanged — no breaking API changes from 4.7** (if your code is on Opus 4.6 or earlier, also apply the 4.7 migration steps — those *did* break: sampling params rejected, extended-thinking budgets removed, new tokenizer).
+Opus 5, the Claude 5 models, and Opus 4.8 share a **1M context window and 128K max output**; **Opus 5's reliable knowledge cutoff is May 2026 — 4 months newer than the rest of the family's Jan 2026** (Haiku 4.5 = 200K context, 64K output, Feb 2025 cutoff). **Opus 5 is now the practical default**, but this file's body is still written around **Opus 4.8** — Opus 5 runs existing 4.8 prompts well, so most guidance below carries; the **Opus 5 section covers the deltas that change or reverse it** (thinking on by default, higher verbosity, more subagents, self-verification), and the Fable 5 / Sonnet 5 sections cover those models. Opus 4.8 **builds on Opus 4.7 and runs existing 4.7 prompts unchanged — no breaking API changes from 4.7** (if your code is on Opus 4.6 or earlier, also apply the 4.7 migration steps — those *did* break: sampling params rejected, extended-thinking budgets removed, new tokenizer).
 
 ## Contents
+- **Opus 5 — current default (deltas from Opus 4.8)**
 - Effort and thinking
 - Sampling parameters (removed)
 - Task budgets
@@ -34,6 +36,20 @@ All Claude 5 models + Opus 4.8 share a **1M context window, 128K max output, and
 - Sonnet 5 and Haiku 4.5
 - Opus 4.7 → 4.8 migration checklist (and moving to Sonnet 5 / Fable 5)
 
+## Opus 5 — current default (deltas from Opus 4.8)
+
+**Claude Opus 5** (`claude-opus-5`, GA July 24 2026) is the new recommended default: **#1 on the AA Intelligence Index (~60.7) and AA Coding Index (78)**, at Opus 4.8's price ($5/$25) with a **May 2026 knowledge cutoff**. It runs existing Opus 4.8 prompts well, so migration is a model-ID swap plus these behavior changes — most of which mean *removing* legacy scaffolding, because Opus 5 leans more autonomous:
+
+- **Thinking is ON by default** (the reverse of Opus 4.8's off-by-default). The model self-decides depth; `effort` is the control; `thinking:{type:"adaptive"}` still equals the default. **Breaking rule:** `thinking:{type:"disabled"}` is accepted only at effort ≤`high` — pairing it with `xhigh`/`max` returns a 400.
+- **More verbose across the board** — conversational replies, agentic narration, *and* files it writes to disk all run longer than 4.8, and **`effort` controls thinking, not output length** (lowering it won't shorten the visible answer). Prompt for concision explicitly (*"keep responses focused and brief; spend most of the response on the main answer"*) and add length calibration for Claude-authored documents.
+- **Remove verification / self-check scaffolding** — Opus 5 verifies and self-corrects unprompted. "Include a final verification step," "use a subagent to verify," and "double-check your answer" now cause *over*-verification (wasted tokens, no quality gain) — delete them. It also narrates corrections more; scope that down if it's user-facing.
+- **Spawns subagents MORE readily** (the reverse of Opus 4.8's fewer) — cap it: delegate only for large, genuinely independent tracks; never to verify its own work; keep spawn counts low.
+- **Scope creep** — it can widen a task or add unrequested steps; for narrow work, constrain scope (*"deliver what was asked, at the scope intended; check in only when different readings would lead to materially different work"*).
+- **If you disable thinking** (only possible at ≤`high`), two artifacts appear, worst on tool-heavy/search work: **tool calls can leak into visible text** (never execute, pollute history) — allow a one-sentence pre-tool preamble; and **internal `<thinking>`/XML tags can leak** — *remove* any "don't think/don't reason" rule (it *increases* leakage) and use a general *"don't include internal or system XML tags."* Better: keep thinking on and lower `effort` instead of disabling.
+- **Safety & retention:** ZDR-eligible (no data-retention floor, unlike Fable 5). Has cyber classifiers but **~85% less restrictive than Fable 5's** — allows source-code vuln finding; blocks binary scanning / pentest / exploit-gen; flagged requests **fall back to Opus 4.8** (default in the apps, opt-in on the API), returning `stop_reason:"refusal"` as with Fable 5.
+
+Everything below (the effort ladder, caching, mid-conversation system messages, fast mode, vision, etc.) still applies to Opus 5 — just tune by *subtracting* prod-and-verify scaffolding and *adding* concision. See Anthropic's *Prompting Claude Opus 5* guide for the full set.
+
 ## Effort and thinking
 
 Opus 4.8 uses **adaptive thinking** and the `effort` parameter (low/medium/high/xhigh/max). Things that break old assumptions:
@@ -41,10 +57,10 @@ Opus 4.8 uses **adaptive thinking** and the `effort` parameter (low/medium/high/
 - **`effort` now defaults to `high`** on all surfaces (Claude API and Claude Code). If you set it explicitly, your value is unchanged. Effort is more consequential on 4.8 than on any prior Opus — experiment with it actively when you upgrade.
 - **Effort levels are recalibrated vs 4.7:** `medium` now allows somewhat *more* thinking, `high` somewhat *less*, and `xhigh` *substantially more*. If you tuned a level against 4.7 cost/latency, **re-baseline at the same level before adjusting**.
 - **Adaptive thinking is OFF by default *on Opus 4.8/4.7*.** A request with no `thinking` field runs with no thinking. Set `thinking: {type: "adaptive"}` explicitly to enable it. (`budget_tokens` extended thinking is removed — `thinking: {type:"enabled", budget_tokens:N}` returns a 400 error. Adaptive is the only thinking-on mode and outperforms extended thinking in Anthropic's evals.) On 4.8, adaptive thinking decides **per turn** whether to reason — responding directly on simple lookups, reasoning on hard multi-step problems — which cuts wasted thinking tokens on bimodal workloads vs 4.7 at the same effort.
-- **This default is model-specific across the family** — don't assume it: **Sonnet 5** runs adaptive when you *omit* `thinking` (on by default); **Fable 5 / Mythos 5** have thinking **always on** (you cannot disable it — `thinking:{type:"disabled"}` returns 400); **Haiku 4.5** has no adaptive thinking at all (use extended thinking with `budget_tokens`). See the family sections below.
+- **This default is model-specific across the family** — don't assume it: **Opus 5** runs adaptive **on by default** (the reverse of 4.8) and only lets you disable thinking at effort ≤`high` (`xhigh`/`max` + `disabled` → 400); **Sonnet 5** runs adaptive when you *omit* `thinking` (on by default); **Fable 5 / Mythos 5** have thinking **always on** (you cannot disable it — `thinking:{type:"disabled"}` returns 400); **Haiku 4.5** has no adaptive thinking at all (use extended thinking with `budget_tokens`). See the family sections below.
 - **Thinking content is omitted from responses by default.** Thinking blocks still stream but their `thinking` field is empty unless you opt in with `thinking: {type:"adaptive", display:"summarized"}`. If your product streams reasoning to users, the default looks like a long pause before output — set `display:"summarized"` to restore visible progress.
 
-Effort guidance for Opus 4.8:
+Effort guidance (Opus 4.8 and Opus 5 share the ladder and the `high` default):
 - `xhigh` — best for most coding and agentic use cases.
 - `high` — the default; minimum recommended for intelligence-sensitive use cases.
 - `medium` — cost-sensitive work that can trade some intelligence.
@@ -77,7 +93,7 @@ Opus 4.8 interprets prompts literally and explicitly (as 4.7 did), especially at
 
 ## Verbosity and tone
 
-Opus 4.8 calibrates response length to perceived task complexity — short on simple lookups, long on open-ended analysis — rather than a fixed verbosity. If your product needs a fixed style, prompt for it explicitly; positive examples of the right concision beat "don't be verbose." Tone is direct and opinionated, with little validation-forward phrasing and sparing emoji. If you need a warmer voice: *"Use a warm, collaborative tone. Acknowledge the user's framing before answering."*
+Opus 4.8 calibrates response length to perceived task complexity — short on simple lookups, long on open-ended analysis — rather than a fixed verbosity. **(Opus 5 breaks this: it runs longer than 4.8 across replies, agentic narration, and written files, and `effort` won't shorten output — prompt for concision explicitly; see the Opus 5 section.)** If your product needs a fixed style, prompt for it explicitly; positive examples of the right concision beat "don't be verbose." Tone is direct and opinionated, with little validation-forward phrasing and sparing emoji. If you need a warmer voice: *"Use a warm, collaborative tone. Acknowledge the user's framing before answering."*
 
 Two formatting defaults worth knowing: the latest models **default to LaTeX** for math/equations (add a plain-text instruction if you don't render LaTeX — *"Write all math in plain text: `/` for division, `*` for multiply, `^` for exponents; no `\( \)`, `$`, or `\frac{}{}`"*), and they lean toward markdown lists/bold; for flowing prose, instruct positively (*"write in flowing prose paragraphs; reserve markdown for code and headings"*) rather than "don't use markdown."
 
@@ -87,7 +103,7 @@ Opus 4.8 favors **reasoning over tool calls** — usually better results — but
 
 Opus 4.8 also gives **more regular, higher-quality user-facing progress updates** across long agentic traces. If you added scaffolding to force interim status messages ("after every 3 tool calls, summarize progress"), remove it; if the updates aren't calibrated to your product, describe what they should look like and give an example.
 
-Opus 4.8 spawns **fewer subagents** by default. This is steerable — give explicit guidance when subagents are wanted:
+Opus 4.8 spawns **fewer subagents** by default (**Opus 5 inverts this — it over-delegates; cap it, per the Opus 5 section**). This is steerable — give explicit guidance when subagents are wanted:
 
 ```
 Do not spawn a subagent for work you can complete directly in a single response.
@@ -116,7 +132,7 @@ Opus 4.8 offers **fast mode** (research preview on the Claude API): set `speed: 
 
 When Claude declines a request, the response carries a `stop_details` object (alongside the existing `refusal` stop reason) describing the **category** of refusal — now publicly documented (available since 4.7). Read it to tell apart classes of declined request and route the user to the right next step instead of treating every refusal identically. No beta header, no opt-out.
 
-**Fable 5 / Mythos 5 refusals go further:** their safety classifiers can return `stop_reason: "refusal"` (at HTTP 200, even mid-completion). Handle this stop reason explicitly and opt into a graceful `fallbacks` behavior rather than surfacing a raw truncated response — see the Fable 5 section for details.
+**Fable 5 / Mythos 5 refusals go further:** their safety classifiers can return `stop_reason: "refusal"` (at HTTP 200, even mid-completion). Handle this stop reason explicitly and opt into a graceful `fallbacks` behavior rather than surfacing a raw truncated response — see the Fable 5 section for details. **Opus 5** carries the same mechanism but far milder — cyber classifiers ~85% less likely to fire than Fable 5's, falling back to Opus 4.8; handle its `stop_reason:"refusal"` the same way.
 
 ## Agentic and long-horizon work
 
@@ -173,7 +189,7 @@ Most of this file is written for Opus 4.8, but the two lighter current models sh
 
 Two cross-cutting notes: prefill on the last assistant turn is **unsupported on all 4.6+ and 5 models** (400), so the prefill-migration guidance above applies to Sonnet 5, Fable 5, and Haiku 4.5 too. The hard 400 on non-default `temperature`/`top_p`/`top_k` is documented for Opus 4.7/4.8, Sonnet 5, and Fable 5 — for Haiku 4.5 it isn't explicitly stated, but omit sampling params anyway and steer with prompting + structured outputs (the determinism argument holds across the family). Model ID formats differ per platform (Bedrock `anthropic.claude-…`, Vertex `claude-…@date`).
 
-## Opus 4.7 → 4.8 migration checklist (and moving to Sonnet 5 / Fable 5)
+## Opus 4.7 → 4.8 migration checklist (and moving to Sonnet 5 / Fable 5 / Opus 5)
 
 No breaking API changes — code on 4.7 runs unchanged. These are behavior/knob checks after swapping the model ID:
 
@@ -187,3 +203,5 @@ No breaking API changes — code on 4.7 runs unchanged. These are behavior/knob 
 **Coming from Opus 4.6 or earlier?** First apply the 4.7 migration, which *does* have breaking changes: remove `temperature`/`top_p`/`top_k` (non-default → 400); replace `thinking:{type:"enabled", budget_tokens:N}` with `thinking:{type:"adaptive"}` + `output_config:{effort:...}` (add `display:"summarized"` if you stream reasoning); bump `max_tokens`/compaction triggers for the ~1–1.35× tokenizer; replace prefill (see *Migrating away from prefill*); state instruction scope explicitly where you relied on generalization. Then apply the 4.7→4.8 steps above.
 
 **Moving to Sonnet 5?** From Sonnet 4.6 it's mostly a model-ID swap: `budget_tokens` extended thinking is gone (adaptive is on by default when you omit `thinking`), `effort` now defaults to `high` (set it explicitly), and the new tokenizer means ~30% more tokens — bump `max_tokens`. Non-default sampling params and last-turn prefill both 400. **Moving to Fable 5?** Same 4.7/4.8 baseline, plus: you cannot disable thinking (`thinking:{type:"disabled"}` → 400 — omit it), handle `stop_reason:"refusal"` with a `fallbacks` policy, and confirm your deployment allows 30-day retention (Fable 5 is **not** ZDR-eligible).
+
+**Moving from Opus 4.8 to Opus 5?** Swap the model ID to `claude-opus-5`. Thinking is now **on by default** (omitting `thinking` reasons; `disabled` is valid only at effort ≤`high`, else 400). Then *remove*, don't add: verification/double-check instructions, forced subagent counts, and any "don't think/don't reason" rules — Opus 5 over-verifies, over-delegates, and leaks internal tags under those. *Add* explicit concision + document-length calibration (it's more verbose than 4.8). ZDR-eligible; carries milder cyber classifiers that fall back to Opus 4.8. Full deltas in the *Opus 5* section above.

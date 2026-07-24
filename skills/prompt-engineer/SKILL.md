@@ -248,8 +248,8 @@ For depth on any one provider — including current model versions and migration
 | Aspect | Claude | GPT | Gemini |
 |--------|--------|-----|--------|
 | Mechanism | Adaptive thinking; `effort`: low/medium/high/xhigh/max | `reasoning.effort`: none/low/medium/high/xhigh/max (+ `reasoning.mode` standard/pro) | `thinking_level`: minimal/low/medium/high |
-| Default state | Opus 4.8: thinking **OFF** unless `thinking:{type:"adaptive"}` is set (Sonnet 5: on by default; Fable 5: always on); `effort` defaults to `high`, `xhigh` for coding/agentic | Default effort per-model: GPT-5.6 `medium` (standard & pro), GPT-5.4/Mini/Nano `none` | Default `thinking_level` per-model: 3.1 Pro `high`, 3.6 Flash `medium`, 3.5 Flash-Lite `minimal` |
-| Sampling params | **Removed on Opus 4.8/4.7, Sonnet 5, Fable 5** — non-default `temperature`/`top_p`/`top_k` → 400 error | Accepted (except Azure/Foundry reasoning models), but trending out | Don't set on Gemini 3.x — strongly discouraged |
+| Default state | **Opus 5 (default): thinking ON** (`disabled` only at effort ≤`high`); Opus 4.8: thinking **OFF** unless `thinking:{type:"adaptive"}`; Sonnet 5: on; Fable 5: always on; `effort` defaults to `high` (`xhigh` for coding/agentic) | Default effort per-model: GPT-5.6 `medium` (standard & pro), GPT-5.4/Mini/Nano `none` | Default `thinking_level` per-model: 3.1 Pro `high`, 3.6 Flash `medium`, 3.5 Flash-Lite `minimal` |
+| Sampling params | **Removed on Opus 5, Opus 4.8/4.7, Sonnet 5, Fable 5** — non-default `temperature`/`top_p`/`top_k` → 400 error | Accepted (except Azure/Foundry reasoning models), but trending out | Don't set on Gemini 3.x — strongly discouraged |
 | Trace reuse | Not supported | `previous_response_id` saves tokens in multi-turn | Thought signatures preserved automatically (Gemini 3.5) |
 
 Reasoning effort is a **last-mile knob, not a primary quality lever**. Before raising effort, exhaust completeness contracts, verification loops, and tool-use persistence (Section A). Higher effort is not automatically better — it can cause overthinking, especially with contradictory instructions or weak stopping criteria.
