@@ -2,16 +2,17 @@
 
 Applies to the **Gemini model family** wherever it runs: the Gemini API (Google AI Studio) and Vertex AI. The platform does not change prompt engineering — the model version does.
 
-**Current models (July 2026):** the Gemini 3.x line leads — there is **no Gemini 4** (the I/O 2026 flagship was Gemini 3.5; "Gemma 4" is the separate open-weights model, not Gemini).
+**Current models (July 2026):** the Gemini 3.x line leads — there is **no Gemini 4 yet** (Google teased at the July 21 launch that its "most ambitious pre-training run yet" has begun, but nothing is shippable; the I/O 2026 flagship was Gemini 3.5; "Gemma 4" is the separate open-weights model, not Gemini).
 
 - **Gemini 3.6 Flash** (`gemini-3.6-flash`, ~July 21 2026) — the current stable Flash flagship: "balances speed with intelligence" for agentic/multimodal work. Supersedes 3.5 Flash as the go-to Flash. Pricing (ai.google.dev/gemini-api/docs/pricing): **$1.50 / 1M input, $7.50 / 1M output (thinking tokens billed at the output rate)**.
 - **Gemini 3.5 Flash-Lite** (`gemini-3.5-flash-lite`, ~July 21 2026) — the current stable cheapest / fastest tier for high-throughput classification, routing, extraction. Supersedes 3.1 Flash-Lite. Default `thinking_level` `minimal` (supports the full `minimal`/`low`/`medium`/`high` knob — raise it for a cheap accuracy boost when a terse/ambiguous input needs domain reasoning; it stays cheap because the classifier is usually low-volume). Pricing: **$0.30 / 1M input, $2.50 / 1M output (incl. thinking)**.
+- **Gemini 3.5 Flash Cyber** (~July 21 2026) — a security-specialized Flash sibling fine-tuned for finding/fixing software vulnerabilities (used inside Google's CodeMender agent, ~5 sub-agent calls per analysis); **restricted to governments and vetted partners**. The direct parallel to Claude's Mythos tier — prompt it like 3.6 Flash; you won't reach for it unless you're in the program.
 - **Gemini 3.5 Flash** (`gemini-3.5-flash`, GA May 19 2026) — prior-gen Flash, still in the API. Default `thinking_level` `medium`.
 - **Gemini 3.1 Pro** (`gemini-3.1-pro-preview`, Feb 19 2026) — the current GA Pro-tier reasoning model (default `thinking_level` `high`; a `gemini-3.1-pro-preview-customtools` variant prioritizes custom tools).
 - **Gemini 3.1 Deep Think** — a max-reasoning tier aimed at the hardest science / research / engineering problems.
 - **Gemini 3.1 Flash-Lite** (`gemini-3.1-flash-lite`) — prior-gen cheapest tier (superseded by 3.5 Flash-Lite), still in the API; **supports `thinking_level`** (default `minimal`).
 
-Current models share a **~1M-token input window, ~64–65k max output, and a January 2025 knowledge cutoff** (verify the exact cutoff per model — official docs list Jan 2025 for the 3.x line). Gemini 3 Flash (`gemini-3-flash-preview`) and Gemini 2.5 remain in the API; **Gemini 2.0 shut down June 1 2026** and `gemini-3-pro-preview` was retired March 9 2026 (redirects to `gemini-3.1-pro-preview`). **Gemini 3.5 Pro is NOT yet available** — as of mid-July 2026 it has missed multiple launch targets, and rumored specs (e.g. a 2M context, a "Deep Think Reasoning Layer") are `[unverified]`; treat it as *coming*, not shippable, and don't build against it until Google publishes a model card. Gemini 3.x models respond best to prompts that are direct, well-structured, and explicit about the task and constraints.
+Current models share a **~1M-token input window and ~64–65k max output**. **Knowledge cutoffs now differ by model:** Gemini 3.6 Flash advanced to **March 2026**, while the older 3.x models (3.5 Flash, 3.1 Pro, and — pending an official confirmation — 3.5 Flash-Lite) stay at **January 2025**; verify the exact cutoff per model. Gemini 3 Flash (`gemini-3-flash-preview`) and Gemini 2.5 remain in the API; **Gemini 2.0 shut down June 1 2026** and `gemini-3-pro-preview` was retired March 9 2026 (redirects to `gemini-3.1-pro-preview`). **Gemini 3.5 Pro is NOT yet available** — as of mid-July 2026 it has missed multiple launch targets, and rumored specs (e.g. a 2M context, a "Deep Think Reasoning Layer") are `[unverified]`; treat it as *coming*, not shippable, and don't build against it until Google publishes a model card. Gemini 3.x models respond best to prompts that are direct, well-structured, and explicit about the task and constraints.
 
 ## Contents
 - System instructions and placement
@@ -44,7 +45,7 @@ For Gemini 3.x, **do not set `temperature`, `top_p`, or `top_k`** — Google str
 
 ## Thinking level
 
-Gemini 3.x uses `thinking_level` (`minimal` / `low` / `medium` / `high`), replacing the older numeric `thinking_budget`. **The default differs by model: Gemini 3.1 Pro defaults to `high`; Gemini 3.5 Flash defaults to `medium`** (lowered from `high` in the 3 Flash preview for cost/latency); Gemini 3.1 Flash-Lite supports the same enum. Per-level intent:
+Gemini 3.x uses `thinking_level` (`minimal` / `low` / `medium` / `high`), replacing the older numeric `thinking_budget`. **The default differs by model: Gemini 3.1 Pro defaults to `high`; Gemini 3.6 Flash and 3.5 Flash default to `medium`; Gemini 3.5 Flash-Lite defaults to `minimal`** — all support the full enum. Per-level intent:
 
 - `minimal` — response speed; chat, quick factual answers, simple tool calls. (Note: `minimal` *does not guarantee thinking is off*.)
 - `low` — low-latency agentic tasks with fewer steps; high-throughput.
@@ -111,7 +112,7 @@ Prefer the structured-output feature over describing a JSON schema in prose. On 
 
 ## Caching
 
-**Implicit caching is on by default for Gemini 2.5 and newer** — no setup needed; check `usage_metadata` for cached-token counts. To raise the implicit hit rate, put large, common content (system instruction, tool defs, shared context) at the **start** of the prompt and send same-prefix requests close together in time. **Explicit caching** (cache once, reference by handle) gives guaranteed savings at scale; minimum cacheable input differs by model — **Gemini 3.5 Flash: 1,024 tokens; Gemini 3 Pro: 4,096 tokens** — and the cache **TTL defaults to 1 hour** (configurable). Cache when a substantial fixed context is referenced repeatedly by shorter requests (system-heavy chatbots, repeated document/video queries).
+**Implicit caching is on by default for Gemini 2.5 and newer** — no setup needed; check `usage_metadata` for cached-token counts. To raise the implicit hit rate, put large, common content (system instruction, tool defs, shared context) at the **start** of the prompt and send same-prefix requests close together in time. **Explicit caching** (cache once, reference by handle) gives guaranteed savings at scale; minimum cacheable input differs by model — **Gemini 3.6 Flash / 3.5 Flash-Lite: 1,024 tokens; Gemini 3.1 Pro: 4,096 tokens** — and the cache **TTL defaults to 1 hour** (configurable). Cache when a substantial fixed context is referenced repeatedly by shorter requests (system-heavy chatbots, repeated document/video queries).
 
 ## Long context
 
@@ -123,7 +124,7 @@ Gemini needs **aggressive** language enforcement to hold a non-English output la
 
 ## Temporal grounding
 
-Gemini 3.x models have a **knowledge cutoff of January 2025** — for anything more recent, enable Search grounding. For time-sensitive tasks, also anchor the date explicitly: "Remember it is {YEAR} this year." Gemini benefits from being told the current date even though it can ground via Search.
+Knowledge cutoffs differ by model — **Gemini 3.6 Flash reaches March 2026**, while the older 3.x models (including 3.5 Flash-Lite, pending confirmation) sit at **January 2025**. For anything past a given model's cutoff, enable Search grounding. For time-sensitive tasks, also anchor the date explicitly: "Remember it is {YEAR} this year." Gemini benefits from being told the current date even though it can ground via Search.
 
 ## Multimodal
 
@@ -142,21 +143,23 @@ Treat text, images, audio, and video as equal-class inputs and reference each cl
 
 **Multimodal troubleshooting.** If the model misses relevant details, hint *which* aspects of the image to draw from. If output is too generic or you can't tell comprehension from reasoning failure, ask it to **describe the image first**, then answer. To curb fabrication, ask for **shorter descriptions** — *the legacy "lower the temperature" tip is superseded on 3.x; keep temperature at the default 1.0.*
 
-Image segmentation is unsupported on Gemini 3.x (use Gemini 2.5 Flash or Robotics-ER). **Computer Use now runs on Gemini 3.5 Flash** (public preview, June 24 2026) with simplified intent-based actions across browser / mobile / desktop, and it's integrated — no separate model needed.
+Image segmentation is unsupported on Gemini 3.x (use Gemini 2.5 Flash or Robotics-ER). **Computer Use is now a built-in client-side tool** on Gemini 3.6 Flash and 3.5 Flash-Lite (via the Gemini API — 3.6 Flash scores 83.0% on OSWorld-Verified, up from 78.4%), with intent-based actions across browser / mobile / desktop and no separate model needed.
 
 ## Flash tier and inference tiers (Flex / Priority)
 
-Gemini 3.5 Flash / 3 Flash / 3.1 Flash-Lite are the budget tier — excellent for classification, routing, translation, and high-volume multimodal batch work; Flash-Lite is the best value for high-volume bounded tasks. Note that **Gemini 3.1 Flash-Lite now supports `thinking_level`**, so it's no longer a strictly no-thinking model — raise its level for a cheap accuracy boost on tasks that benefit from a little reasoning, keep it low/minimal for raw throughput. Give Flash-tier models more explicit instructions and more (simpler) few-shot examples than you would a Pro model, and keep the tool set small and clearly bounded.
+Gemini 3.6 Flash / 3.5 Flash / 3.5 Flash-Lite are the budget tier — excellent for classification, routing, translation, and high-volume multimodal batch work; Flash-Lite is the best value for high-volume bounded tasks. **3.5 Flash-Lite supports `thinking_level`** (default `minimal`), so it's not a strictly no-thinking model — raise its level for a cheap accuracy boost on tasks that benefit from a little reasoning, keep it minimal/low for raw throughput. 3.6 Flash supersedes 3.5 Flash as the go-to Flash: Google cites **~17% fewer output tokens** on average (independent tests find the gain workload-dependent) plus higher precision on code edits, so give `max_tokens`/budget estimates a little less headroom than 3.5 Flash needed. Give Flash-tier models more explicit instructions and more (simpler) few-shot examples than you would a Pro model, and keep the tool set small and clearly bounded.
 
 Beyond model choice, Gemini exposes **Flex and Priority inference tiers** (added April 1 2026) as a separate cost/latency lever: **Flex** trades latency for lower cost on batch-tolerant work; **Priority** buys faster, steadier latency at a premium. Pick the tier to match the workload's latency sensitivity, independent of which model you run.
 
-## Migration to Gemini 3.5
+## Migration to Gemini 3.6 Flash / 3.5 Flash-Lite
 
-- Update the model ID to `gemini-3.5-flash` (or the relevant 3.x model).
-- Remove `temperature`, `top_p`, `top_k` from the request config.
+- Update the model ID to `gemini-3.6-flash` or `gemini-3.5-flash-lite` (or the relevant 3.x model).
+- Remove `temperature`, `top_p`, `top_k`, and `candidate_count` from the request config.
+- **Drop assistant prefill** — a message history ending on a non-empty `model` role now returns a 400 (matching Claude and GPT). Force output shape with structured output instead.
 - Replace `thinking_budget` (numeric) with `thinking_level` (`minimal`/`low`/`medium`/`high`). `thinking_budget` is kept only for backward compat — and **don't send both in one request (400)**.
 - Delete chain-of-thought scaffolding that forced reasoning — use `thinking_level` instead.
 - Expect thought preservation on by default; ensure thought signatures round-trip with function results (or use the stateful **Interactions API** to have the server manage them).
-- If moving a no-thinking Flash-Lite workload up to `gemini-3.1-flash-lite`, you can now set `thinking_level` on it — start `minimal`/`low` and raise only where accuracy needs it.
+- If moving a no-thinking Flash-Lite workload up to `gemini-3.5-flash-lite`, you can now set `thinking_level` on it — start `minimal`/`low` and raise only where accuracy needs it.
 - **Pin explicit model IDs, not `-latest` aliases** — alias targets shift and `gemini-3-pro-preview` was already retired (→ `gemini-3.1-pro-preview`).
+- **On 3.6 Flash the knowledge cutoff advanced to March 2026** — you can drop date-anchoring and Search grounding for facts it now knows natively (older 3.x models stay at Jan 2025).
 - Re-test: Gemini 3.x is terser and more direct — prompts written for a chattier older model may need an explicit elaboration request.
