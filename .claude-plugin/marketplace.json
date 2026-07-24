@@ -6,12 +6,12 @@
   },
   "metadata": {
     "description": "Agent skills by Shahar Shavit for Claude Code, Codex, Cursor, and other Agent-Skills-compatible harnesses",
-    "version": "1.4.1"
+    "version": "1.5.0"
   },
   "plugins": [
     {
       "name": "shaharsha-skills",
-      "description": "All 18 agent skills - gdoc-sync, gslides-sync, gsheets, presentation-generator, narrating-pptx, deck-to-video, self-presenting-decks, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-instructions, tech-design-doc, namecheap-domains, office-render, viewing-videos, proton-pass, excalidraw-diagrams",
+      "description": "All 19 agent skills - gdoc-sync, gslides-sync, gsheets, presentation-generator, narrating-pptx, deck-to-video, self-presenting-decks, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-instructions, tech-design-doc, namecheap-domains, office-render, viewing-videos, proton-pass, excalidraw-diagrams, tavily-extract",
       "source": "./",
       "strict": false,
       "skills": [
@@ -32,7 +32,8 @@
         "./skills/office-render",
         "./skills/viewing-videos",
         "./skills/proton-pass",
-        "./skills/excalidraw-diagrams"
+        "./skills/excalidraw-diagrams",
+        "./skills/tavily-extract"
       ]
     },
     {
@@ -83,14 +84,15 @@
     },
     {
       "name": "utilities",
-      "description": "Domain availability via Namecheap API; rendering Microsoft Office files (.docx/.pptx/.xlsx) to PDF/images via the real Office apps on macOS; viewing video files (mp4/mov) by extracting the fewest frames that answer the question; plus managing credentials and secrets via the Proton Pass CLI (pass-cli)",
+      "description": "Domain availability via Namecheap API; rendering Microsoft Office files (.docx/.pptx/.xlsx) to PDF/images via the real Office apps on macOS; viewing video files (mp4/mov) by extracting the fewest frames that answer the question; managing credentials and secrets via the Proton Pass CLI (pass-cli); plus fetching JavaScript-rendered or bot-blocked web pages that WebFetch can't, via the Tavily Extract API",
       "source": "./",
       "strict": false,
       "skills": [
         "./skills/namecheap-domains",
         "./skills/office-render",
         "./skills/viewing-videos",
-        "./skills/proton-pass"
+        "./skills/proton-pass",
+        "./skills/tavily-extract"
       ]
     }
   ]

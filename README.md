@@ -22,7 +22,7 @@ This installs all 18 skills as one plugin. Or pick a subset:
 /plugin install brand-and-visuals@shaharsha-skills      # brand-system + brand-assets + image-generation + excalidraw-diagrams
 /plugin install engineering-decisions@shaharsha-skills  # tech-design-doc
 /plugin install building-agents@shaharsha-skills        # prompt-engineer + writing-project-instructions
-/plugin install utilities@shaharsha-skills              # namecheap-domains + office-render + viewing-videos + proton-pass
+/plugin install utilities@shaharsha-skills              # namecheap-domains + office-render + viewing-videos + proton-pass + tavily-extract
 ```
 
 ### Manual (any other harness)
@@ -120,6 +120,10 @@ Claude can't watch video — this skill is how it sees one anyway: turn the file
 #### [proton-pass](skills/proton-pass)
 
 Manage credentials and secrets from the CLI via **Proton Pass** (`pass-cli`): list vaults and items, view / create / update / delete logins, generate random passwords or passphrases, and resolve `pass://vault/item/field` secret references into template files or a command's environment. Bakes in the security guardrails (never print secrets to chat, prefer `inject` / `run` over inline values, always name the vault) and a load-bearing gotcha — the `run -- env X="pass://…"` form has been seen passing the literal URI instead of the resolved secret, so resolve explicitly with command substitution and length-check when correctness matters. macOS/Homebrew binary path.
+
+#### [tavily-extract](skills/tavily-extract)
+
+Fetch the pages the built-in fetcher can't — the JavaScript-rendered SPAs and bot-protected (403) hosts where WebFetch returns an empty shell or a "Loading…" skeleton. Wraps the **Tavily Extract** API (which runs the page's JS and fetches through browser-like infrastructure) to return clean markdown, batches up to 20 URLs per call, and reranks with `--query` to cut nav boilerplate; also does Tavily web search. Stdlib-only Python; key from `$TAVILY_API_KEY` or `~/.config/tavily/api-key`. Encodes the layered lesson learned building the other skills: try WebFetch first (free, and it reads server-rendered sites), reach for a site's own API for *structured* data (rendered charts serialize to axis labels, not numbers), and watch for **soft 404s** — a rendered SPA can return HTTP 200 with a "Page not found" body buried under nav chrome, which the script flags for you.
 
 ---
 

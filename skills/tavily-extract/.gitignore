@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Credentials — never commit (the Tavily key lives in $TAVILY_API_KEY or ~/.config/tavily/api-key)
+api-key
+*.key
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/
+*.swp
