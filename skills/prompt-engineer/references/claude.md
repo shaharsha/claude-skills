@@ -83,7 +83,7 @@ Two formatting defaults worth knowing: the latest models **default to LaTeX** fo
 
 ## Tool use and subagents
 
-Opus 4.8 favors **reasoning over tool calls** — usually better results — but **triggers required tools more reliably than 4.7** (the 4.7 issue of skipping a tool call the task needed is largely fixed). Raising `effort` is still the main lever to increase tool usage (`high`/`xhigh` show substantially more tool use in agentic search and coding). If a specific tool is under-used, describe explicitly when and why to use it.
+Opus 4.8 favors **reasoning over tool calls** — usually better results — but **triggers required tools more reliably than 4.7** (the 4.7 issue of skipping a tool call the task needed is largely fixed). Raising `effort` is still the main lever to increase tool usage (`high`/`xhigh` show substantially more tool use in agentic search and coding). If a specific tool is under-used, describe explicitly when and why to use it. **For any tool-using agent, turn adaptive thinking ON (`thinking:{type:"adaptive"}`) — it's OFF by default on Opus 4.8, and external agent evals (LMArena Agent Arena) show tool-hallucination jumping to ~19% with thinking off vs ~0.2% with it on. Don't run agentic tool loops on the thinking-off default.**
 
 Opus 4.8 also gives **more regular, higher-quality user-facing progress updates** across long agentic traces. If you added scaffolding to force interim status messages ("after every 3 tool calls, summarize progress"), remove it; if the updates aren't calibrated to your product, describe what they should look like and give an example.
 

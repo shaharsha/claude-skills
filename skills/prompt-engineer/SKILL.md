@@ -452,3 +452,6 @@ Framework deep-dive (provider-agnostic; read in addition to a provider file when
 
 Task playbooks (provider-agnostic; read when the agent's job is clearly one of these):
 - `use-cases.md` — task-specific levers for coding agents / SWE and deep-research / RAG
+
+Model selection (read when *choosing* a model, not when prompting one — keep it out of the prompt-authoring context):
+- `model-selection.md` — cross-provider intelligence/coding/agentic + cost snapshot (Artificial Analysis + LMArena), "good at what," and routing decision rules. Dated and directional; re-pull live numbers before relying on a figure.
