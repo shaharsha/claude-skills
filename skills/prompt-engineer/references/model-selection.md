@@ -2,7 +2,7 @@
 
 > **Scope — read this when *choosing* a model, not when *prompting* one.** Which tier for a task, at what budget, good at what. For *how to write the prompt* once you've picked, use `claude.md` / `gpt.md` / `gemini.md`. Keep this file **out of the prompt-authoring context** — benchmark tables are low-signal noise while writing a prompt (the "context rot" caution in SKILL.md Section A applies to the skill itself).
 >
-> **Staleness — the numbers are a dated snapshot, the *relationships* are the durable part.** Source: Artificial Analysis **Intelligence Index v4.1** + LMArena, captured **2026-07-24**. Frontier rankings churn every few weeks (Kimi K3, Grok 4.5, and others sit in the same band). Trust the **bands, gaps, and "good at what" shape**; re-pull exact figures before you rely on one. AA has an API: `GET https://artificialanalysis.ai/api/v2/data/llms/models` with header `x-api-key` (fields: `evaluations.*`, `pricing.*`, `median_output_tokens_per_second`). LMArena leaderboard: lmarena.ai/leaderboard.
+> **Staleness — the numbers are a dated snapshot, the *relationships* are the durable part.** Source: Artificial Analysis **Intelligence Index v4.1** + LMArena (+ BullshitBench for false-premise detection), captured **2026-07-24**. Frontier rankings churn every few weeks (Kimi K3, Grok 4.5, and others sit in the same band). Trust the **bands, gaps, and "good at what" shape**; re-pull exact figures before you rely on one. AA has an API: `GET https://artificialanalysis.ai/api/v2/data/llms/models` with header `x-api-key` (fields: `evaluations.*`, `pricing.*`, `median_output_tokens_per_second`). LMArena leaderboard: lmarena.ai/leaderboard.
 
 ## Snapshot — AA Intelligence Index v4.1 (2026-07-24)
 
@@ -50,6 +50,10 @@ LMArena runs a **separate human-vote leaderboard per task**: Agent, Text (chat),
 
 **Bottom line:** AA (objective evals) and the *task-matched* LMArena arena mostly agree — where they diverge, weight **AA for test-graded capability/cost**, **LMArena for which output humans prefer**. All of this churns; re-pull from lmarena.ai/leaderboard (per-arena) and the AA API.
 
+## Beyond intelligence — false-premise detection (BullshitBench)
+
+A capability the AA/LMArena indices miss: **will the model call out a nonsensical or false premise instead of confidently building on it?** On [BullshitBench](https://petergpt.github.io/bullshit-benchmark/) (100 false-premise prompts across 5 domains, 3-judge panel), **Anthropic models lead by a wide margin** — Claude Opus 4.8 **95%** clear-pushback vs **GPT-5.6 Sol/Terra ~50%** and **Gemini 3.6 Flash ~30%** (bottom models accept the nonsense ~85% of the time). Two caveats it surfaces: **raising effort/thinking doesn't help — often hurts** detection, and a *refusal* isn't *pushback* (Fable 5 declines ~35% rather than naming the flaw). If your app must not act on broken user premises — agents, advice, or extraction over user-supplied "facts" — weight this; it's orthogonal to the coding/agentic scores above, and you fix it with prompting + model choice, not the effort knob. (Opus 5 not benchmarked yet.)
+
 ## Picking a model — decision rules
 
 - **Highest ceiling** → **Opus 5** (new AA #1, $5/$25, ZDR-eligible) is now the default top pick. **Fable 5** may still edge it on the longest, most ambiguous multi-hour work + human preference, but at 2× the price and ZDR-ineligible. **GPT-5.6 Sol** is ~equal on benchmarks and more token-efficient.
@@ -58,6 +62,7 @@ LMArena runs a **separate human-vote leaderboard per task**: Agent, Text (chat),
 - **Fast multimodal / knowledge work at scale** → **Gemini 3.6 Flash**.
 - **High-volume classification / routing / extraction** → **Gemini 3.5 Flash-Lite** (cheapest + fastest) or **Luna**; **Haiku 4.5** for the cheapest Claude.
 - **Strict instruction-following / adherence** → **Gemini 3.1 Pro**.
+- **Must not build on false/nonsense premises** (agents acting on user-supplied "facts", advice, extraction) → **Anthropic models lead by far** on false-premise detection — see *Beyond intelligence* above.
 - **Multi-tier pipeline** (the usual pattern): cheap/fast tier for extract-classify-route (Flash-Lite / Haiku / Luna) → frontier tier for analysis/generation (Opus 5 / Sol / Fable 5). See SKILL.md Section D.
 
 ## Cost-per-task ≠ per-token price
