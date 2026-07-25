@@ -15,12 +15,12 @@ MIT licensed. Built day-to-day; battle-tested in real projects.
 /plugin install shaharsha-skills@shaharsha-skills
 ```
 
-This installs all 18 skills as one plugin. Or pick a subset:
+This installs all 20 skills as one plugin. Or pick a subset:
 
 ```bash
 /plugin install documents-and-decks@shaharsha-skills    # gdoc-sync + gslides-sync + gsheets + presentation-generator + narrating-pptx + deck-to-video + self-presenting-decks
 /plugin install brand-and-visuals@shaharsha-skills      # brand-system + brand-assets + image-generation + excalidraw-diagrams
-/plugin install engineering-decisions@shaharsha-skills  # tech-design-doc
+/plugin install engineering-decisions@shaharsha-skills  # tech-design-doc + codex-review
 /plugin install building-agents@shaharsha-skills        # prompt-engineer + writing-project-instructions
 /plugin install utilities@shaharsha-skills              # namecheap-domains + office-render + viewing-videos + proton-pass + tavily-extract
 ```
@@ -92,6 +92,10 @@ Build architecture, flow, and system diagrams on an Excalidraw+ canvas through i
 #### [tech-design-doc](skills/tech-design-doc)
 
 Author technical design review documents - RFCs, ADRs, design docs, KEPs, partner-mode TDRs - sized correctly for the audience and the decision being made. Triages format first (1-2 page mini ADR vs 6-page standard RFC vs 10-20 page heavyweight KEP vs partner-mode for external dev partners), scaffolds from research-grounded templates, enforces load-bearing sections (BLUF summary, goals/non-goals with quantified targets, >=3 alternatives, cross-cutting checklist, decision log), inserts mandatory C4 + sequence diagrams in mermaid, and runs a static audit against best-practice anti-patterns. Pairs with `gdoc-sync` to push the finished doc to a live Google Doc for stakeholder review.
+
+#### [codex-review](skills/codex-review)
+
+Get an independent second opinion on a plan or a diff from OpenAI Codex, in a fresh context, with no write access - then adjudicate every finding against the source before acting on any of it. Runs `codex exec` (not `codex exec review`, which refuses a custom prompt alongside a scope flag) at `gpt-5.6-sol` / high effort with the read-only sandbox forced on every invocation, promotes `CLAUDE.md` to a real Codex instruction file via `project_doc_fallback_filenames` so no `AGENTS.md` is needed, and returns schema-constrained findings - each requiring a concrete failure scenario - rendered to a Markdown review with an adjudication table. Sessions are labelled and resumable: resume the same reviewer to argue a specific finding, start a fresh one to re-review after fixes. Built on the measured result that context separation, not the model swap, is where most of the benefit comes from.
 
 ### Building agents
 

@@ -1,0 +1,63 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["scan_notes", "findings", "overall_verdict", "overall_explanation", "overall_confidence"],
+  "properties": {
+    "scan_notes": {
+      "type": "string",
+      "description": "Working notes: what you read, what you checked, what you deliberately ruled out. Written before any finding is committed to."
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "severity", "category", "file", "line_start", "line_end", "evidence", "failure_scenario", "suggested_fix", "confidence"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "One line, under 80 characters, stating the defect itself."
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["critical", "high", "medium", "low"],
+            "description": "critical = data loss, security breach, or corruption reachable in production. high = wrong behaviour on a realistic input. medium = a real defect on an edge case. low = degrades maintainability with no behavioural bug."
+          },
+          "category": {
+            "type": "string",
+            "enum": ["correctness", "security", "concurrency", "data-loss", "api-contract", "error-handling", "resource-leak", "performance", "test-gap", "spec-violation", "maintainability"]
+          },
+          "file": {
+            "type": "string",
+            "description": "Repository-relative path. Use the plan/document path when reviewing a plan."
+          },
+          "line_start": {"type": "integer"},
+          "line_end": {"type": "integer"},
+          "evidence": {
+            "type": "string",
+            "description": "What in the code or document establishes this. Quote the operative line rather than describing it."
+          },
+          "failure_scenario": {
+            "type": "string",
+            "description": "Concrete inputs or state, leading to a concrete wrong outcome. If no such scenario can be written, the finding does not belong in this list."
+          },
+          "suggested_fix": {
+            "type": "string",
+            "description": "The smallest change that removes the defect."
+          },
+          "confidence": {
+            "type": "number",
+            "description": "0 to 1. Reflects how certain you are the defect is real, not how severe it would be."
+          }
+        }
+      }
+    },
+    "overall_verdict": {
+      "type": "string",
+      "enum": ["sound", "sound with reservations", "not sound"],
+      "description": "'not sound' requires at least one critical or high finding."
+    },
+    "overall_explanation": {"type": "string"},
+    "overall_confidence": {"type": "number"}
+  }
+}

@@ -6,12 +6,12 @@
   },
   "metadata": {
     "description": "Agent skills by Shahar Shavit for Claude Code, Codex, Cursor, and other Agent-Skills-compatible harnesses",
-    "version": "1.5.0"
+    "version": "1.6.0"
   },
   "plugins": [
     {
       "name": "shaharsha-skills",
-      "description": "All 19 agent skills - gdoc-sync, gslides-sync, gsheets, presentation-generator, narrating-pptx, deck-to-video, self-presenting-decks, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-instructions, tech-design-doc, namecheap-domains, office-render, viewing-videos, proton-pass, excalidraw-diagrams, tavily-extract",
+      "description": "All 20 agent skills - gdoc-sync, gslides-sync, gsheets, presentation-generator, narrating-pptx, deck-to-video, self-presenting-decks, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-instructions, tech-design-doc, namecheap-domains, office-render, viewing-videos, proton-pass, excalidraw-diagrams, tavily-extract, codex-review",
       "source": "./",
       "strict": false,
       "skills": [
@@ -33,7 +33,8 @@
         "./skills/viewing-videos",
         "./skills/proton-pass",
         "./skills/excalidraw-diagrams",
-        "./skills/tavily-extract"
+        "./skills/tavily-extract",
+        "./skills/codex-review"
       ]
     },
     {
@@ -65,11 +66,12 @@
     },
     {
       "name": "engineering-decisions",
-      "description": "Author technical design review documents - RFCs, ADRs, design docs, KEPs, and partner-mode TDRs",
+      "description": "Author and audit technical design docs, RFCs, and ADRs, and get an independent read-only cross-model review of a plan or a diff from OpenAI Codex before it lands",
       "source": "./",
       "strict": false,
       "skills": [
-        "./skills/tech-design-doc"
+        "./skills/tech-design-doc",
+        "./skills/codex-review"
       ]
     },
     {
