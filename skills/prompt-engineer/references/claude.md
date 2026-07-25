@@ -16,6 +16,7 @@ Opus 5, the Claude 5 models, and Opus 4.8 share a **1M context window and 128K m
 ## Contents
 - **Opus 5 — current default (deltas from Opus 4.8)**
 - Effort and thinking
+- Few-shot examples with thinking
 - Sampling parameters (removed)
 - Task budgets
 - Tokenizer and token budgeting
@@ -41,14 +42,17 @@ Opus 5, the Claude 5 models, and Opus 4.8 share a **1M context window and 128K m
 **Claude Opus 5** (`claude-opus-5`, GA July 24 2026) is the new recommended default: **#1 on the AA Intelligence Index (~60.7) and AA Coding Index (78)**, at Opus 4.8's price ($5/$25) with a **May 2026 knowledge cutoff**. It runs existing Opus 4.8 prompts well, so migration is a model-ID swap plus these behavior changes — most of which mean *removing* legacy scaffolding, because Opus 5 leans more autonomous:
 
 - **Thinking is ON by default** (the reverse of Opus 4.8's off-by-default). The model self-decides depth; `effort` is the control; `thinking:{type:"adaptive"}` still equals the default. **Breaking rule:** `thinking:{type:"disabled"}` is accepted only at effort ≤`high` — pairing it with `xhigh`/`max` returns a 400.
-- **More verbose across the board** — conversational replies, agentic narration, *and* files it writes to disk all run longer than 4.8, and **`effort` controls thinking, not output length** (lowering it won't shorten the visible answer). Prompt for concision explicitly (*"keep responses focused and brief; spend most of the response on the main answer"*) and add length calibration for Claude-authored documents.
+- **More verbose across the board** — conversational replies, agentic narration, *and* files it writes to disk all run longer than 4.8, and **`effort` controls thinking, not output length** (lowering it won't shorten the visible answer). Prompt for concision explicitly (*"keep responses focused and brief; spend most of the response on the main answer"*) and add length calibration for Claude-authored documents. **In a long system prompt, repeat it near the end** — Anthropic's guidance pairs the main instruction with a short tail reminder (`<reminder>Keep outputs reasonably concise.</reminder>`). This is the one place recency still buys something on Claude; it is not license to restate tool guidance the description already carries.
 - **Remove verification / self-check scaffolding** — Opus 5 verifies and self-corrects unprompted. "Include a final verification step," "use a subagent to verify," and "double-check your answer" now cause *over*-verification (wasted tokens, no quality gain) — delete them. It also narrates corrections more; scope that down if it's user-facing.
 - **Spawns subagents MORE readily** (the reverse of Opus 4.8's fewer) — cap it: delegate only for large, genuinely independent tracks; never to verify its own work; keep spawn counts low.
 - **Scope creep** — it can widen a task or add unrequested steps; for narrow work, constrain scope (*"deliver what was asked, at the scope intended; check in only when different readings would lead to materially different work"*).
 - **If you disable thinking** (only possible at ≤`high`), two artifacts appear, worst on tool-heavy/search work: **tool calls can leak into visible text** (never execute, pollute history) — allow a one-sentence pre-tool preamble; and **internal `<thinking>`/XML tags can leak** — *remove* any "don't think/don't reason" rule (it *increases* leakage) and use a general *"don't include internal or system XML tags."* Better: keep thinking on and lower `effort` instead of disabling.
+- **Effort recalibrates *down*.** `low` and `medium` deliver strong quality at a fraction of the tokens and latency, and Anthropic's guidance is to use them **liberally, as the primary control for token cost and response time wherever quality holds**, stepping up to `xhigh` only for *demanding* coding and agentic work. This inverts the Opus 4.8 ladder below, where `xhigh` is the blanket coding default. Don't port an effort setting across the upgrade — re-run a sweep on your own evals.
 - **Safety & retention:** ZDR-eligible (no data-retention floor, unlike Fable 5). Has cyber classifiers but **~85% less restrictive than Fable 5's** — allows source-code vuln finding; blocks binary scanning / pentest / exploit-gen; flagged requests **fall back to Opus 4.8** (default in the apps, opt-in on the API), returning `stop_reason:"refusal"` as with Fable 5.
 
-Everything below (the effort ladder, caching, mid-conversation system messages, fast mode, vision, etc.) still applies to Opus 5 — just tune by *subtracting* prod-and-verify scaffolding and *adding* concision. See Anthropic's *Prompting Claude Opus 5* guide for the full set.
+Everything below (caching, mid-conversation system messages, fast mode, vision, etc.) still applies to Opus 5 — just tune by *subtracting* prod-and-verify scaffolding and *adding* concision. **The one exception is the effort ladder**, which Opus 5 recalibrates as above. See Anthropic's *Prompting Claude Opus 5* guide for the full set.
+
+**Trim before you add.** Anthropic removed **over 80% of Claude Code's system prompt** for Opus 5 and Fable 5 with no measurable loss on their coding evals: the Claude 5 generation has enough judgment to handle cases that older models needed hard rules for, and those rules were wrong on a subset of prompts anyway. The canonical swap — old: *"In code: default to writing no comments. Never write multi-paragraph docstrings or multi-line comment blocks — one short line max."* New: *"Write code that reads like the surrounding code: match its comment density, naming, and idiom."* Same intent, expressed as a judgment heuristic instead of an absolute. When migrating a prompt stack onto Opus 5, delete first and measure before adding anything new.
 
 ## Effort and thinking
 
@@ -60,7 +64,7 @@ Opus 4.8 uses **adaptive thinking** and the `effort` parameter (low/medium/high/
 - **This default is model-specific across the family** — don't assume it: **Opus 5** runs adaptive **on by default** (the reverse of 4.8) and only lets you disable thinking at effort ≤`high` (`xhigh`/`max` + `disabled` → 400); **Sonnet 5** runs adaptive when you *omit* `thinking` (on by default); **Fable 5 / Mythos 5** have thinking **always on** (you cannot disable it — `thinking:{type:"disabled"}` returns 400); **Haiku 4.5** has no adaptive thinking at all (use extended thinking with `budget_tokens`). See the family sections below.
 - **Thinking content is omitted from responses by default.** Thinking blocks still stream but their `thinking` field is empty unless you opt in with `thinking: {type:"adaptive", display:"summarized"}`. If your product streams reasoning to users, the default looks like a long pause before output — set `display:"summarized"` to restore visible progress.
 
-Effort guidance (Opus 4.8 and Opus 5 share the ladder and the `high` default):
+Effort guidance for **Opus 4.8** (Opus 5 shares the `high` default but recalibrates the ladder — see the Opus 5 section above before applying this to it):
 - `xhigh` — best for most coding and agentic use cases.
 - `high` — the default; minimum recommended for intelligence-sensitive use cases.
 - `medium` — cost-sensitive work that can trade some intelligence.
@@ -72,6 +76,15 @@ Opus 4.8 respects effort **strictly**, especially at the low end — at `low`/`m
 Adaptive-thinking triggering is steerable. Large/complex system prompts can make the model think more often than you want; counter with: *"Thinking adds latency and should only be used when it will meaningfully improve answer quality — typically multi-step reasoning. When in doubt, respond directly."* When thinking is disabled, Claude is sensitive to the word "think" — prefer "consider," "evaluate," "reason through."
 
 At `max`/`xhigh`, set a large `max_tokens` (start at 64k) so the model has room to think and act across tool calls.
+
+## Few-shot examples with thinking
+
+SKILL.md's cross-model default is to skip few-shot chain-of-thought on reasoning models. **Claude is the documented exception, in both directions:**
+
+- Ordinary few-shot guidance is unchanged — Anthropic still calls examples "one of the most reliable ways to steer Claude's output format, tone, and structure" and recommends **3-5** relevant, diverse examples wrapped in `<example>` tags. Don't strip them from a Claude prompt on the strength of the reasoning-model rule.
+- Examples reach the reasoning itself. Anthropic's guidance: *"Multishot examples work with thinking. Use `<thinking>` tags inside your few-shot examples to show Claude the reasoning pattern. It will generalize that style to its own extended thinking blocks."* So on Claude you can steer *how it reasons*, not just what it emits — useful when the shape of the analysis matters (a triage order, a checklist the reasoning must walk).
+
+The tool-usage case is separate and cuts the other way: for the Claude 5 generation, examples showing *how to call* a tool constrain exploration, and an expressive schema beats them. See SKILL.md §B, *Input Examples*.
 
 ## Sampling parameters (removed)
 

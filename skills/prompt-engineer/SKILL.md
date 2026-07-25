@@ -76,7 +76,7 @@ These apply to all three providers and cover ~70% of prompt engineering work.
 - Cover typical cases, edge cases, and at least one "what not to do" example.
 - Wrap in `<example>` tags with `<input>` and `<output>` sub-tags. Keep formatting identical across every example — inconsistent structure confuses the model.
 - Budget models need MORE examples (5-6 minimum) with simpler patterns.
-- **Reasoning/thinking models invert this rule — don't add few-shot CoT.** On models reasoning internally (Claude adaptive thinking, GPT `reasoning.effort`, Gemini `thinking_level`), stacked few-shot exemplars and hand-written step-by-step demos are neutral-to-*harmful* — the model tends to ignore exemplars and follow the instructions. Describe the task + output format zero-shot; reach for examples only to pin **output format/schema**, not to teach reasoning. (DeepSeek-R1's own guidance: few-shot "consistently degrades its performance… use a zero-shot setting" — arXiv:2501.12948; corroborated by arXiv:2506.14641.)
+- **On reasoning/thinking models, few-shot CoT is model-family-specific — check the matching reference file before adding it.** The cross-model default is to skip it: stacked exemplars and hand-written step-by-step demos run neutral-to-*harmful*, and the model tends to ignore the exemplars and follow the instructions instead. Describe the task + output format zero-shot and reach for examples to pin **output format/schema**. (DeepSeek-R1's own guidance: few-shot "consistently degrades its performance… use a zero-shot setting" — arXiv:2501.12948; corroborated by arXiv:2506.14641.) **Claude is the documented exception** — Anthropic recommends the opposite; see `references/claude.md`.
 
 ### Output Format
 - **Prefer the provider's structured-output feature** over describing a JSON schema in prose: OpenAI Structured Outputs (`strict: true`), Claude Structured Outputs, Gemini `responseSchema`. These constrain the response far more reliably than prompt text and remove the validation burden from the model.
@@ -93,6 +93,7 @@ These apply to all three providers and cover ~70% of prompt engineering work.
 - When context grows large, ask the model to **quote relevant sections first** before reasoning — this cuts through noise and grounds the response.
 - For multi-turn agents: **compact and summarize** conversation history at context limits. Maximize recall first (capture every architectural decision, unresolved issue, and key finding), then tighten for precision. Use a cheap model (Flash, Haiku) for summarization. Clearing stale tool-call results is a cheap, low-risk form of compaction — once a result has been used, the raw payload can be dropped.
 - For long-horizon tasks: maintain **structured notes** (scratchpad, state JSON) outside the conversation for information that must survive compaction.
+- **Point at an artifact instead of describing one.** When a spec is hard to write out — a visual design, a behavior with a lot of edge cases, a convention you'd recognize but can't articulate — hand over the thing itself. Anthropic reports source code is the highest-fidelity reference (it carries structure, naming, and idiom a paraphrase loses) and that an HTML mockup of a design outperforms a prose description *or a screenshot* of it. Other forms that work as specs: a test suite, a function in another codebase to port (language doesn't have to match), and a rubric a verifier agent scores against. Beyond "code beats prose beats screenshot," these are alternatives rather than a ranked ladder — pick by which one you can actually produce.
 - **Irrelevant context actively degrades performance, and length itself is a cost — "context rot."** Every added token lowers reliability, even far below the window limit and even on trivial retrieval; a single distractor measurably hurts, and models can do *worse* on a coherent long context than a shuffled one (Chroma "Context Rot," 18-model study, 2025). Treat a 200K/1M window as reliable to *tens of thousands* of tokens, not its max: retrieve the few highest-relevance chunks, prune near-duplicate distractors, and don't pad. Degradation is gradual, not a cliff.
 
 ### Reducing Hallucinations
@@ -192,7 +193,7 @@ Tool descriptions are **the single most impactful quality factor** for tool-use 
 |--------|--------|-----|--------|
 | Description style | Detailed narrative (3-4 sentences) | CTCO: Context, Task, Constraints, Output | Short and direct; use enum arrays heavily |
 | Strict schema | Structured Outputs supported | `strict: true` for 100% schema adherence | Up to 512 declarations; 10-20 active recommended |
-| Where guidance lives | System prompt or description | Put tool-specific guidance in the description, not the system prompt | Description; append runtime hints to the function-response text |
+| Where guidance lives | Claude 5: the tool description — delete the system-prompt duplicate; earlier models sometimes needed the reinforcement | Put tool-specific guidance in the description, not the system prompt | Description; append runtime hints to the function-response text |
 | Tool preambles | Not needed | Two uses: (1) "explain why" before a call → better accuracy; (2) short user-visible "acknowledge + plan + first step" in streaming → better perceived responsiveness | Not needed |
 | Error recovery | Handles well natively | Handles well natively | Add: "Don't repeat failed calls with identical arguments" |
 | Scope creep risk | Low | High — add "Do ONLY what is requested" | Moderate |
@@ -205,7 +206,9 @@ Tool descriptions are **the single most impactful quality factor** for tool-use 
 - **Concrete thresholds** — "3+ steps" not "complex tasks"; "at least 2 characters" not "enough text." Numeric where possible.
 
 ### Input Examples
-For complex tools with nested objects, format-sensitive parameters, or tools that are easily confused with each other — add 1-5 input examples showing realistic parameter values. This improves parameter accuracy from 72% to 90%.
+For complex tools with nested objects, optional parameters, format-sensitive inputs, or tools easily confused with each other — supply 1-5 valid example inputs. On Claude this is a first-class field on the tool definition, `input_examples`, not prose buried in the description; Anthropic's internal testing puts it at **72% → 90% on complex parameter handling** ([advanced tool use](https://www.anthropic.com/engineering/advanced-tool-use)). They add tokens to every request, so they earn their place where the schema is genuinely hard to guess and not where it's self-evident.
+
+Keep this distinct from examples that teach a model **how or when to call** a tool. For the Claude 5 generation Anthropic reports those constrain the model to the exploration space the examples imply — design an expressive interface instead. A `status` enum of `pending`/`in_progress`/`completed` conveys the state machine, and one line ("keep exactly one item `in_progress`") conveys the rule, with no example needed. `input_examples` answers *"what does a valid input look like"*; interface design answers *"when do I reach for this."*
 
 See `${CLAUDE_SKILL_DIR}/templates/tool-description-template.md` for the full structured format.
 
@@ -249,7 +252,7 @@ For depth on any one provider — including current model versions and migration
 | Aspect | Claude | GPT | Gemini |
 |--------|--------|-----|--------|
 | Mechanism | Adaptive thinking; `effort`: low/medium/high/xhigh/max | `reasoning.effort`: none/low/medium/high/xhigh/max (+ `reasoning.mode` standard/pro) | `thinking_level`: minimal/low/medium/high |
-| Default state | **Opus 5 (default): thinking ON** (`disabled` only at effort ≤`high`); Opus 4.8: thinking **OFF** unless `thinking:{type:"adaptive"}`; Sonnet 5: on; Fable 5: always on; `effort` defaults to `high` (`xhigh` for coding/agentic) | Default effort per-model: GPT-5.6 `medium` (standard & pro), GPT-5.4/Mini/Nano `none` | Default `thinking_level` per-model: 3.1 Pro `high`, 3.6 Flash `medium`, 3.5 Flash-Lite `minimal` |
+| Default state | **Opus 5 (default): thinking ON** (`disabled` only at effort ≤`high`); Opus 4.8: thinking **OFF** unless `thinking:{type:"adaptive"}`; Sonnet 5: on; Fable 5: always on; `effort` defaults to `high` — on Opus 5 use `low`/`medium` liberally and reserve `xhigh` for demanding coding/agentic work (4.8 makes `xhigh` the coding default) | Default effort per-model: GPT-5.6 `medium` (standard & pro), GPT-5.4/Mini/Nano `none` | Default `thinking_level` per-model: 3.1 Pro `high`, 3.6 Flash `medium`, 3.5 Flash-Lite `minimal` |
 | Sampling params | **Removed on Opus 5, Opus 4.8/4.7, Sonnet 5, Fable 5** — non-default `temperature`/`top_p`/`top_k` → 400 error | Accepted (except Azure/Foundry reasoning models), but trending out | Don't set on Gemini 3.x — strongly discouraged |
 | Trace reuse | Not supported | `previous_response_id` saves tokens in multi-turn | Thought signatures preserved automatically (Gemini 3.5) |
 
