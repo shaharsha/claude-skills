@@ -1,6 +1,6 @@
 # codex-review
 
-Get an independent second opinion on a plan or a diff from OpenAI Codex — fresh context, no write access — then adjudicate every finding against the source before acting on any of it. Runs `codex exec` at `gpt-5.6-sol` / high effort with the read-only sandbox forced on every invocation, and returns schema-constrained findings that each require a concrete failure scenario.
+Get an independent second opinion on a plan or a diff from **OpenAI Codex** — fresh context, no write access — then **adjudicate every finding against the source** before acting on any of it. Runs `codex exec` at `gpt-5.6-sol` / `high` reasoning effort with the read-only sandbox forced on every invocation, and returns schema-constrained findings that each require a concrete failure scenario. Optional `--search` gives the reviewer web search and page fetch without granting it network access.
 
 Part of [shaharsha/claude-skills](../..). MIT.
 
@@ -106,6 +106,21 @@ scripts/codex_review.sh --repo <dir> --list
 | `--no-schema` | off | Return prose instead of structured findings |
 | `--search` | off | Give the reviewer web search and page fetch. Runs server-side, so it works under the read-only sandbox with no local network. |
 
+## What the reviewer can and can't do
+
+Read-only restricts writes, not thinking. Measured on codex-cli 0.145.0:
+
+| Capability | Read-only | Notes |
+|---|---|---|
+| Run commands — `git log`, `git diff`, `grep`, `nl`, `python3` | ✅ | It reaches for git unprompted |
+| Read any file in the repo | ✅ | |
+| Web search **and** direct page fetch | ✅ | With `--search`; runs server-side |
+| Write anywhere — repo, `/tmp`, `mkdir` | ❌ | No writable location exists |
+| Raw network — `curl`, `urllib`, `ping` | ❌ | DNS resolution fails |
+| Run the test suite or a build | ❌ | Needs a temp dir; see gotchas |
+
+Add `--search` when correctness depends on something outside the repo: whether a library API is used as documented, whether a version carries a known advisory, whether a wire format is implemented correctly. Leave it off for internal-logic reviews — it costs latency and adds another untrusted-input channel for no gain.
+
 ## Gotchas
 
 Each of these was measured, not assumed:
@@ -130,7 +145,9 @@ Each of these was measured, not assumed:
 
 ## Related skills
 
-- [tech-design-doc](../tech-design-doc) — authors the plans this reviews in `plan` mode.
+- [tech-design-doc](../tech-design-doc) — authors the RFCs, ADRs, and design docs this reviews in `plan` mode. Write it there, review it here, before anyone implements it.
+- [writing-project-instructions](../writing-project-instructions) — authors the `CLAUDE.md` / `AGENTS.md` that Codex loads as the project's rules for the review. Whatever is missing from that file is missing from the reviewer's context, and `@import` lines never reach it.
+- [prompt-engineer](../prompt-engineer) — the provider-specific reference behind the review prompt's shape: outcome-first framing, why repetition costs quality on GPT-5.6, and judge-prompt design.
 
 ## License
 
