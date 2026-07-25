@@ -9,10 +9,13 @@ Personal Agent Skills library, published as the `shaharsha-skills` marketplace. 
 Miss one and the skill ships half-wired (installs but isn't listed, or is listed but 404s):
 
 1. `skills/<name>/SKILL.md` — frontmatter `name` + `description`. The description is *when to trigger* (third-person "Use when…", keyword-rich); it's the only thing that makes the skill fire, so it is not a workflow summary.
-2. `.claude-plugin/marketplace.json` — add `./skills/<name>` to the **main `shaharsha-skills` plugin** (and update its "All N skills" count in that plugin's description) **and** to the fitting **category plugin**; bump `metadata.version`.
-3. `README.md` — the matching `/plugin install <category>@shaharsha-skills` comment line, plus a `#### [<name>](skills/<name>)` entry with a description paragraph.
-4. `~/Projects/shahar-sh/public/skills.html` — **separate repo.** Add a skill card and append the name to the `<meta name="description">` list. Pushing `main` there auto-deploys to Cloudflare Pages (`gh run watch` to confirm).
-5. `ln -s "$PWD/skills/<name>" ~/.claude/skills/<name>` — the symlink that makes it loadable locally.
+2. `skills/<name>/README.md` — the GitHub landing page for that folder. **SKILL.md is for the model; README.md is for the human** — it links into SKILL.md and `reference/` rather than restating procedure. Sections: pitch, why it exists, what it does, install (marketplace + monorepo path), requirements, quick start, gotchas, related skills, license. Copy the shape from any existing one.
+3. `.claude-plugin/marketplace.json` — add `./skills/<name>` to the **main `shaharsha-skills` plugin** (and update its "All N skills" count in that plugin's description) **and** to the fitting **category plugin**; bump `metadata.version`.
+4. `README.md` — the matching `/plugin install <category>@shaharsha-skills` comment line, plus a one-line row in that category's table. One sentence, not a paragraph — the long description lives in the skill's own README.
+5. `~/Projects/shahar-sh/public/skills.html` — **separate repo.** Add a skill card, append the name to the `<meta name="description">` list, and bump the two "N skills" counts. Pushing `main` there auto-deploys to Cloudflare Pages (`gh run watch` to confirm).
+6. `ln -s "$PWD/skills/<name>" ~/.claude/skills/<name>` — the symlink that makes it loadable locally.
+
+**Cross-skill links:** relative (`../<name>`) only for skills *in this repo* — they must resolve on GitHub. Anything else gets an upstream URL (Anthropic's live at `github.com/anthropics/skills/tree/main/skills/<name>`) or plain text. A `../<name>/` pointing outside `skills/` is always a 404.
 
 ## Naming
 

@@ -1,6 +1,6 @@
 # claude-skills
 
-Agent skills by [@shaharsha](https://github.com/shaharsha) - 18 production-grade [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills) that work in Claude Code, claude.ai, Codex, Cursor, and any other harness that reads the SKILL.md format.
+Agent skills by [@shaharsha](https://github.com/shaharsha) - 20 production-grade [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills) that work in Claude Code, claude.ai, Codex, Cursor, and any other harness that reads the SKILL.md format.
 
 MIT licensed. Built day-to-day; battle-tested in real projects.
 
@@ -39,97 +39,52 @@ For Codex, Cursor, Gemini CLI, OpenClaw, etc., follow the same shape - point you
 
 ## Skills
 
+Each links to its own README — what it does, why it exists, install, and the gotchas it encodes.
+
 ### Documents & decks
 
-#### [gdoc-sync](skills/gdoc-sync)
-
-Push a local `.md` to an existing Google Doc, then fix the four things Google's converter breaks: `#anchor` links arriving as broken URL strings, `other.md#anchor` cross-doc refs, inline images at 1500pt+ wrecking layout, and missing RTL for Hebrew/Arabic. One Python script, stdlib + `google-auth`.
-
-#### [gslides-sync](skills/gslides-sync)
-
-Sister to `gdoc-sync` for `.pptx` -> existing Google Slides. Rewrites broken slide-anchor and cross-presentation links into native `pageObjectId` references, scales oversized images, applies RTL per text shape. Same service-account setup works for both.
-
-#### [gsheets](skills/gsheets)
-
-Comprehensive Sheets API v4 CLI - the Sheets-shaped sibling to `gdoc-sync` and `gslides-sync`. Read / write / append / clear cells; create / rename / duplicate / delete tabs; freeze rows, set column widths, merge ranges; style headers (bold + colored bg + frozen + filter as one atomic batch); apply borders, banding (zebra stripes), and conditional formatting; sort and filter; or drop to a `batch-update` escape hatch for charts, pivots, data-validation dropdowns, protected ranges, and gradient color scales. Same service-account auth as the other Google skills.
-
-#### [presentation-generator](skills/presentation-generator)
-
-Generate 16:9 PDF + PPTX decks where every slide is a custom AI-rendered image - not a templated layout with stock photos. Style locks globally via a reference image; composition varies per slide (full-bleed photo, infographic, architecture flowchart, big-number callout, timeline, quote card, etc.). Research -> narrative arc (SCQA / Duarte / Kawasaki) -> style lock -> parallel generation at concurrency 4 -> QA -> assemble. ~$3-5 in image-API spend for a 10-slide deck.
-
-#### [narrating-pptx](skills/narrating-pptx)
-
-Turn any `.pptx` into a self-presenting deck: write presenter-style narration scripts in any language (Hebrew, English, mixed), generate speech via **ElevenLabs v3**, embed one clip per slide, and set autoplay-on-slide-entry through **real PowerPoint** — the one method that doesn't trigger the "found a problem / Repair" dialog (hand-written `<p:timing>` XML corrupts the file; this skill exists because it happened). Parallel TTS with 429 backoff and response-integrity checks, filename-targeted AppleScript (never `presentation 1`), hover-seekbar-sized speaker icons, and real-PowerPoint validation. macOS + PowerPoint for the autoplay step.
-
-#### [deck-to-video](skills/deck-to-video)
-
-Turn slides (a PDF or per-slide images) + per-slide narration audio into a **self-playing mp4**: each slide holds for exactly its narration's length plus a breath, then hard-cuts to the next — with a filling progress bar + seconds-remaining countdown (bottom-right) and an "N / M" slide counter (top-right). One bundled script does the whole build. The overlays are **baked per-second with PIL, never drawn by ffmpeg filters** — because `drawbox` width expressions silently render a full bar from frame 0 in several builds, and Homebrew's ffmpeg bottles ship without `drawtext` entirely (both learned the hard way). Encoding is dialed in (`apad` tail padding, `yuv420p`, `stillimage` tune, lossless concat, faststart) and validation is mandatory: extract early/late frames and *look*.
-
-#### [self-presenting-decks](skills/self-presenting-decks)
-
-The orchestration map for making a presentation explain itself: **content → narration → video**, which skill owns each stage (`pptx` authoring → `office-render` validation → `narrating-pptx` → `deck-to-video`), the three-artifacts-three-audiences rule (clean pptx for live presenting, narrated pptx for self-paced review, mp4 for zero-friction sharing), and an **update matrix** — exactly what to rebuild when slides change vs narration text vs pace vs video overlays. Encodes the seam rules that bite: the video renders from the *clean* deck's PDF (the narrated copy draws speaker icons), scripts get human approval *before* TTS spend, and regenerate only changed clips but always rebuild final artifacts from the full audio set.
+| Skill | What it does |
+|---|---|
+| [gdoc-sync](skills/gdoc-sync) | Push a local `.md` to an existing Google Doc, fixing the four things Google's converter breaks: `#anchor` links, cross-doc refs, 1500pt images, and missing RTL. |
+| [gslides-sync](skills/gslides-sync) | The same shape for `.pptx` → an existing Google Slides: native `pageObjectId` links, scaled images, RTL per text shape. |
+| [gsheets](skills/gsheets) | Full Sheets API v4 CLI — cells, tabs, freeze/resize/merge, header styling, filters, banding, conditional formatting, plus a raw `batchUpdate` escape hatch. |
+| [presentation-generator](skills/presentation-generator) | 16:9 PDF + PPTX decks where every slide is a custom AI-rendered image. Style locks globally; composition varies per slide. |
+| [narrating-pptx](skills/narrating-pptx) | Per-slide ElevenLabs narration embedded in a pptx, with autoplay authored by real PowerPoint — the one method that doesn't corrupt the file. |
+| [deck-to-video](skills/deck-to-video) | Slides + narration → a self-playing mp4 with a progress bar, countdown, and slide counter, baked with PIL because ffmpeg's animated `drawbox` silently renders full. |
+| [self-presenting-decks](skills/self-presenting-decks) | The orchestration map over the whole chain, plus the update matrix for what to rebuild when something changes. |
 
 ### Brand & visuals
 
-#### [brand-system](skills/brand-system)
-
-Author a production-grade brand book + design system in one shot: long-form `BRAND.md` (20 sections), printable `BRAND.html` rendered to `BRAND.pdf` via Chrome headless, plus `tokens.css` (Tailwind v4 `@theme` + light/dark `:root`) and `tokens.json` (W3C DTCG, consumable by Style Dictionary / Tokens Studio). An anti-template interview won't finalize without one invented proper noun, three falsifiable principles, three real don'ts, and a 150-word voice sample. WCAG 2.2 AA audited at authoring time.
-
-#### [brand-assets](skills/brand-assets)
-
-The mechanical-pixel sibling to `brand-system`. Five pipelines that run locally in seconds: **vectorize** (split-by-color-mask + potrace, not one-shot vtracer which muddies palettes), **finalize-svg** (snap fills to exact brand hexes, normalize viewBox), **rasterize** SVG -> pristine PNG, **icon-pack** (one SVG -> favicon + apple-touch-icon + PWA pack with iOS-opaque background and PWA-maskable safe area), **color-audit** (histogram opaque pixels per hex; fails on >1% drift). Bash + Python stdlib.
-
-#### [image-generation](skills/image-generation)
-
-Generate logos, icons, UI mockups, hero images, and product shots via **OpenAI gpt-image-2** (default since Apr 2026 - took #1 in Image Arena by +242 pts within 12 hours of release) or **Gemini Nano Banana 2 / Pro**. Packages model-selection logic, provider-specific prompt grammars (OpenAI wants labeled segments + negatives; Gemini wants narrative paragraphs + positives only - mixing them up degrades outputs), asset templates, a transparent-background pipeline (gpt-image-2 + `rembg`), Hebrew/RTL guidance, and an iteration loop where Claude reads the saved image with vision and decides ship/edit/rewrite before showing the user.
-
-#### [excalidraw-diagrams](skills/excalidraw-diagrams)
-
-Build architecture, flow, and system diagrams on an Excalidraw+ canvas through its MCP - with real, recognizable tech/logo icons (Postgres, React, Docker, AWS services…) extracted live from the ~230-pack community icon catalog, no bundled asset data. Encodes the whole workflow (plan the visual argument -> frames -> nodes -> icons -> bound arrows -> verify), the element format, and layout/centering/alignment math - plus the MCP quirks that silently break a diagram: screenshots don't render text, the fractional-index z-order trap that hides icons/cards under fills *even on a fresh build* (fix: transparent-fill containers), arrows that detach unless bound, and verifying element IDs before binding. Ships a glyph-fallback recipe set for the brands the libs don't carry.
+| Skill | What it does |
+|---|---|
+| [brand-system](skills/brand-system) | A production-grade brand book: 20-section `BRAND.md`, printable PDF sibling, and matched `tokens.css` (Tailwind v4) + `tokens.json` (W3C DTCG). WCAG 2.2 AA audited at authoring time. |
+| [brand-assets](skills/brand-assets) | The mechanical-pixel sibling: vectorize, finalize-svg, rasterize, icon-pack, colour-audit. Bash + Python stdlib. |
+| [image-generation](skills/image-generation) | Logos, icons, mockups, and product shots via OpenAI gpt-image-2 or Gemini Nano Banana 2 / Pro — each prompted in its provider's native grammar. |
+| [excalidraw-diagrams](skills/excalidraw-diagrams) | Architecture and flow diagrams on an Excalidraw+ canvas with real tech icons, plus the MCP quirks that silently break a diagram. |
 
 ### Engineering decisions
 
-#### [tech-design-doc](skills/tech-design-doc)
-
-Author technical design review documents - RFCs, ADRs, design docs, KEPs, partner-mode TDRs - sized correctly for the audience and the decision being made. Triages format first (1-2 page mini ADR vs 6-page standard RFC vs 10-20 page heavyweight KEP vs partner-mode for external dev partners), scaffolds from research-grounded templates, enforces load-bearing sections (BLUF summary, goals/non-goals with quantified targets, >=3 alternatives, cross-cutting checklist, decision log), inserts mandatory C4 + sequence diagrams in mermaid, and runs a static audit against best-practice anti-patterns. Pairs with `gdoc-sync` to push the finished doc to a live Google Doc for stakeholder review.
-
-#### [codex-review](skills/codex-review)
-
-Get an independent second opinion on a plan or a diff from OpenAI Codex, in a fresh context, with no write access - then adjudicate every finding against the source before acting on any of it. Runs `codex exec` (not `codex exec review`, which refuses a custom prompt alongside a scope flag) at `gpt-5.6-sol` / high effort with the read-only sandbox forced on every invocation, promotes `CLAUDE.md` to a real Codex instruction file via `project_doc_fallback_filenames` so no `AGENTS.md` is needed, and returns schema-constrained findings - each requiring a concrete failure scenario - rendered to a Markdown review with an adjudication table. Sessions are labelled and resumable: resume the same reviewer to argue a specific finding, start a fresh one to re-review after fixes. Built on the measured result that context separation, not the model swap, is where most of the benefit comes from.
+| Skill | What it does |
+|---|---|
+| [tech-design-doc](skills/tech-design-doc) | RFCs, ADRs, KEPs, and partner-mode TDRs, triaged to the right format first and audited against documented anti-patterns. |
+| [codex-review](skills/codex-review) | An independent read-only second opinion on a plan or diff from OpenAI Codex — then adjudicate every finding against the source. |
 
 ### Building agents
 
-#### [prompt-engineer](skills/prompt-engineer)
-
-Expert prompt-engineering reference for AI agents on **Claude / GPT / Gemini** APIs. Covers system-prompt structure, tool descriptions (the single highest-leverage quality factor), context engineering, provider differences (instruction placement, verbosity defaults, persona handling, temperature, caching), budget-model patterns, cross-provider compatibility, anti-patterns, and evaluation/judge-prompt design. Use when writing system prompts, tool descriptions, function-calling schemas, agent instructions, or when an agent keeps misfiring.
-
-#### [writing-project-instructions](skills/writing-project-instructions)
-
-Author or audit a CLAUDE.md / AGENTS.md project-instruction file (the file an AI coding agent reads at session start for project context). Encodes Anthropic's cardinal include/exclude rules, the under-200-line target, the falsifiability test, locations + loading semantics, AGENTS.md interop via `@import`, and Boris Cherny's compounding-engineering loop. Use when authoring a new CLAUDE.md, auditing an existing one for bloat, trimming a too-long file, or diagnosing why Claude isn't following its instructions.
+| Skill | What it does |
+|---|---|
+| [prompt-engineer](skills/prompt-engineer) | Prompt and context engineering for the Claude / GPT / Gemini APIs — system prompts, tool descriptions, provider differences, judge-prompt design. |
+| [writing-project-instructions](skills/writing-project-instructions) | Author or audit a `CLAUDE.md` / `AGENTS.md`, with the falsifiability test and the loading semantics people usually get wrong. |
 
 ### Utilities
 
-#### [namecheap-domains](skills/namecheap-domains)
-
-Check domain availability via Namecheap's `domains.check` API. One domain, batches up to 50, or TLD sweeps (`com,io,ai,dev,co,app,xyz`). Surfaces premium and EAP fees so you don't fall in love with a `$2,999` "available" name. Stdlib-only Python; auto-chunks lists >50 (the API's hard cap).
-
-#### [office-render](skills/office-render)
-
-Render a Microsoft Office file (`.docx` / `.pptx` / `.xlsx`) to PDF and then to page images using the **real** installed Office app (Word / PowerPoint / Excel) on macOS — pixel-faithful, unlike LibreOffice, which substitutes fonts and re-flows complex tables and slide grids. One command produces page JPGs Claude can read, for previewing a doc or visually QA-ing a generated `.docx`/`.pptx`. Bakes in the macOS permission gotchas it took real debugging to find: Automation consent, the Office sandbox's per-file access prompt, Full Disk Access for the Office apps (and the quit-and-relaunch needed for it to apply), and the `with timeout` wrapper that prevents AppleEvent timeouts on PDF export.
-
-#### [viewing-videos](skills/viewing-videos)
-
-Claude can't watch video — this skill is how it sees one anyway: turn the file into the **fewest frames that answer the question** via ffmpeg. Three strategies (targeted seek for known timestamps, scene-change detection for screen shares / slides, interval sampling for continuous motion), frames renamed to their meeting timestamp, an ImageMagick contact sheet to triage 60+ frames in one look, and a crop+upscale recipe for table text at the edge of 720p legibility. Born from a real need: a 30-min Zoom recording whose transcript missed the numbers shown on screen.
-
-#### [proton-pass](skills/proton-pass)
-
-Manage credentials and secrets from the CLI via **Proton Pass** (`pass-cli`): list vaults and items, view / create / update / delete logins, generate random passwords or passphrases, and resolve `pass://vault/item/field` secret references into template files or a command's environment. Bakes in the security guardrails (never print secrets to chat, prefer `inject` / `run` over inline values, always name the vault) and a load-bearing gotcha — the `run -- env X="pass://…"` form has been seen passing the literal URI instead of the resolved secret, so resolve explicitly with command substitution and length-check when correctness matters. macOS/Homebrew binary path.
-
-#### [tavily-extract](skills/tavily-extract)
-
-Fetch the pages the built-in fetcher can't — the JavaScript-rendered SPAs and bot-protected (403) hosts where WebFetch returns an empty shell or a "Loading…" skeleton. Wraps the **Tavily Extract** API (which runs the page's JS and fetches through browser-like infrastructure) to return clean markdown, batches up to 20 URLs per call, and reranks with `--query` to cut nav boilerplate; also does Tavily web search. Stdlib-only Python; key from `$TAVILY_API_KEY` or `~/.config/tavily/api-key`. Encodes the layered lesson learned building the other skills: try WebFetch first (free, and it reads server-rendered sites), reach for a site's own API for *structured* data (rendered charts serialize to axis labels, not numbers), and watch for **soft 404s** — a rendered SPA can return HTTP 200 with a "Page not found" body buried under nav chrome, which the script flags for you.
-
----
+| Skill | What it does |
+|---|---|
+| [namecheap-domains](skills/namecheap-domains) | Domain availability via Namecheap's API — one domain, batches of 50, or TLD sweeps, with premium and EAP fees surfaced. |
+| [office-render](skills/office-render) | Render `.docx` / `.pptx` / `.xlsx` to PDF and page images using the real Office apps on macOS — pixel-faithful, unlike LibreOffice. |
+| [viewing-videos](skills/viewing-videos) | How an agent sees a video: the fewest ffmpeg frames that answer the question, triaged on a contact sheet. |
+| [proton-pass](skills/proton-pass) | Credentials and secrets from the CLI via Proton Pass, with never-print-secrets guardrails. |
+| [tavily-extract](skills/tavily-extract) | Fetch the JS-rendered SPAs and 403-blocked hosts a normal fetcher can't, and flag soft 404s. |
 
 ## How they compose
 

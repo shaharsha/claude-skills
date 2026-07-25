@@ -96,8 +96,7 @@ The import is destructive, the anchor-link rewrite is regex-based, and RTL has q
 ```
 gdoc-sync/
 ├── SKILL.md                   # this file
-├── README.md                  # public-facing overview (GitHub landing page)
-├── LICENSE                    # MIT
+├── README.md                  # human-facing overview (GitHub landing page)
 ├── scripts/
 │   ├── sync-gdoc.py           # the main script (Python, stdlib + google-auth optional)
 │   └── README.md              # per-script invocation + flags
@@ -115,4 +114,7 @@ gdoc-sync/
 
 ## Related skills
 
-None at this time. If you need to generate Doc content (beyond syncing existing markdown), [brand-system](../brand-system/SKILL.md) scaffolds long-form BRAND.md documents — pair it with this skill for rendering to Google Docs.
+- [`gslides-sync`](../gslides-sync/SKILL.md) — same pattern for `.pptx` → Google Slides.
+- [`gsheets`](../gsheets/SKILL.md) — the Sheets-shaped sibling. One service account covers all three; just enable each API in its project.
+- [`tech-design-doc`](../tech-design-doc/SKILL.md) — calls this skill at the end of its workflow to push a finished TDR to a live Doc.
+- [`brand-system`](../brand-system/SKILL.md) — scaffolds long-form BRAND.md documents worth rendering to a Doc.

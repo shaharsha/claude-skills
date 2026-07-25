@@ -136,8 +136,9 @@ complete brand rollout.
 - **Mechanical asset pipelines** (vectorize PNG → SVG, icon-pack
   generation, rasterize at size) — that's [brand-assets](../brand-assets/SKILL.md).
 - **Building the actual components** — §18 of `BRAND.md` documents the
-  specs; [react-components](../react-components/SKILL.md) and
-  [frontend-design](../frontend-design/SKILL.md) implement them.
+  specs; implement them in your own component layer — Anthropic's
+  [frontend-design](https://github.com/anthropics/skills/tree/main/skills/frontend-design)
+  skill is a good companion for that step.
 - **Brand storytelling / marketing copywriting** — §13 governs *how* to
   write, not *what*.
 - **Translating copy** — the skill scaffolds RTL-aware *structure* but
@@ -201,5 +202,4 @@ complete brand rollout.
 
 - [brand-assets](../brand-assets/SKILL.md) — mechanical SVG/PNG pipelines; run after this skill to produce the favicon pack.
 - [image-generation](../image-generation/SKILL.md) — design logo/hero imagery before this skill runs.
-- [frontend-design](../frontend-design/SKILL.md) — implement §18 components in production code.
-- [react-components](../react-components/SKILL.md) — build component primitives once §18 is authored.
+- Anthropic's [frontend-design](https://github.com/anthropics/skills/tree/main/skills/frontend-design) — implement §18 components in production code.

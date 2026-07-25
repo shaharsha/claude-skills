@@ -96,8 +96,7 @@ The import is destructive, fonts get substituted, and custom layouts can be stri
 ```
 gslides-sync/
 ├── SKILL.md                   # this file
-├── README.md                  # public-facing overview (GitHub landing page)
-├── LICENSE                    # MIT
+├── README.md                  # human-facing overview (GitHub landing page)
 ├── scripts/
 │   ├── sync-gslides.py        # the main script (Python, stdlib + google-auth optional)
 │   └── README.md              # per-script invocation + flags
