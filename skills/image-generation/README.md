@@ -1,6 +1,10 @@
-# image-generation — a Claude Code skill
+# image-generation
 
-A Claude Code skill for generating logos, icons, UI mockups, hero images, and product shots using **OpenAI gpt-image-2** and **Google Gemini Nano Banana 2 / Pro** (gemini-3.1-flash-image-preview / gemini-3-pro-image-preview).
+Generate logos, icons, UI mockups, hero images, and product shots using **OpenAI gpt-image-2** and **Google Gemini Nano Banana 2 / Pro** (gemini-3.1-flash-image-preview / gemini-3-pro-image-preview).
+
+Part of [shaharsha/claude-skills](../..). MIT.
+
+---
 
 As of 2026-04-21, **gpt-image-2** is the default model for most jobs — it took #1 across every Image Arena category by +242 points over Nano Banana 2 within 12 hours of release (the largest gap in Arena history). Gemini Pro is retained for hyper-realistic portraiture and multi-reference brand work where Pro still wins. Gemini Flash is retained for cheap exploration.
 
@@ -16,10 +20,18 @@ The skill packages:
 
 ## Install
 
-Drop the directory at `~/.claude/skills/image-generation/`:
+**Claude Code**
 
 ```bash
-git clone https://github.com/shaharsha/claude-skill-image-generation.git ~/.claude/skills/image-generation
+/plugin marketplace add shaharsha/claude-skills
+/plugin install brand-and-visuals@shaharsha-skills
+```
+
+**Any other harness**
+
+```bash
+git clone https://github.com/shaharsha/claude-skills.git
+ln -s "$PWD/claude-skills/skills/image-generation" ~/.claude/skills/image-generation
 ```
 
 Install the local background-removal tool (one-time, ~200-400MB of model weights on first use):
@@ -77,9 +89,29 @@ scripts/
   rembg.sh                        ← local rembg wrapper (birefnet-general default)
 ```
 
+## Gotchas
+
+- **The two providers want opposite prompt structures.** OpenAI wants labeled segments and accepts negative phrasing; Gemini wants narrative paragraphs and **negative phrasing actively backfires** — rewrite "no people" as "empty street". Mixing them up degrades outputs badly, which is why the skill makes you read the provider reference before writing a prompt.
+- **Gemini's aspect ratio goes in `imageConfig`, not the prompt text.** Asking for "16:9" in prose does nothing.
+- **gpt-image-2 has no native transparent output.** Generate on flat white and post-process with `scripts/rembg.sh` — empirically cleaner edges than the old native mode anyway.
+- **Read the generated image before showing the user.** Claude is multimodal and will actually see the pixels: mangled letterforms, wrong hex, broken geometry. Catch it first; don't ask "is this good?" about something you haven't looked at.
+- **After 3 unsuccessful iterations on the same image, change strategy** — rewrite the base prompt or switch models. Tweaking a fourth time rarely converges.
+- **Dimensions must be multiples of 16** for gpt-image-2. `1920×1080` is invalid because 1080 isn't; use `2560×1440`.
+
 ## Notes
 
-- This is a personal skill for use inside Claude Code. The bash scripts assume `bash`, `curl`, `jq`, `base64`, and `file` are on PATH.
+- The bash scripts assume `bash`, `curl`, `jq`, `base64`, and `file` are on PATH.
 - `rembg` requires Python 3.10+ on PATH.
 - Both API keys must be paid-tier.
 - Generated outputs default to `./generated-images/` in the current working directory.
+- Budget discipline: 5 gpt-image-2 high calls at 1024² ≈ $1.05. Full cost tables in [reference/pricing.md](reference/pricing.md).
+
+## Related skills
+
+- [presentation-generator](../presentation-generator) — calls this skill's `openai-image.sh` once per slide.
+- [brand-assets](../brand-assets) — takes a generated logo raster and turns it into production SVG/PNG/favicon assets.
+- [brand-system](../brand-system) — authors the brand book whose palette and motif these prompts should honour.
+
+## License
+
+MIT — see [LICENSE](../../LICENSE).

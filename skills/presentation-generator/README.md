@@ -1,6 +1,10 @@
 # presentation-generator
 
-A Claude Code skill that generates **superb 16:9 widescreen presentations** (PDF and PPTX) where every slide is a custom AI-rendered image — not a templated layout filled with stock photos.
+Generate **superb 16:9 widescreen presentations** (PDF and PPTX) where every slide is a custom AI-rendered image — not a templated layout filled with stock photos.
+
+Part of [shaharsha/claude-skills](../..). MIT.
+
+---
 
 The skill makes Claude think like a creative director:
 
@@ -20,9 +24,25 @@ AI deck generators (Gamma, Tome, Beautiful.AI) produce decks that *look* AI-gene
 
 This skill fills the gap: every slide is a custom-rendered 16:9 image, but the rendering is intentional and varied — the same skill produces a documentary-photographic editorial deck, a dark-UI infographic deck with cards and flowcharts, a hand-drawn whiteboard explainer, or a corporate isometric brief. All from the same pipeline.
 
+## Install
+
+**Claude Code**
+
+```bash
+/plugin marketplace add shaharsha/claude-skills
+/plugin install documents-and-decks@shaharsha-skills
+```
+
+**Any other harness**
+
+```bash
+git clone https://github.com/shaharsha/claude-skills.git
+ln -s "$PWD/claude-skills/skills/presentation-generator" ~/.claude/skills/presentation-generator
+```
+
 ## Quickstart
 
-In a Claude Code conversation, in a directory where you want the deck to live:
+In a conversation, in a directory where you want the deck to live:
 
 > "Use presentation-generator to make a 7-slide deck about [topic], audience: [audience]. Use the [aesthetic] aesthetic with [palette description]."
 
@@ -56,7 +76,16 @@ A 10-slide deck typically costs ~$3-5 in image API spend. Wall-clock time at con
 - `OPENAI_IMAGE_API_KEY` — get from your OpenAI account
 - Python 3.10+ with `python-pptx` and `Pillow` installed
 - Chrome / Chromium for PDF rendering
-- The `image-generation` skill installed alongside this one (this skill calls its `openai-image.sh`)
+- The [image-generation](../image-generation) skill installed alongside this one (this skill calls its `openai-image.sh`)
+
+## Gotchas
+
+- **Lock the style, vary the composition.** If you find yourself describing the palette per slide, push it up into `style_brief`; if you're describing layouts in `style_brief`, push them down per slide. Getting this backwards is what makes an AI deck look AI-generated.
+- **No two adjacent slides should share a composition.** Alternate high-info structured slides (cards, diagrams, charts) with low-info atmospheric ones (photo, quote, big-number).
+- **`1920×1080` is an invalid size** — gpt-image-2 needs both edges to be multiples of 16, and 1080 isn't. The default is `2560×1440`.
+- **Cap QA retries at 2 per slide.** Past that, surface the specific problem to the user instead of burning API spend.
+- **Sibling decks should share one style ref.** Point both deck plans at the same ref PNG and skip the style-lock phase for the second — that's what makes two decks read as one engagement.
+- **Budget ~$6 per finished deck.** If a single deck passes $12, stop and check in.
 
 ## Documentation
 
@@ -77,8 +106,9 @@ The skill's full documentation lives alongside it:
 - [`image-generation`](../image-generation/) — the engine. This skill calls `openai-image.sh` from it.
 - [`brand-system`](../brand-system/) — when a project has a BRAND.md, this skill consumes its palette / typography / motif for pixel-tight brand fidelity.
 - [`brand-assets`](../brand-assets/) — for logo and icon asset preparation that may feed individual slides.
+- [narrating-pptx](../narrating-pptx) — add per-slide voice narration to the deck this produces.
 - Anthropic's [official `pptx` skill](https://github.com/anthropics/skills/tree/main/skills/pptx) — use it instead when the user wants natively-editable PowerPoint with text and shapes (this skill produces image-as-slide PPTX, which is intentionally not text-editable).
 
 ## License
 
-Author: Shahar Shavit. Same license as the rest of the user's `~/.claude/skills/` collection.
+MIT — see [LICENSE](../../LICENSE).

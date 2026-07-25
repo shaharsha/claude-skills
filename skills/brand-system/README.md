@@ -1,13 +1,16 @@
-# brand-system — a Claude Code skill
+# brand-system
 
 Scaffolds a production-grade brand book + design system for a web product.
 Pairs a long-form working reference with a printable stakeholder distillation,
 and ties everything back to code via Tailwind v4 `@theme` and W3C DTCG tokens.
 
-The skill authors the **document**. Its sibling
-[brand-assets](https://github.com/shaharsha/claude-skill-brand-assets) produces
-the **pixels** (favicons, PWA pack, apple-touch-icon). Run both for a complete
-brand rollout.
+Part of [shaharsha/claude-skills](../..). MIT.
+
+---
+
+The skill authors the **document**. Its sibling [brand-assets](../brand-assets)
+produces the **pixels** (favicons, PWA pack, apple-touch-icon). Run both for a
+complete brand rollout.
 
 ## Why this exists
 
@@ -36,17 +39,25 @@ The skill codifies the pattern that actually survives:
 - **WCAG 2.2 AA audited at authoring time.** Every palette pair runs
   through `audit-contrast.py` before the book is considered done.
 
-## Install as a Claude Code skill
+## Install
+
+**Claude Code**
 
 ```bash
-# Into your global skills directory
-git clone https://github.com/shaharsha/claude-skill-brand-system.git \
-  ~/.claude/skills/brand-system
+/plugin marketplace add shaharsha/claude-skills
+/plugin install brand-and-visuals@shaharsha-skills
+```
+
+**Any other harness**
+
+```bash
+git clone https://github.com/shaharsha/claude-skills.git
+ln -s "$PWD/claude-skills/skills/brand-system" ~/.claude/skills/brand-system
 chmod +x ~/.claude/skills/brand-system/scripts/*.sh \
          ~/.claude/skills/brand-system/scripts/*.py
 ```
 
-Claude Code auto-discovers the skill. Trigger with phrases like:
+Trigger with phrases like:
 
 - *"let's draft a brand book for X"*
 - *"create a BRAND.md for this project"*
@@ -55,7 +66,7 @@ Claude Code auto-discovers the skill. Trigger with phrases like:
 
 ## Use the scripts directly
 
-No Claude required. Bash + Python stdlib + Chrome.
+No agent required. Bash + Python stdlib + Chrome.
 
 ```bash
 # End-to-end scaffold
@@ -101,9 +112,8 @@ pipeline:
 
 ```
 brand-system/
-├── SKILL.md                          # Claude entry point (router, <300 lines)
+├── SKILL.md                          # agent entry point (router, <300 lines)
 ├── README.md                         # This file — human-facing
-├── LICENSE                           # MIT
 ├── reference/                        # Deep-dives, loaded on demand
 │   ├── signature-moves.md            # The anti-template interview
 │   ├── canonical-outline.md          # Per-section must-haves for all 20 sections
@@ -154,15 +164,22 @@ deterministic ops so they don't burn context tokens on every invocation.
 
 ## What this skill is NOT
 
-- A logo designer. Use `image-generation`.
-- A mechanical asset pipeline. Use `brand-assets` (the sibling skill).
-- A React/Vue component library. Use `react-components` / `frontend-design`
-  to implement §18 specs.
+- A logo designer. Use [image-generation](../image-generation).
+- A mechanical asset pipeline. Use [brand-assets](../brand-assets) (the sibling skill).
+- A React/Vue component library. Implement the §18 specs with your own component
+  layer — Anthropic's [frontend-design](https://github.com/anthropics/skills/tree/main/skills/frontend-design)
+  skill is a good companion for that step.
 - A Figma plugin. `tokens.json` is DTCG-compatible — import it into
   Tokens Studio if you want Figma sync.
 - A copywriter. §13 governs *how* to write, not *what*.
 - A translation service.
 
+## Related skills
+
+- [brand-assets](../brand-assets) — the pixels: vectorize, favicon + PWA icon pack, colour audit.
+- [image-generation](../image-generation) — design the logo and hero imagery before this runs.
+- [presentation-generator](../presentation-generator) — consumes a `BRAND.md` for pixel-tight deck fidelity.
+
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT — see [LICENSE](../../LICENSE).

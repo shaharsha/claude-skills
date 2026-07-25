@@ -1,8 +1,10 @@
-# gslides-sync — a Claude Code skill
+# gslides-sync
 
-Sync a local `.pptx` file to an existing Google Slides presentation — with broken slide-anchor links rewritten, oversized images shrunk to fit the page, and optional RTL paragraph direction for Hebrew/Arabic decks. Packaged as both a standalone CLI and a [Claude Code](https://claude.com/claude-code) skill.
+Sync a local `.pptx` file to an existing Google Slides presentation — with broken slide-anchor links rewritten, oversized images shrunk to fit the page, and optional RTL paragraph direction for Hebrew/Arabic decks. Works as a standalone CLI and as an agent skill.
 
-Sister project to [`claude-skill-gdoc-sync`](https://github.com/shaharsha/claude-skill-gdoc-sync) — same pattern, swapped for Slides.
+Part of [shaharsha/claude-skills](../..). MIT.
+
+Sister skill to [gdoc-sync](../gdoc-sync) — same pattern, swapped for Slides.
 
 ---
 
@@ -37,8 +39,7 @@ One command, three to four API calls, a deck that works.
 pip install google-auth
 
 # Clone this repo
-git clone https://github.com/shaharsha/claude-skill-gslides-sync.git
-cd claude-skill-gslides-sync
+cd skills/gslides-sync
 
 # Run
 scripts/sync-gslides.py path/to/your.pptx \
@@ -130,12 +131,14 @@ No other dependencies — uses Python's `urllib` stdlib for all HTTP.
 
 ## License
 
-MIT. See [`LICENSE`](LICENSE).
+MIT — see [LICENSE](../../LICENSE).
 
 ## Contributing
 
 Issues and PRs welcome. The script is intentionally single-file and stdlib-leaning — please keep it that way.
 
-## Use with Claude Code
+## Related skills
 
-This repo is also a [Claude Code skill](https://docs.anthropic.com/en/docs/claude-code/skills). Clone it to `~/.claude/skills/gslides-sync/` and Claude Code will auto-discover it when the user asks to sync a pptx to a Google Slides.
+- [gdoc-sync](../gdoc-sync) — Markdown → Google Docs. Same auth model.
+- [gsheets](../gsheets) — the Sheets-shaped sibling.
+- [presentation-generator](../presentation-generator) — produces the `.pptx` files this consumes.

@@ -19,24 +19,71 @@ decisions already settled and not up for debate. That is what makes a reviewer
 able to catch "this doesn't do what it promised", which is the defect class an
 uninformed reviewer structurally cannot see.
 
-Withhold the **rationale**: your reasoning, your justification for the approach,
-your confidence that it works, your explanation of why an apparent problem
-isn't one. A reviewer handed the author's reasoning tends to grade the
-reasoning rather than the artifact.
+Withhold your **conclusions**: your judgement that the approach is sound, your
+confidence that it works, your explanation of why an apparent problem isn't one.
+A reviewer handed the author's verdict tends to grade the verdict rather than
+the artifact.
 
-That split isn't a stylistic preference. In the cross-context review study
-(arXiv:2603.12123, 360 runs over 150 injected defects), the condition that got a
-fresh context *plus the generation prompt* scored F1 23.8 — below plain
-same-session self-review at 24.6, and well below artifact-only review at 28.6.
-Carrying the author's framing across the boundary cost more than the fresh
-context gained. Specification survives that boundary well; rationale does not.
+The line is between *facts* and *verdicts*, and it is finer than "context good,
+opinions bad". Two literatures pull in opposite directions until you draw it in
+the right place. Pascarella et al. find that rationale is one of the seven
+things human reviewers most often have to stop and ask the author for — a
+reviewer who doesn't know why a constraint exists is blocked. But the
+cross-context review study (arXiv:2603.12123, 360 runs over 150 injected
+defects) found the condition given a fresh context *plus the author's generation
+prompt* scored F1 23.8 — below plain same-session self-review at 24.6, and well
+below artifact-only review at 28.6.
+
+Both hold, because they concern different things wearing the same word. "The
+ORM's `bulk_update` doesn't fire signals, so the loop is hand-rolled" is a fact
+about the world the reviewer cannot discover from the diff and would waste a
+finding on. "The race is theoretical because contention is unlikely" is a
+verdict, and handing it over buys you agreement instead of a check.
+
+Reassurance is the more expensive mistake. Confirmation bias in LLM-assisted
+security review is asymmetric: false-negative bias exceeds false-positive bias
+(arXiv:2603.18740) — priming the reviewer that something is fine suppresses real
+detections harder than priming it that something is broken invents false ones.
+So when you're unsure whether a sentence is fact or verdict, cutting it costs
+you less than leaving it in.
+
+### The slots to fill
+
+Work through these. Omit a slot that genuinely doesn't apply; don't pad it.
+Most of the value is in the middle three, which are also the ones authors skip.
+
+| Slot | Why it changes the review |
+|---|---|
+| **Goal** — what this change is for | Without it, every finding is judged against a guess |
+| **Requirements and invariants** — what must hold | The only way it can catch "doesn't do what it promised" |
+| **Runtime context** — concurrency model, where inputs come from and whether they're trusted, scale, blast radius | Drives severity, and prevents whole classes of false positive |
+| **Settled decisions** — chosen, not up for review, with the reason it's settled | Stops it relitigating architecture |
+| **Deliberately deferred** — known gaps that are not this change's job | Stops it reporting your backlog as defects |
+| **Constraints hit while building** — a library that doesn't behave as documented, an API that forced an awkward shape | Points it at the load-bearing weirdness. State the constraint, not your defence of it |
+| **Known-failing or skipped tests** | Otherwise reported as a defect |
+| **Where the plan or ticket lives** — a path, if one exists | Lets it read the source of truth instead of your paraphrase |
+
+Runtime context earns its place. In testing, the reviewer raised a
+read-modify-write race that was real in general and impossible in the actual
+deployment — single worker, caller-held mutex. Given one sentence of runtime
+context up front, that finding never gets written; without it, the finding costs
+an adjudication round. Severity is not a property of the code alone.
+
+Naming where you're least sure is fair game and useful — "the retry path is the
+part I'd most like checked" directs attention without supplying a conclusion.
+What you must not do is state the answer: "the retry path is fine, right?"
+invites agreement, and agreement is what you'll get.
 
 Concretely:
 
 - Good: "Refunds must be idempotent per `(user_id, refund_id)`. Balances are
   money — no lost updates under concurrent calls."
+- Good: "Runs single-worker under gunicorn; `user_id` arrives from an
+  unauthenticated public endpoint. Postgres 14 in production, despite the
+  SQLite fixtures in tests."
 - Good: "Team decision, not up for review: all DB access goes through
-  `db.execute()`. Flagging the direct-driver call in `legacy/` is out of scope."
+  `db.execute()`. The direct-driver call in `legacy/` is deferred to PAY-4471."
+- Good: "`bulk_update` doesn't fire model signals, so the loop is hand-rolled."
 - Bad: "I used a read-modify-write here because the table is small and
   contention is unlikely, so I think the race is theoretical."
 - Bad: "This should be correct — I've already checked the concurrency."
@@ -58,11 +105,21 @@ author's own repository, requested by the author.
 
 Read the diff yourself with git, then read enough of the surrounding files to
 judge whether each change is correct in context. Callers, tests, and adjacent
-error paths are usually where the answer is.
+error paths are usually where the answer is. Untracked files are part of the
+change and `git diff` will not show them — check `git status --short` and read
+those directly.
 
 <intent>
 {{INTENT}}
 </intent>
+
+<your_constraints>
+You are running with the filesystem read-only, so you cannot execute anything
+that writes: test runners fail on their own temp directories. Every statement
+you make about runtime behaviour is therefore inference from reading, not
+observation. Where a finding turns on behaviour you could not observe, say so in
+its evidence and let that show in its confidence.
+</your_constraints>
 
 <what_counts>
 Report a defect when you can name concrete inputs or state that produce a
@@ -105,6 +162,14 @@ does not match the actual repository is the primary thing to catch.
 {{INTENT}}
 </intent>
 
+<your_constraints>
+You are running with the filesystem read-only and cannot execute anything that
+writes, so you cannot try the plan's steps — you can only check them against
+what the repository actually contains. Where a step's viability turns on
+behaviour you could not observe, say so in its evidence and let that show in its
+confidence.
+</your_constraints>
+
 <what_counts>
 Report a defect when the plan would fail, produce a wrong result, or prove
 unimplementable as written. That includes: assumptions contradicted by the
@@ -144,10 +209,20 @@ Check whether the implementation described below does what the plan at
 
 Read the plan, then read the diff with git, then read enough of the repository
 to judge the match. Work through the plan's requirements one at a time.
+Untracked files are part of the change and `git diff` will not show them — check
+`git status --short` and read those directly.
 
 <intent>
 {{INTENT}}
 </intent>
+
+<your_constraints>
+You are running with the filesystem read-only, so you cannot execute anything
+that writes: test runners fail on their own temp directories. Every statement
+you make about runtime behaviour is therefore inference from reading. Where a
+requirement's satisfaction turns on behaviour you could not observe, say so in
+its evidence and let that show in its confidence.
+</your_constraints>
 
 <what_counts>
 Report: requirements the plan states that the implementation does not satisfy,

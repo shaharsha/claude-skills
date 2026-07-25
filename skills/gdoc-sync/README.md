@@ -1,6 +1,8 @@
-# gdoc-sync — a Claude Code skill
+# gdoc-sync
 
-Sync a local Markdown file to an existing Google Doc — with working internal anchor links, auto-resized images, and optional RTL paragraph direction for Hebrew/Arabic docs. Packaged as both a standalone CLI and a [Claude Code](https://claude.com/claude-code) skill.
+Sync a local Markdown file to an existing Google Doc — with working internal anchor links, auto-resized images, and optional RTL paragraph direction for Hebrew/Arabic docs. Works as a standalone CLI and as an agent skill.
+
+Part of [shaharsha/claude-skills](../..). MIT.
 
 ---
 
@@ -28,15 +30,29 @@ Google Docs has a native "import from markdown" endpoint — great for the first
 
 One command, three API calls, a doc that works.
 
+## Install
+
+**Claude Code**
+
+```bash
+/plugin marketplace add shaharsha/claude-skills
+/plugin install documents-and-decks@shaharsha-skills
+```
+
+**Any other harness**
+
+```bash
+git clone https://github.com/shaharsha/claude-skills.git
+ln -s "$PWD/claude-skills/skills/gdoc-sync" ~/.claude/skills/gdoc-sync
+```
+
 ## Quick start
 
 ```bash
-# Install the one optional dependency (only needed for service-account auth)
+# The one optional dependency (only needed for service-account auth)
 pip install google-auth
 
-# Clone this repo
-git clone https://github.com/shaharsha/claude-skill-gdoc-sync.git
-cd claude-skill-gdoc-sync
+cd skills/gdoc-sync
 
 # Run
 scripts/sync-gdoc.py path/to/your.md \
@@ -123,14 +139,16 @@ Full list: [`reference/gotchas.md`](reference/gotchas.md).
 
 No other dependencies — uses Python's `urllib` stdlib for all HTTP.
 
-## License
+## Related skills
 
-MIT. See [`LICENSE`](LICENSE).
+- [gslides-sync](../gslides-sync) — the same pattern for `.pptx` → Google Slides.
+- [gsheets](../gsheets) — the Sheets-shaped sibling. One service account works for all three.
+- [tech-design-doc](../tech-design-doc) — authors docs that get pushed here for stakeholder review.
 
 ## Contributing
 
 Issues and PRs welcome. The script is intentionally single-file and stdlib-leaning — please keep it that way.
 
-## Use with Claude Code
+## License
 
-This repo is also a [Claude Code skill](https://docs.anthropic.com/en/docs/claude-code/skills). Clone it to `~/.claude/skills/gdoc-sync/` and Claude Code will auto-discover it when the user asks to sync markdown to a Google Doc.
+MIT — see [LICENSE](../../LICENSE).

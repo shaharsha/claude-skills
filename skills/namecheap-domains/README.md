@@ -1,6 +1,8 @@
-# namecheap-domains — a Claude Code skill
+# namecheap-domains
 
-Check domain availability against the Namecheap API — single domain, batch up to 50 at once, or multi-TLD sweeps of a base name. Packaged as both a standalone CLI and a [Claude Code](https://claude.com/claude-code) skill.
+Check domain availability against the Namecheap API — single domain, batch up to 50 at once, or multi-TLD sweeps of a base name. Works as a standalone CLI and as an agent skill.
+
+Part of [shaharsha/claude-skills](../..). MIT.
 
 ---
 
@@ -23,11 +25,28 @@ domains  ──batch up to 50──▶  Namecheap API  ──parse XML──▶ 
 
 Auto-chunks any list larger than 50 (the API's hard cap — `51+` returns `"Only 50 domains are allowed in a single check command"`). No runtime dependencies beyond CPython stdlib.
 
+## Install
+
+**Claude Code**
+
+```bash
+/plugin marketplace add shaharsha/claude-skills
+/plugin install utilities@shaharsha-skills
+```
+
+**Any other harness**
+
+```bash
+git clone https://github.com/shaharsha/claude-skills.git
+ln -s "$PWD/claude-skills/skills/namecheap-domains" ~/.claude/skills/namecheap-domains
+```
+
+Invoke it by asking naturally — "is `brugfdjiujhrg.ai` available?", "find me an available `.io` for my AI startup", "check these 12 domains". The skill's `allowed-tools` is scoped to the exact script path, so there are no extra permission prompts once installed.
+
 ## Quick start
 
 ```bash
-git clone https://github.com/shaharsha/claude-skill-namecheap-domains.git
-cd claude-skill-namecheap-domains
+cd skills/namecheap-domains
 
 export NAMECHEAP_API_USER=your-username
 export NAMECHEAP_API_KEY=your-api-key
@@ -50,21 +69,7 @@ scripts/check.py foo.com bar.ai --json
 
 1. **Get Namecheap API access.** Sign in → Profile → Tools → "Namecheap API Access" → enable. You'll get an API key.
 2. **Whitelist your public IP.** Same settings page — add the IP your requests will originate from. If your IP changes, you'll get `Invalid request IP`; update the whitelist.
-3. **Export credentials** (env vars, `.env` file, or — if you use Claude Code — a `## Namecheap` block in `~/.claude/projects/<project>/memory/api-keys.md` following the pattern documented in your global `CLAUDE.md`).
-
-## Installing as a Claude Code skill
-
-```bash
-git clone https://github.com/shaharsha/claude-skill-namecheap-domains.git \
-  ~/.claude/skills/namecheap-domains
-```
-
-Restart Claude Code (or `/agents`) and the skill will register. Invoke it by:
-
-- asking naturally: "is `brugfdjiujhrg.ai` available?", "find me an available `.io` domain for my AI startup", "check these 12 domains"
-- explicitly: `/namecheap-domains`
-
-The skill's `allowed-tools` is scoped to the exact script path, so no extra permission prompts once installed.
+3. **Export credentials** — env vars, a `.env` file, or a `## Namecheap` block in your agent's credentials file (see the fallback note below).
 
 ## Flags
 
@@ -112,8 +117,8 @@ AVAILABLE  newtld.app [EAP +$1000.00]
 
 ## Credentials file fallback (optional)
 
-If env vars are unset, the script will read a `## Namecheap` section from `~/.claude/projects/-Users-shaharshavit/memory/api-keys.md` (the author's convention). Change `CREDS_FILE` at the top of [scripts/check.py](scripts/check.py) or just use env vars.
+If env vars are unset, the script reads a `## Namecheap` section from `~/.claude/projects/-Users-shaharshavit/memory/api-keys.md` (the author's convention). Change `CREDS_FILE` at the top of [scripts/check.py](scripts/check.py), or just use env vars.
 
 ## License
 
-MIT.
+MIT — see [LICENSE](../../LICENSE).

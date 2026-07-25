@@ -44,11 +44,22 @@ others sees.
 **1. Write the prompt.** Read `references/prompts.md`, take the template for the
 mode, fill `{{SCOPE}}` and `{{INTENT}}`, write it to a temp file.
 
-The `{{INTENT}}` block is where this succeeds or fails. Give the reviewer the
-specification — what the change must accomplish, the invariants it must hold,
-the decisions already settled — and withhold your rationale for the approach.
-`references/prompts.md` explains why the distinction is load-bearing and shows
-the good and bad forms; read it rather than guessing.
+The `{{INTENT}}` block is where this succeeds or fails, and it is the step to
+slow down on. `references/prompts.md` has the slots to work through — goal,
+requirements and invariants, runtime context, settled decisions, deliberately
+deferred work, constraints hit while building, known-failing tests, and where
+the plan lives. Read it rather than improvising; the three slots authors skip
+are the three that prevent the most false positives.
+
+The rule that governs all of them: give facts and constraints, withhold verdicts
+and confidence. "`bulk_update` doesn't fire signals, so the loop is hand-rolled"
+is context the reviewer cannot derive. "The race is theoretical, contention is
+unlikely" is your conclusion, and supplying it buys agreement instead of a
+check — the more so because the bias runs asymmetrically toward false negatives.
+
+Runtime context deserves its own sentence even when it feels obvious. Whether
+the code runs single-worker or concurrently, and whether its inputs are trusted,
+decides the severity of half the findings a reviewer can raise.
 
 **2. Run the review.**
 
@@ -79,6 +90,38 @@ result up when it lands, rather than sitting on a blocked call.
 **5. Report, then ask.** Give the user the table of verdicts and what you plan
 to change. Apply fixes after they say so, not before: they asked for a review,
 which is not the same as asking for a rewrite.
+
+## What the reviewer can and can't do
+
+Read-only restricts writes, not thinking. Measured on codex-cli 0.145.0:
+
+| | |
+|---|---|
+| Run commands — `git log`, `git diff`, `grep`, `nl`, `python3` | ✅ it does this unprompted |
+| Read any file in the repo | ✅ |
+| Write anywhere — repo, `/tmp`, `mkdir` | ❌ no writable location exists |
+| Raw network — `curl`, `urllib`, `ping` | ❌ DNS resolution fails |
+| Web search | ✅ with `--search` |
+| **Run the test suite or a build** | ❌ **see below** |
+
+`--search` is worth adding when correctness depends on something outside the
+repo: whether a library API is being used as documented, whether a version has a
+known advisory, whether a protocol or format is being implemented correctly.
+Leave it off for reviews of internal logic — it costs latency and adds another
+untrusted-input channel for no gain. It works despite the network being blocked
+because the search executes at OpenAI, not locally.
+
+**The reviewer cannot execute your code.** Anything needing a temp directory
+dies under read-only — pytest fails outright with `No usable temporary directory
+found`. So every claim it makes about runtime behaviour is inference from
+reading, not observation. That is the single most useful thing to hold in mind
+while adjudicating: it is often right, and it has no way to check itself.
+
+Loosening the sandbox to fix this is a bad trade. A reviewer that can write can
+be induced to write by anything it reads in the repo, and you would be running
+an agent with a stated goal of finding fault and the ability to act on it. If a
+finding genuinely hinges on runtime behaviour, run the test yourself — you have
+the tools and the context to do it properly.
 
 ## Adjudicating
 

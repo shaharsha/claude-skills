@@ -1,6 +1,8 @@
-# gsheets — a Claude Code skill
+# gsheets
 
-A comprehensive Python CLI over the **Google Sheets API v4**: write data, manage tabs, style headers, freeze rows, set column widths, add filters, apply conditional formatting and banding — or drop to a raw `batchUpdate` escape hatch for anything more exotic. Packaged as both a standalone CLI and a [Claude Code](https://claude.com/claude-code) skill.
+A comprehensive Python CLI over the **Google Sheets API v4**: write data, manage tabs, style headers, freeze rows, set column widths, add filters, apply conditional formatting and banding — or drop to a raw `batchUpdate` escape hatch for anything more exotic. Works as a standalone CLI and as an agent skill.
+
+Part of [shaharsha/claude-skills](../..). MIT.
 
 Sister skill to [gdoc-sync](../gdoc-sync) (Markdown → Google Docs) and [gslides-sync](../gslides-sync) (`.pptx` → Google Slides). Same service-account auth model; same retry semantics; different surface.
 
@@ -32,7 +34,7 @@ One stdlib-only Python script. Optional `google-auth` for service-account auth (
 
 ## Install
 
-### As a Claude Code skill
+### Claude Code
 
 ```bash
 /plugin marketplace add shaharsha/claude-skills
@@ -215,6 +217,13 @@ Sensible defaults baked into `format-header` and `banding`. All WCAG-AA contrast
 
 ---
 
+## Related skills
+
+- [gdoc-sync](../gdoc-sync) — Markdown → Google Docs.
+- [gslides-sync](../gslides-sync) — `.pptx` → Google Slides.
+
+One service account works for all three; just enable each API in its project.
+
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT — see [LICENSE](../../LICENSE).

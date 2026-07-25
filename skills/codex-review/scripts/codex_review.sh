@@ -25,6 +25,7 @@ NAME=""
 RESUME=""
 SCHEMA="$SKILL_DIR/assets/findings.schema.json"
 EPHEMERAL=0
+SEARCH=0
 
 usage() {
   cat >&2 <<'USAGE'
@@ -40,6 +41,8 @@ usage: codex_review.sh --repo <dir> --prompt-file <file> [options]
   --effort <level>      low|medium|high|xhigh|max (default: high)
   --schema <file>       JSON Schema for the result (default: bundled findings schema)
   --no-schema           Ask for prose instead of structured findings
+  --search              Give the reviewer web search. Runs server-side, so it
+                        works under the read-only sandbox with no local network.
   --ephemeral           Don't persist the session (cannot be resumed later)
   --list                Print known session labels for --repo and exit
 
@@ -60,6 +63,7 @@ while [[ $# -gt 0 ]]; do
     --effort)      EFFORT="${2:-}"; shift 2 ;;
     --schema)      SCHEMA="${2:-}"; shift 2 ;;
     --no-schema)   SCHEMA=""; shift ;;
+    --search)      SEARCH=1; shift ;;
     --ephemeral)   EPHEMERAL=1; shift ;;
     --list)        LIST_ONLY=1; shift ;;
     -h|--help)     usage ;;
@@ -149,6 +153,11 @@ COMMON=(
   -o "$RAW"
 )
 [[ -n "$SCHEMA" ]] && COMMON+=(--output-schema "$SCHEMA")
+# `codex exec` rejects the --search flag; the config key is the only route. The
+# search runs server-side at OpenAI, so it needs no egress from the sandbox --
+# which is the only way to get web access here at all, since read-only blocks
+# curl outright and macOS seatbelt ignores network_access even in write modes.
+[[ "$SEARCH" -eq 1 ]] && COMMON+=(-c 'tools.web_search=true')
 
 if [[ -n "$RESUME_ID" ]]; then
   # resume accepts neither -s nor -C. The working root comes from the original
