@@ -223,5 +223,4 @@ A 10-slide deck at gpt-image-2 high (2560×1440) costs roughly **$3-5** per gene
 | [reference/image-prompting.md](reference/image-prompting.md) | Per-slide prompt engineering for gpt-image-2 — text rendering, structured layouts, label legibility, palette injection |
 | [reference/consistency-tactics.md](reference/consistency-tactics.md) | Style lock, palette pinning, motif repetition, model selection |
 | [reference/output-formats.md](reference/output-formats.md) | PDF vs PPTX dimensions, safe areas, gotchas |
-| [reference/examples/product-pitch-10.md](reference/examples/product-pitch-10.md) | Worked example: 10-slide product pitch deck plan |
-| [reference/examples/research-explainer-7.md](reference/examples/research-explainer-7.md) | Worked example: 7-slide research explainer |
+| [templates/deck-plan.example.json](templates/deck-plan.example.json) | Worked example: 8-slide deck plan with eight different compositions |

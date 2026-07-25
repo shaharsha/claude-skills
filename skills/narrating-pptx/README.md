@@ -86,7 +86,8 @@ This is where a narrated deck is won or lost.
 
 - **Language: exactly what the user asks for.** Hebrew, English, or mixed. For Hebrew, write like a native presenter who naturally keeps technical terms in English (Israeli hi-tech register: "ה-agent מנתח את הדאטה וכותב manifest"). Don't translate terms the audience uses in English.
 - **Depth: ~600–900 chars per slide (≈45–75 s).** Open with context → walk the elements actually visible on the slide ("תסתכלו על המספרים מימין…" / "the green bar at the bottom…") → explain the *why* → bridge to the next slide.
-- **Audio tags are the "Enhance" feature.** ElevenLabs' UI Enhance button just runs an LLM to insert tags — there is no Enhance API. You are that LLM. Weave 2–4 per script, sparingly: `[warm]` for openings and closings, `[confident]` on key claims, `[pause]` before a pivot, `[excited]`. Tags stay in English brackets even inside Hebrew text.
+- **Audio tags are the "Enhance" feature.** ElevenLabs' UI Enhance button just runs an LLM to insert tags — there is no Enhance API. You are that LLM. Default to 2–4 per script for a clean corporate read; go heavier (5–8, varied) only when someone explicitly wants an expressive performance, capping around one per sentence. Tags stay in English brackets even inside Hebrew text, placed at the beat they modify. Ellipsis `…` is a more reliable pause than `[pause]`.
+- **⚠️ Tags are undocumented for non-English.** Heavy tagging on Hebrew can make v3 *speak the tag word aloud*, over-act, or insert odd pauses. Generate ONE slide and ear-check that tags are performed rather than spoken before spending credits on a whole deck.
 - **Hard limit: 5,000 chars per script** (the `eleven_v3` request cap).
 
 ## ElevenLabs reference

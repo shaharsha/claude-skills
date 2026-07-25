@@ -2,7 +2,7 @@
 
 Two supported auth paths for `sync-gslides.py`. Pick one and do the setup once. Service account is strongly recommended.
 
-If you already use [`gdoc-sync`](https://github.com/shaharsha/claude-skill-gdoc-sync) with a service account, **the same SA works** — skip to step 2 (enable Slides API), then step 5 (share the target Slides).
+If you already use [`gdoc-sync`](../../gdoc-sync) with a service account, **the same SA works** — skip to step 2 (enable Slides API), then step 5 (share the target Slides).
 
 ## Path A: Service account (recommended)
 

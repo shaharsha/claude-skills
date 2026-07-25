@@ -120,6 +120,3 @@ Per Anthropic's [skill best practices](https://code.claude.com/docs/en/skills.md
 
 MIT — see [LICENSE](../../LICENSE).
 
-## License
-
-MIT. See [LICENSE](LICENSE).

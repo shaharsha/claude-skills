@@ -23,7 +23,16 @@ Turn any pptx into a self-presenting deck: write presenter-style narration scrip
 
 **Depth: the voice IS the presenter, not a caption reader.** Target ~600–900 chars per slide (≈45–75 s). Each script: open with context → walk the elements actually visible on the slide ("תסתכלו על המספרים מימין…" / "the green bar at the bottom…") → explain the *why* → bridge to the next slide. Short caption-style scripts (~200 chars) feel like labels, not a presentation — users reject them.
 
-**Audio tags = the "Enhance" feature.** ElevenLabs' UI "Enhance" button just uses an LLM to add tags — there is no Enhance API. You are that LLM: weave 2–4 tags per script, sparingly: `[warm]` (openings/closings), `[confident]` (key claims), `[pause]` (before a pivot), `[excited]`. Tags stay in English brackets even inside Hebrew text.
+**Audio tags = the "Enhance" feature.** ElevenLabs' UI "Enhance" button just uses an LLM to add tags — there is no Enhance API. You are that LLM: weave tags into the script. Tags stay in **English brackets even inside Hebrew/other-language text**, placed at the emotional beat they modify.
+
+**Tag catalog (Eleven v3)** — pick to match the moment, don't just repeat `[warm]`/`[confident]`:
+- **Tone / emotion:** `[warm]` `[excited]` `[confident]` `[curious]` `[surprised]` `[impressed]` `[amused]` `[thoughtful]` `[serious]` `[reassuring]` `[professional]` `[sympathetic]` `[questioning]` `[sarcastic]` `[mischievously]` `[nervous]` `[frustrated]` `[calm]`
+- **Non-verbal reactions:** `[chuckles]` `[laughs]` `[giggles]` `[sighs]` `[exhales]` `[gasps]` `[whispers]` `[clears throat]`
+- **Punctuation levers (combine with tags):** ellipsis `…` = natural pause (more reliable than `[pause]`); CAPS = emphasis; real question marks / commas set rhythm. Structure matters more than tag count.
+
+**Density:** default 2–4 per script for a clean corporate read. Some users explicitly want a *dense, expressive* performance — then go heavier (5–8, varied), matching tag to content (`[excited]`/`[surprised]` on a reveal, `[amused]`/`[chuckles]` on a wry aside, `[serious]`/`[sighs]` on a cost, `[curious]` on a "so what?" pivot). Cap around one tag per sentence — past that, delivery gets jerky and tags start leaking into the audio.
+
+**⚠️ Non-English caveat (Hebrew, etc.):** ElevenLabs has **no documented tag support for non-English**. Heavy tagging on Hebrew can (a) make v3 *speak the tag word aloud*, (b) over-act, or (c) insert odd pauses. So when tagging densely or in a non-English language, **generate ONE slide first and ear-check that tags are performed, not spoken**, before spending credits on the whole deck. Sources: [v3 audio tags](https://elevenlabs.io/blog/v3-audiotags), [best practices](https://elevenlabs.io/docs/overview/capabilities/text-to-speech/best-practices).
 
 **Hard limit:** 5,000 chars per script (`eleven_v3` request cap).
 
