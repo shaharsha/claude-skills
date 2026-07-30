@@ -26,31 +26,17 @@ import base64
 import glob
 import json
 import os
-import subprocess
+
 import sys
 import time
 
 MAILBOX = os.path.expanduser("~/.claude/mailbox")
 ROOT = os.environ.get("CCREAD_ROOT", os.path.expanduser("~/.claude/projects"))
 
-# The receiving side. Kept here so `--arm` and the liveness probe can never
-# disagree about what an armed inbox looks like.
-#
-# Drain-and-follow rather than `tail -f`, for two reasons that both bite:
-#   * `tail -f -n 0` starts at end-of-file, so anything queued BEFORE the
-#     session armed is silently skipped — which would make `--force` useless
-#     and, worse, lose a message that was accepted.
-#   * `tail -f` on a missing file exits immediately, so a session would "arm"
-#     its inbox and have the watch die on the spot, looking armed to everyone.
-# Moving the file aside before decoding means a message arriving mid-drain
-# lands in the fresh inbox and is picked up next pass, never lost or doubled.
-ARM_TEMPLATE = (
-    "mkdir -p {mailbox}; touch {inbox}; "
-    "while true; do "
-    'if [ -s {inbox} ]; then t=$(mktemp); mv {inbox} "$t"; touch {inbox}; '
-    'while IFS= read -r l; do printf %s "$l" | base64 --decode; echo; done < "$t"; '
-    'rm -f "$t"; fi; sleep 1; done'
-)
+# The receiving side lives in ccarm, not inline here. An inline copy would
+# drift: the version this once printed had no heartbeat, so a session armed
+# from it would have read as unarmed forever. One implementation, no drift.
+CCARM = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ccarm")
 
 
 def sessions():
@@ -87,17 +73,24 @@ def inbox_for(sid):
     return os.path.join(MAILBOX, f"{sid}.inbox")
 
 
-def is_armed(sid):
-    """True when a live process is draining this session's inbox.
+HEARTBEAT_STALE_SECONDS = 10   # ccarm refreshes every ~1s
 
-    Presence of a watcher is the only evidence that a write will be seen, which
-    is why this gates sending at all.
+
+def is_armed(sid):
+    """True when a live watcher is draining this session's inbox.
+
+    Reads ccarm's heartbeat rather than scanning the process table. A `pgrep`
+    for the inbox path matches anything that merely *mentions* it — a grep, a
+    cat, an editor — so an unarmed session reads as armed and the message is
+    reported delivered into a void. Requiring a fresh mtime AND a live pid
+    admits only a real watcher, and notices a dead one within seconds.
     """
+    hb = os.path.join(MAILBOX, f"{sid}.armed")
     try:
-        out = subprocess.run(["pgrep", "-f", f"{sid}.inbox"],
-                             capture_output=True, text=True, timeout=5)
-        pids = [p for p in out.stdout.split() if p and int(p) != os.getpid()]
-        return bool(pids)
+        if time.time() - os.path.getmtime(hb) > HEARTBEAT_STALE_SECONDS:
+            return False
+        os.kill(int(open(hb).read().strip()), 0)   # signal 0 = liveness probe
+        return True
     except Exception:
         return False
 
@@ -151,8 +144,9 @@ def main():
     inbox = inbox_for(sid)
 
     if a.arm:
-        print(f"# have session {sid[:8]} ({title}) run this as a persistent Monitor:\n")
-        print(ARM_TEMPLATE.format(inbox=inbox, mailbox=MAILBOX))
+        print(f"# {sid[:8]} ({title}) can receive once it runs /arm-inbox,")
+        print("# or calls Monitor with persistent: true and this command:\n")
+        print(f"{CCARM} {sid}")
         return
 
     body = open(a.file).read() if a.file else " ".join(a.message)

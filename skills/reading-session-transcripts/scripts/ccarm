@@ -45,9 +45,19 @@ fi
 
 MAILBOX="${CCREAD_MAILBOX:-$HOME/.claude/mailbox}"
 INBOX="$MAILBOX/$SID.inbox"
+# Proof-of-life for senders. Holding a pid and a fresh mtime lets a sender
+# distinguish a real watcher from any process that merely mentions the inbox
+# path — a `grep` or a `cat` would otherwise read as "armed", and a message
+# sent on that evidence lands nowhere while reporting success.
+HEARTBEAT="$MAILBOX/$SID.armed"
 
 mkdir -p "$MAILBOX"
 touch "$INBOX"
+
+# Remove the heartbeat on any exit, so a stopped watcher stops claiming to be
+# alive within one poll rather than lingering as a stale claim.
+trap 'rm -f "$HEARTBEAT"' EXIT INT TERM
+printf %s "$$" > "$HEARTBEAT"
 
 while true; do
   if [ -s "$INBOX" ]; then
@@ -61,5 +71,6 @@ while true; do
     done < "$t"
     rm -f "$t"
   fi
+  printf %s "$$" > "$HEARTBEAT"   # refresh mtime: senders read staleness as dead
   sleep 1
 done
