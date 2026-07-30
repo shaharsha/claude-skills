@@ -1,0 +1,249 @@
+#!/usr/bin/env python3
+"""ccread — read agent session transcripts as conversation, not as tool spam.
+
+A session .jsonl is ~95% tool calls and tool results. This prints what was
+*said*: the human's turns and the assistant's prose. Tool calls collapse to one
+dim line each (with --tools) so you can still see what happened between remarks.
+
+    ccread                          list sessions, oldest first
+    ccread --since 2026-07-29       ...only ones active on/after a date
+    ccread <id|title>               print that session's conversation
+    ccread <id> --last 20           ...only the final 20 turns
+    ccread <id> --from 06:00        ...only after a time on its last day
+    ccread <id> --tools             ...with tool calls interleaved
+    ccread <id> --grep codex        ...only turns matching a regex
+    ccread --all --grep "leak"      search every session's prose at once
+
+Sessions resolve by id prefix or by a substring of the title or cwd:
+
+    ccread "TOR-55"
+
+Transcript root defaults to ~/.claude/projects (Claude Code). Override with
+--root or CCREAD_ROOT for another harness that writes the same JSONL shape.
+
+Why this exists: a parallel session's reasoning lives only in its prose. What it
+decided, what it refuted, what it flagged about its own work — none of that is
+in the diff, the PR, or the ticket.
+"""
+import argparse, glob, json, os, re, sys, textwrap, time
+
+DEFAULT_ROOT = os.environ.get("CCREAD_ROOT", os.path.expanduser("~/.claude/projects"))
+DIM, BOLD, YOU, BOT, RST = "\033[2m", "\033[1m", "\033[36m", "\033[32m", "\033[0m"
+
+# Harness-injected "user" turns. A real instruction never looks like these, and
+# leaving them in buries the human's actual words.
+NOISE = re.compile(
+    r"^(<|Skill /|\(Re-invocation|This session is being continued|Caveat:|"
+    r"\[Request interrupted|Base directory for this skill:)"
+)
+
+
+def sessions(root):
+    """Every transcript under root, with the metadata needed to choose one."""
+    out = []
+    for f in glob.glob(os.path.join(root, "*", "*.jsonl")) + \
+             glob.glob(os.path.join(root, "*", "*", "*.jsonl")):
+        try:
+            if os.path.getsize(f) < 2000:
+                continue
+        except OSError:
+            continue
+        title = cwd = None
+        ts = []
+        try:
+            with open(f, errors="replace") as fh:
+                for line in fh:
+                    if not line.startswith("{"):
+                        continue
+                    try:
+                        o = json.loads(line)
+                    except ValueError:
+                        continue
+                    title = o.get("aiTitle") or title
+                    cwd = o.get("cwd") or cwd
+                    if o.get("timestamp"):
+                        ts.append(o["timestamp"])
+        except OSError:
+            continue
+        if not ts:
+            continue
+        out.append(dict(
+            path=f, sid=os.path.basename(f)[:8], title=title or "(untitled)",
+            cwd=cwd or "", start=ts[0], end=ts[-1],
+            project=os.path.basename(os.path.dirname(f)),
+            mtime=os.path.getmtime(f),
+        ))
+    out.sort(key=lambda s: s["start"])
+    return out
+
+
+def dedupe(all_s):
+    """One row per session id.
+
+    A transcript is filed under a directory keyed on the session's cwd, so a
+    session that moved between worktrees leaves several copies on disk. The
+    most recently written one is the real transcript; the rest are stale.
+    """
+    by = {}
+    for s in all_s:
+        prev = by.get(s["sid"])
+        if prev is None:
+            by[s["sid"]] = dict(s, copies=1)
+        elif s["mtime"] > prev["mtime"]:
+            by[s["sid"]] = dict(s, copies=prev["copies"] + 1)
+        else:
+            prev["copies"] += 1
+    return sorted(by.values(), key=lambda s: s["start"])
+
+
+def turns(path):
+    """Yield (timestamp, kind, text) where kind is 'you', 'bot' or 'tool'."""
+    with open(path, errors="replace") as fh:
+        for line in fh:
+            if not line.startswith("{"):
+                continue
+            try:
+                o = json.loads(line)
+            except ValueError:
+                continue
+            ts, typ = o.get("timestamp", ""), o.get("type")
+            c = o.get("message", {}).get("content")
+            if typ == "user":
+                # A human turn is a bare string, or a list carrying text blocks.
+                # Lists of tool_result blocks are the harness, not a person.
+                text = c if isinstance(c, str) else (
+                    " ".join(b.get("text", "") for b in c
+                             if isinstance(b, dict) and b.get("type") == "text")
+                    if isinstance(c, list) else "")
+                text = (text or "").strip()
+                if text and not NOISE.match(text):
+                    yield ts, "you", text
+            elif typ == "assistant" and isinstance(c, list):
+                said = " ".join(b.get("text", "") for b in c
+                                if isinstance(b, dict) and b.get("type") == "text").strip()
+                if said:
+                    yield ts, "bot", said
+                for b in c:
+                    if isinstance(b, dict) and b.get("type") == "tool_use":
+                        inp = b.get("input", {}) or {}
+                        d = (inp.get("command") or inp.get("file_path")
+                             or inp.get("description") or inp.get("prompt") or "")
+                        yield ts, "tool", f"{b.get('name')}: {str(d)[:110]}"
+
+
+def resolve(needle, all_s):
+    hits = [s for s in all_s if s["sid"].startswith(needle)]
+    if not hits:
+        n = needle.lower()
+        hits = [s for s in all_s if n in s["title"].lower() or n in s["cwd"].lower()]
+    if not hits:
+        sys.exit(f"no session matches {needle!r} — run `ccread` to list them")
+    if len({h["sid"] for h in hits}) > 1:
+        print("ambiguous — matches:", file=sys.stderr)
+        for h in sorted(hits, key=lambda h: h["start"]):
+            print(f'  {h["sid"]}  {h["title"]}', file=sys.stderr)
+        sys.exit(1)
+    return max(hits, key=lambda h: h["mtime"])
+
+
+def render(ts, kind, text, width):
+    stamp = f"{DIM}{ts[5:16]}{RST}"
+    if kind == "tool":
+        return f"  {stamp} {DIM}·  {text}{RST}"
+    tag = f"{YOU}YOU{RST}" if kind == "you" else f"{BOT}CC {RST}"
+    return f"  {stamp} {tag} {textwrap.fill(text, width, subsequent_indent=' ' * 22)}\n"
+
+
+def main():
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument("session", nargs="?")
+    p.add_argument("--root", default=DEFAULT_ROOT)
+    p.add_argument("--since", help="list/search only from this date (YYYY-MM-DD)")
+    p.add_argument("--from", dest="frm",
+                   help="skip turns before HH:MM (on the session's last day) or an ISO stamp")
+    p.add_argument("--last", type=int, help="only the final N turns")
+    p.add_argument("--tools", action="store_true", help="interleave tool calls")
+    p.add_argument("--grep", help="only turns matching this regex (case-insensitive)")
+    p.add_argument("--all", action="store_true", help="search across every session")
+    p.add_argument("--width", type=int, default=100)
+    p.add_argument("-h", "--help", action="store_true")
+    a = p.parse_args()
+    if a.help:
+        print(__doc__)
+        return
+
+    all_s = sessions(a.root)
+    if not all_s:
+        sys.exit(f"no transcripts under {a.root} — pass --root or set CCREAD_ROOT")
+    rx = re.compile(a.grep, re.I) if a.grep else None
+
+    # ── search every session ────────────────────────────────────────────────
+    if a.all:
+        if not rx:
+            sys.exit("--all needs --grep")
+        for s in dedupe(all_s):
+            if a.since and s["end"][:10] < a.since:
+                continue
+            shown = False
+            for ts, kind, text in turns(s["path"]):
+                if kind == "tool" and not a.tools:
+                    continue
+                # A long-lived session spans many days, so --since has to bound
+                # turns as well or one old session floods the whole search.
+                if a.since and ts[:10] < a.since:
+                    continue
+                if not rx.search(text):
+                    continue
+                if not shown:
+                    print(f'\n{BOLD}══ {s["sid"]}  {s["title"]}{RST}')
+                    shown = True
+                print(render(ts, kind, text[:400], a.width))
+        return
+
+    # ── list ────────────────────────────────────────────────────────────────
+    if not a.session:
+        now = time.time()
+        for s in dedupe(all_s):
+            if a.since and s["end"][:10] < a.since:
+                continue
+            idle = int((now - s["mtime"]) / 60)
+            live = "🟢" if idle < 15 else ("🟡" if idle < 180 else "⚪")
+            notes = []
+            if "worktrees" in s["project"]:
+                notes.append("worktree-filed")
+            if s["copies"] > 1:
+                notes.append(f'{s["copies"]} copies')
+            tail = f'  {DIM}({", ".join(notes)}){RST}' if notes else ""
+            print(f'{live} {s["sid"]}  {s["start"][5:16]} → {s["end"][5:16]}  '
+                  f'{s["title"][:58]}{tail}')
+        return
+
+    # ── one session ─────────────────────────────────────────────────────────
+    s = resolve(a.session, all_s)
+    # A bare HH:MM means that time on the session's LAST day. Sessions run
+    # overnight, and a plain time-of-day comparison silently matches yesterday.
+    frm = a.frm
+    if frm and len(frm) == 5 and ":" in frm:
+        frm = f'{s["end"][:10]}T{frm}'
+    elif frm and len(frm) == 11 and frm[2] == "-":          # MM-DDTHH:MM
+        frm = f'{s["end"][:4]}-{frm}'
+
+    print(f'{BOLD}{s["title"]}{RST}')
+    print(f'{DIM}{s["sid"]} · {s["start"][:16]} → {s["end"][:16]} · {s["cwd"]}{RST}')
+    if frm:
+        print(f"{DIM}from {frm}{RST}")
+    print()
+
+    rows = [(ts, k, t) for ts, k, t in turns(s["path"])
+            if (k != "tool" or a.tools)
+            and not (frm and ts < frm)
+            and (rx is None or rx.search(t))]
+    for ts, kind, text in (rows[-a.last:] if a.last else rows):
+        print(render(ts, kind, text, a.width))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except BrokenPipeError:
+        pass  # piping into `head` is the normal case

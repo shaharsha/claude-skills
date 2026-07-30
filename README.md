@@ -21,7 +21,7 @@ This installs all 20 skills as one plugin. Or pick a subset:
 /plugin install documents-and-decks@shaharsha-skills    # gdoc-sync + gslides-sync + gsheets + presentation-generator + narrating-pptx + deck-to-video + self-presenting-decks
 /plugin install brand-and-visuals@shaharsha-skills      # brand-system + brand-assets + image-generation + excalidraw-diagrams
 /plugin install engineering-decisions@shaharsha-skills  # tech-design-doc + codex-review
-/plugin install building-agents@shaharsha-skills        # prompt-engineer + writing-project-instructions
+/plugin install building-agents@shaharsha-skills        # prompt-engineer + writing-project-instructions + reading-session-transcripts
 /plugin install utilities@shaharsha-skills              # namecheap-domains + office-render + viewing-videos + proton-pass + tavily-extract
 ```
 
@@ -75,6 +75,7 @@ Each links to its own README — what it does, why it exists, install, and the g
 |---|---|
 | [prompt-engineer](skills/prompt-engineer) | Prompt and context engineering for the Claude / GPT / Gemini APIs — system prompts, tool descriptions, provider differences, judge-prompt design. |
 | [writing-project-instructions](skills/writing-project-instructions) | Author or audit a `CLAUDE.md` / `AGENTS.md`, with the falsifiability test and the loading semantics people usually get wrong. |
+| [reading-session-transcripts](skills/reading-session-transcripts) | Read what a parallel agent session actually said — list every session, print one as a conversation, search the prose of all of them. |
 
 ### Utilities
 
