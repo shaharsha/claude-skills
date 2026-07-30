@@ -21,6 +21,18 @@ would arrive as several disconnected notifications. Messages are therefore
 base64'd onto a single line and decoded by the arm command; Monitor batches the
 decoded lines (within 200ms) back into one notification.
 
+Length: a notification is capped, and the cap is silent — the recipient sees a
+plausible message ending mid-sentence and has no way to tell that from a sender
+who stopped there. Measured 2026-07-30 by probing a live session: **~500 chars
+per LINE** and **~3000 chars per EVENT**. A long technical handover is several
+times that, so the tail simply vanished.
+
+So the body is always written to a file under `<MAILBOX>/msgs/`, and only short
+messages travel inline. A long one sends a preview plus that path, and says
+plainly that it is a preview — an explicit pointer beats a silent cut, because
+the recipient can act on the difference. Long lines are wrapped below the
+per-line cap on the way out; the file keeps the text unwrapped and whole.
+
 Replying: every delivered message carries `[reply with: ccsend <id> "..."]`.
 That header exists ONLY on a delivered message — text pasted into a session by
 hand is an ordinary user turn with no header, so telling a session to "reply
@@ -32,8 +44,9 @@ import base64
 import glob
 import json
 import os
-
+import re
 import sys
+import textwrap
 import time
 
 MAILBOX = os.path.expanduser("~/.claude/mailbox")
@@ -77,6 +90,72 @@ def sessions():
 
 def inbox_for(sid):
     return os.path.join(MAILBOX, f"{sid}.inbox")
+
+
+# Both measured on a live session, 2026-07-30, by sending a probe with position
+# markers every 50 chars and reading where the notification stopped: a single
+# line survived to ~500 chars, and the event as a whole to ~3000. Neither is
+# documented, so treat them as observations that could move — which is exactly
+# why the file copy exists rather than a cap tuned to the last byte.
+LINE_CAP = 500
+EVENT_CAP = 3000
+
+# Wrap well inside the line cap, and keep the inline budget well inside the
+# event cap. The header, the reply line and the preview banner all consume the
+# same budget, and a message that overshoots is truncated invisibly — the one
+# failure this whole mechanism exists to remove.
+WRAP_AT = 400
+INLINE_BUDGET = 2000
+
+_FENCE = "```"
+
+
+def wrap(text):
+    """Hard-wrap to WRAP_AT so no single line can hit the per-line cap.
+
+    Paragraph shape is worth preserving — blank lines separate ideas, and indented
+    lines are usually code or a table, where a reflow does more harm than the wrap
+    prevents. So indented and fenced lines are left alone unless they exceed the cap
+    on their own, in which case they are split anyway: an unwrapped 900-char line
+    does not arrive intact, it arrives cut at 500 with no marker.
+    """
+    out, fenced = [], False
+    for line in text.split("\n"):
+        if line.lstrip().startswith(_FENCE):
+            fenced = not fenced
+        protected = fenced or line[:1] in (" ", "\t") or line.lstrip().startswith("|")
+        if len(line) <= WRAP_AT:
+            out.append(line)
+        elif protected:
+            out += [line[i:i + WRAP_AT] for i in range(0, len(line), WRAP_AT)]
+        else:
+            out += textwrap.wrap(
+                line, WRAP_AT, break_long_words=True, break_on_hyphens=False,
+                replace_whitespace=False, drop_whitespace=True,
+            ) or [line]
+    return "\n".join(out)
+
+
+def spill(sid, who, body):
+    """Persist the full body and return its path.
+
+    Every message gets a file, not just the long ones. A short message costs one
+    small write, and in exchange the recipient can re-read any message after its
+    notification has scrolled away or been compacted out of context — which the
+    inline-only design could not offer at all.
+    """
+    d = os.path.join(MAILBOX, "msgs", sid)
+    os.makedirs(d, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime())
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", who).strip("-").lower()[:32] or "sender"
+    path = os.path.join(d, f"{stamp}-{slug}.md")
+    n = 2
+    while os.path.exists(path):   # same sender, same second
+        path = os.path.join(d, f"{stamp}-{slug}-{n}.md")
+        n += 1
+    with open(path, "w") as fh:
+        fh.write(body.rstrip() + "\n")
+    return path
 
 
 HEARTBEAT_STALE_SECONDS = 10   # ccarm refreshes every ~1s
@@ -180,19 +259,47 @@ def main():
     else:
         who = "an unidentified sender"
 
+    os.makedirs(MAILBOX, exist_ok=True)
+    body = body.rstrip()
+    path = spill(sid, who, body)
+
     header = f"[message from {who}]"
     if me:
         header += f"\n[reply with: ccsend {me[:8]} \"...\"]"
-    payload = base64.b64encode(f"{header}\n{body.rstrip()}".encode()).decode()
 
-    os.makedirs(MAILBOX, exist_ok=True)
-    with open(inbox, "a") as fh:
-        fh.write(payload + "\n")
-
-    if armed:
-        print(f"✓ delivered to {sid[:8]} ({title}) — a watcher is live, it arrives now")
+    wrapped = wrap(body)
+    if len(header) + len(wrapped) + 2 <= INLINE_BUDGET:
+        payload = f"{header}\n{wrapped}"
+        mode = "inline"
     else:
-        print(f"⏸ queued for {sid[:8]} ({title}) — NO watcher; it arrives only if one is armed")
+        # Cut on a line boundary so the preview never ends mid-sentence — the
+        # exact ambiguity the cap created. The banner comes FIRST: a recipient
+        # who reads only the opening lines still learns there is more, whereas a
+        # footer note is the part most likely to be scrolled past.
+        banner = (
+            f"[PREVIEW — this message is {len(body)} chars and the notification channel "
+            f"truncates near {EVENT_CAP}. Read the full text BEFORE acting on it:]\n"
+            f"[{path}]"
+        )
+        room = INLINE_BUDGET - len(header) - len(banner) - 8
+        head, total = [], 0
+        for line in wrapped.split("\n"):
+            if total + len(line) + 1 > room:
+                break
+            head.append(line)
+            total += len(line) + 1
+        payload = f"{header}\n{banner}\n\n" + "\n".join(head) + "\n[…]"
+        mode = f"preview + file ({len(body)} chars)"
+
+    with open(inbox, "a") as fh:
+        fh.write(base64.b64encode(payload.encode()).decode() + "\n")
+
+    where = f"{sid[:8]} ({title})"
+    if armed:
+        print(f"✓ delivered to {where} — a watcher is live, it arrives now [{mode}]")
+    else:
+        print(f"⏸ queued for {where} — NO watcher; it arrives only if one is armed [{mode}]")
+    print(f"  full text: {path}")
 
 
 if __name__ == "__main__":

@@ -110,14 +110,17 @@ Reply to me with: ccsend <your-id> "..."
 
 When you **send** through `ccsend`, say nothing: the header is already there and already correct.
 
-### The four things that are silent when wrong
+### The five things that are silent when wrong
 
 - **`persistent: true`.** A default Monitor times out and stops listening with no announcement.
 - **`touch` the inbox before reading it.** `tail -f`/read on a missing file exits instantly, so the session looks armed and receives nothing.
 - **Drain, don't follow.** Starting at end-of-file skips anything queued *before* arming — losing messages that were already accepted. `ccarm` moves the file aside and decodes it, so a message arriving mid-drain lands in the fresh inbox and is caught next pass.
 - **One message is one base64 line.** Monitor emits per line, so a raw multi-line body arrives as several disconnected notifications. Encoded, the decoded lines re-batch into one.
+- **A notification is capped, twice, and both caps cut silently.** Measured 2026-07-30 against a live armed session, by sending position-marked text and reading where it stopped: **~500 chars per line** and **~3000 chars per event**. The sender still prints "delivered". `ccsend` therefore spools every body to `~/.claude/mailbox/msgs/<sid>/` and wraps lines under the line cap; anything over the event budget arrives as a **preview with the spool path** instead of a body that ends mid-sentence.
 
-`ccarm` handles all four. Prefer it to a hand-rolled loop.
+`ccarm` handles the first four; `ccsend` handles the fifth. Prefer them to a hand-rolled loop.
+
+**Why the cap matters more than it sounds.** The two caps interact to look like corruption rather than a limit: short lines around a long paragraph arrive intact while the paragraph dies mid-sentence, so the message reads as though the *sender* trailed off. On 2026-07-30 four long technical handovers went out with their second halves missing and nobody — sender or recipient — could tell. **A received message that ends without a closing thought should be treated as suspect**: check for a `[PREVIEW …]` banner and read the spool file before acting.
 
 ### Verify, never assume, that a target is reachable
 
