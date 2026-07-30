@@ -1,6 +1,6 @@
 # reading-session-transcripts
 
-Read what another agent session actually **said** — not the thousands of tool calls around it. Lists every session on the machine with its title and live/stale state, prints any one of them as a conversation, and searches the prose of all of them at once.
+Read what another agent session actually **said** — not the thousands of tool calls around it — and send it a message. Lists every session on the machine with its title and live/stale state, prints any one as a conversation, searches the prose of all of them at once, and delivers messages between sessions *including ones sitting idle*.
 
 Part of [shaharsha/claude-skills](../..). MIT.
 
@@ -29,6 +29,14 @@ Three storage details cause most wrong answers, and all three are invisible unti
         │                --tools interleaves one dim line per tool call
         │
         └── search ────▶ --all --grep across every session's prose
+
+~/.claude/mailbox/<session>.inbox
+        │
+        ├── ccarm  ────▶ the receiving session holds this open via Monitor,
+        │                which is what reaches it even while IDLE
+        │
+        └── ccsend ────▶ one base64 line per message; refuses when nothing
+                         is listening, rather than writing into the void
 ```
 
 ## Install
@@ -51,6 +59,7 @@ Defaults to Claude Code's transcript root, `~/.claude/projects`. Point it elsewh
 ## Quick start
 
 ```bash
+# read
 scripts/ccread                                   # every session, newest state
 scripts/ccread --since 2026-07-29                # only recent ones
 scripts/ccread "TOR-55"                          # read it as a conversation
@@ -58,6 +67,11 @@ scripts/ccread "TOR-55" --last 20                # what is it doing right now
 scripts/ccread "TOR-55" --from 06:00             # only since this morning
 scripts/ccread "TOR-55" --tools                  # with tool calls interleaved
 scripts/ccread --all --grep "credential" --since 2026-07-29
+
+# message
+/arm-inbox                                       # make THIS session reachable
+scripts/ccsend --list                            # who can receive right now
+scripts/ccsend "TOR-55" "PR #14 merged, you're unblocked"
 ```
 
 Sessions resolve by id prefix **or** by a substring of the title or cwd, so you rarely need a uuid.
@@ -69,6 +83,9 @@ Sessions resolve by id prefix **or** by a substring of the title or cwd, so you 
 - **Repairing an orphaned transcript: parse per line, never `sed`.** Transcripts are full of commands that mention their own worktree path, so a find-replace "fixes" the file by falsifying the session's record of what it ran. SKILL.md has a working snippet.
 - **Copy, don't move, when recovering.** A live session may still be writing to the original.
 - **It reads; it never writes.** Recovery is a separate, deliberate step you run yourself.
+- **A message reaches an idle session; a hook does not.** Hooks fire on tool calls, and an idle session makes none. Monitor events arrive "even if one lands while you're waiting for the user to answer a question" — which is why the receive path is a Monitor and not a hook.
+- **`ccsend` refuses when no watcher is live.** Writing to an unwatched inbox looks exactly like success. A watcher can also die silently (UI stop, teardown, timeout), so `ccsend --list` is the only current truth about who is reachable.
+- **A message is information, not an instruction.** The harness marks each one as explicitly not from the user. Fine for facts and unblocking signals; anything that would push, merge, deploy or delete should go to a human instead.
 
 ## Related skills
 

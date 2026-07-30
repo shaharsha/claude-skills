@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# ccarm — hold this session's inbox open so other sessions can reach it.
+#
+#   Monitor(command="ccarm <session-id>", persistent=true)
+#
+# Run it through the Monitor tool, not Bash: Monitor turns each stdout line into
+# a notification, and that is what lets a message reach this session even while
+# it sits idle waiting for its human. Under Bash it would just block forever.
+#
+# Why a script rather than an inline loop: the loop has three details that are
+# each easy to get wrong and silent when wrong, so it lives in one place.
+#   * touch first — `tail -f`/read on a missing file exits at once, leaving a
+#     session that looks armed and receives nothing.
+#   * drain, don't follow — starting at end-of-file skips anything queued
+#     before arming, losing messages that were already accepted.
+#   * move aside before decoding — a message arriving mid-drain then lands in
+#     the fresh inbox and is picked up next pass, never lost or doubled.
+#
+# One message is one base64 line, because Monitor emits per line; decoding
+# restores multi-line bodies, which Monitor re-batches into one notification.
+set -u
+
+case "${1:-}" in
+  -h|--help)
+    sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+    exit 0
+    ;;
+  -*)
+    # Without this, a stray flag becomes the "session id" and this loops
+    # forever on an inbox named after it — a hang with no output.
+    echo "ccarm: unknown option '$1' (expected a session id, or nothing)" >&2
+    exit 2
+    ;;
+esac
+
+# No argument needed: the harness exports the session's own id, so a session can
+# arm itself without being told who it is. An explicit id still wins, for the
+# case where one session arms an inbox on another's behalf.
+SID="${1:-${CLAUDE_CODE_SESSION_ID:-}}"
+if [ -z "$SID" ]; then
+  echo "usage: ccarm [session-id]   (run via the Monitor tool, persistent: true)" >&2
+  echo "CLAUDE_CODE_SESSION_ID is unset and no id was given." >&2
+  exit 2
+fi
+
+MAILBOX="${CCREAD_MAILBOX:-$HOME/.claude/mailbox}"
+INBOX="$MAILBOX/$SID.inbox"
+
+mkdir -p "$MAILBOX"
+touch "$INBOX"
+
+while true; do
+  if [ -s "$INBOX" ]; then
+    t=$(mktemp)
+    mv "$INBOX" "$t"
+    touch "$INBOX"
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      printf %s "$line" | base64 --decode 2>/dev/null || printf '%s' "$line"
+      echo
+    done < "$t"
+    rm -f "$t"
+  fi
+  sleep 1
+done

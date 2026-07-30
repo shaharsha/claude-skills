@@ -1,0 +1,202 @@
+#!/usr/bin/env python3
+"""ccsend — deliver a message to another agent session on this machine.
+
+    ccsend <id|title> "your message"
+    ccsend <id|title> --file notes.md
+    ccsend --list                      who can receive right now
+    ccsend <id|title> --arm            print the Monitor call the target must run
+
+A session receives only while it holds an open Monitor on its inbox. That watch
+is what makes delivery work even when the session is sitting idle waiting for
+its human — the one thing hooks, channels and process wrappers all fail to do.
+
+The corollary is the reason this tool refuses by default: a session that never
+armed its inbox has no watcher, so a write lands in a file nobody reads and
+looks exactly like success. `ccsend` checks for the live watcher first and
+refuses rather than reporting a delivery that will never happen. `--force`
+queues anyway, which is only useful if you know the target will arm later.
+
+Encoding: Monitor turns each stdout LINE into an event, so a multi-line message
+would arrive as several disconnected notifications. Messages are therefore
+base64'd onto a single line and decoded by the arm command; Monitor batches the
+decoded lines (within 200ms) back into one notification.
+"""
+import argparse
+import base64
+import glob
+import json
+import os
+import subprocess
+import sys
+import time
+
+MAILBOX = os.path.expanduser("~/.claude/mailbox")
+ROOT = os.environ.get("CCREAD_ROOT", os.path.expanduser("~/.claude/projects"))
+
+# The receiving side. Kept here so `--arm` and the liveness probe can never
+# disagree about what an armed inbox looks like.
+#
+# Drain-and-follow rather than `tail -f`, for two reasons that both bite:
+#   * `tail -f -n 0` starts at end-of-file, so anything queued BEFORE the
+#     session armed is silently skipped — which would make `--force` useless
+#     and, worse, lose a message that was accepted.
+#   * `tail -f` on a missing file exits immediately, so a session would "arm"
+#     its inbox and have the watch die on the spot, looking armed to everyone.
+# Moving the file aside before decoding means a message arriving mid-drain
+# lands in the fresh inbox and is picked up next pass, never lost or doubled.
+ARM_TEMPLATE = (
+    "mkdir -p {mailbox}; touch {inbox}; "
+    "while true; do "
+    'if [ -s {inbox} ]; then t=$(mktemp); mv {inbox} "$t"; touch {inbox}; '
+    'while IFS= read -r l; do printf %s "$l" | base64 --decode; echo; done < "$t"; '
+    'rm -f "$t"; fi; sleep 1; done'
+)
+
+
+def sessions():
+    """(session_id, title, cwd, mtime) for every transcript, newest copy first."""
+    out = {}
+    for f in glob.glob(os.path.join(ROOT, "*", "*.jsonl")):
+        try:
+            if os.path.getsize(f) < 2000:
+                continue
+        except OSError:
+            continue
+        sid = os.path.basename(f)[: -len(".jsonl")]
+        title = cwd = None
+        try:
+            with open(f, errors="replace") as fh:
+                for line in fh:
+                    if not line.startswith("{"):
+                        continue
+                    try:
+                        o = json.loads(line)
+                    except ValueError:
+                        continue
+                    title = o.get("aiTitle") or title
+                    cwd = o.get("cwd") or cwd
+        except OSError:
+            continue
+        mt = os.path.getmtime(f)
+        if sid not in out or mt > out[sid][3]:
+            out[sid] = (sid, title or "(untitled)", cwd or "", mt)
+    return sorted(out.values(), key=lambda s: s[3], reverse=True)
+
+
+def inbox_for(sid):
+    return os.path.join(MAILBOX, f"{sid}.inbox")
+
+
+def is_armed(sid):
+    """True when a live process is draining this session's inbox.
+
+    Presence of a watcher is the only evidence that a write will be seen, which
+    is why this gates sending at all.
+    """
+    try:
+        out = subprocess.run(["pgrep", "-f", f"{sid}.inbox"],
+                             capture_output=True, text=True, timeout=5)
+        pids = [p for p in out.stdout.split() if p and int(p) != os.getpid()]
+        return bool(pids)
+    except Exception:
+        return False
+
+
+def resolve(needle, all_s):
+    hits = [s for s in all_s if s[0].startswith(needle)]
+    if not hits:
+        n = needle.lower()
+        hits = [s for s in all_s if n in s[1].lower() or n in s[2].lower()]
+    if not hits:
+        sys.exit(f"no session matches {needle!r} — run `ccsend --list`")
+    if len({h[0] for h in hits}) > 1:
+        print("ambiguous — matches:", file=sys.stderr)
+        for h in hits:
+            print(f"  {h[0][:8]}  {h[1]}", file=sys.stderr)
+        sys.exit(1)
+    return hits[0]
+
+
+def main():
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument("target", nargs="?")
+    p.add_argument("message", nargs="*")
+    p.add_argument("--file", help="read the message body from a file")
+    p.add_argument("--from", dest="sender", default=os.environ.get("CCSEND_FROM", ""),
+                   help="label recorded as the sender")
+    p.add_argument("--list", action="store_true", help="show who can receive right now")
+    p.add_argument("--arm", action="store_true", help="print the Monitor command for a target")
+    p.add_argument("--force", action="store_true", help="queue even if no watcher is armed")
+    p.add_argument("-h", "--help", action="store_true")
+    # parse_known_args, not parse_args: argparse cannot gather a `nargs="*"`
+    # positional that appears AFTER an option, and `ccsend <id> --from x "msg"`
+    # is the natural way to type this. Leftovers are message text.
+    a, extra = p.parse_known_args()
+    a.message = list(a.message) + [x for x in extra if not x.startswith("--")]
+    if a.help or (not a.target and not a.list):
+        print(__doc__)
+        return
+
+    all_s = sessions()
+
+    if a.list:
+        print("armed sessions can receive now; unarmed ones cannot:\n")
+        for sid, title, cwd, mt in all_s[:25]:
+            idle = int((time.time() - mt) / 60)
+            mark = "📬 armed  " if is_armed(sid) else "   unarmed"
+            print(f"{mark} {sid[:8]}  {idle:>4}m ago  {title[:52]}")
+        return
+
+    sid, title, _cwd, _mt = resolve(a.target, all_s)
+    inbox = inbox_for(sid)
+
+    if a.arm:
+        print(f"# have session {sid[:8]} ({title}) run this as a persistent Monitor:\n")
+        print(ARM_TEMPLATE.format(inbox=inbox, mailbox=MAILBOX))
+        return
+
+    body = open(a.file).read() if a.file else " ".join(a.message)
+    if not body.strip():
+        sys.exit("ccsend: empty message")
+
+    armed = is_armed(sid)
+    if not armed and not a.force:
+        sys.exit(
+            f"✗ not delivered — {sid[:8]} ({title}) has no inbox watcher.\n"
+            f"  Nothing is listening, so this would sit unread and look like success.\n"
+            f"  Have it arm one:  ccsend {sid[:8]} --arm\n"
+            f"  Or queue anyway:  --force"
+        )
+
+    # Identify the sender so the recipient can reply without having to work out
+    # who sent it. A message that can't be answered is a notification, not a
+    # conversation — and the harness exports the caller's own id for free.
+    me = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+    if a.sender:
+        who = a.sender
+    elif me:
+        mine = next((s for s in all_s if s[0] == me), None)
+        who = f"{mine[1]} ({me[:8]})" if mine else me[:8]
+    else:
+        who = "an unidentified sender"
+
+    header = f"[message from {who}]"
+    if me:
+        header += f"\n[reply with: ccsend {me[:8]} \"...\"]"
+    payload = base64.b64encode(f"{header}\n{body.rstrip()}".encode()).decode()
+
+    os.makedirs(MAILBOX, exist_ok=True)
+    with open(inbox, "a") as fh:
+        fh.write(payload + "\n")
+
+    if armed:
+        print(f"✓ delivered to {sid[:8]} ({title}) — a watcher is live, it arrives now")
+    else:
+        print(f"⏸ queued for {sid[:8]} ({title}) — NO watcher; it arrives only if one is armed")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except BrokenPipeError:
+        pass
