@@ -86,7 +86,13 @@ with open(SRC) as fi, open(DST, "w") as fo:
 ccsend --list                        # who can receive RIGHT NOW
 ccsend "TOR-55" "PR #14 is merged, you're unblocked"
 ccsend "TOR-55" --file notes.md      # longer body from a file
+
+ccsend "TOR-55" --file - <<'EOF'     # anything technical — see below
+The `page_snapshot()` contract: one `with` block per page, $vars intact.
+EOF
 ```
+
+**Use the quoted heredoc for anything containing code.** A message passed as a shell argument is parsed by the shell first, so a backticked `identifier` is **command substitution** — the shell runs it and splices in the output, which is empty. The recipient gets a sentence with holes where every identifier was, and `ccsend` still prints `✓ delivered`, because by the time it sees `argv` the words are already gone and nothing downstream can detect it. Measured 2026-07-30 on a real handover: `` `with` `` arrived as nothing, leaving "must run inside ONE  block". The `<<'EOF'` quoting (note the quotes) disables every expansion, so backticks, `$vars`, and both quote styles survive byte-for-byte.
 
 **To become reachable yourself, run `/arm-inbox`** — or call Monitor directly with `command: ccarm`, `persistent: true`. `ccarm` needs no argument: the harness exports `CLAUDE_CODE_SESSION_ID`, so a session can arm itself without being told who it is.
 

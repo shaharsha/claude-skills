@@ -107,6 +107,10 @@ EVENT_CAP = 3000
 WRAP_AT = 400
 INLINE_BUDGET = 2000
 
+# Spooled bodies are a convenience for re-reading, not an archive — the durable
+# record of what a session was told is its own transcript, which ccread reads.
+SPOOL_RETENTION_DAYS = 14
+
 _FENCE = "```"
 
 
@@ -155,6 +159,19 @@ def spill(sid, who, body):
         n += 1
     with open(path, "w") as fh:
         fh.write(body.rstrip() + "\n")
+
+    # Prune on write rather than on a timer — there is no daemon to hang one on,
+    # and an inbox spool that grows forever is a slow leak in a directory nobody
+    # thinks to look at. A message older than the retention window has long since
+    # been read or forgotten; the notification it belonged to is far out of context.
+    cutoff = time.time() - SPOOL_RETENTION_DAYS * 86400
+    for old in os.listdir(d):
+        p = os.path.join(d, old)
+        try:
+            if p != path and os.path.getmtime(p) < cutoff:
+                os.remove(p)
+        except OSError:
+            pass          # a concurrent reader or another sender; not worth failing a send
     return path
 
 
@@ -199,7 +216,8 @@ def main():
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("target", nargs="?")
     p.add_argument("message", nargs="*")
-    p.add_argument("--file", help="read the message body from a file")
+    p.add_argument("--file", help="read the body from a file, or '-' for stdin "
+                                  "(use a quoted heredoc for anything with backticks)")
     p.add_argument("--from", dest="sender", default=os.environ.get("CCSEND_FROM", ""),
                    help="label recorded as the sender")
     p.add_argument("--list", action="store_true", help="show who can receive right now")
@@ -234,7 +252,25 @@ def main():
         print(f"{CCARM} {sid}")
         return
 
-    body = open(a.file).read() if a.file else " ".join(a.message)
+    # `--file -` reads stdin, which makes the quoted heredoc the cheapest safe way
+    # to send anything technical:
+    #
+    #     ccsend <id> --file - <<'EOF'
+    #     ... backticks, $vars and quotes all survive verbatim ...
+    #     EOF
+    #
+    # That matters more than it looks. A message passed as a shell argument goes
+    # through the shell first, so `code` is COMMAND SUBSTITUTION — the word is
+    # replaced by the output of running it, usually empty. Measured 2026-07-30: a
+    # handover written with backticked identifiers arrived with gaps where every
+    # identifier had been, and ccsend still reported a clean delivery, because by
+    # the time it sees argv the damage is already done and is undetectable here.
+    if a.file == "-":
+        body = sys.stdin.read()
+    elif a.file:
+        body = open(a.file).read()
+    else:
+        body = " ".join(a.message)
     if not body.strip():
         sys.exit("ccsend: empty message")
 
@@ -266,6 +302,11 @@ def main():
     header = f"[message from {who}]"
     if me:
         header += f"\n[reply with: ccsend {me[:8]} \"...\"]"
+    # The path goes to the RECIPIENT, on every message, not just previews. Without
+    # it `spill`'s whole re-readability claim is unreachable: the sender's stdout
+    # names the file, and the sender is the one party who does not need it. A short
+    # message that scrolls away or is compacted out is otherwise simply gone.
+    header += f"\n[full text: {path}]"
 
     wrapped = wrap(body)
     if len(header) + len(wrapped) + 2 <= INLINE_BUDGET:
@@ -278,8 +319,8 @@ def main():
         # footer note is the part most likely to be scrolled past.
         banner = (
             f"[PREVIEW — this message is {len(body)} chars and the notification channel "
-            f"truncates near {EVENT_CAP}. Read the full text BEFORE acting on it:]\n"
-            f"[{path}]"
+            f"truncates near {EVENT_CAP}. Read the full text at the path above BEFORE "
+            f"acting on it — what follows stops early.]"
         )
         room = INLINE_BUDGET - len(header) - len(banner) - 8
         head, total = [], 0
