@@ -100,6 +100,16 @@ Messages carry their own reply address, so answering needs no lookup:
 …body…
 ```
 
+**That header exists only on a *delivered* message.** Text you paste into a session yourself arrives as an ordinary user turn with no header, so an instruction like "reply using the address in this message's header" is unfollowable — and the receiving session is left with no way to answer. Measured 2026-07-30: a session given exactly that line replied *"this arrived as a user turn, not as a Monitor inbox event, and it has no header — so there's no sender id to `ccsend` a reply to."*
+
+So when you **paste** a prompt and want an answer, state your own id — `echo $CLAUDE_CODE_SESSION_ID` — in the text:
+
+```
+Reply to me with: ccsend <your-id> "..."
+```
+
+When you **send** through `ccsend`, say nothing: the header is already there and already correct.
+
 ### The four things that are silent when wrong
 
 - **`persistent: true`.** A default Monitor times out and stops listening with no announcement.

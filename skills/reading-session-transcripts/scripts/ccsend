@@ -20,6 +20,12 @@ Encoding: Monitor turns each stdout LINE into an event, so a multi-line message
 would arrive as several disconnected notifications. Messages are therefore
 base64'd onto a single line and decoded by the arm command; Monitor batches the
 decoded lines (within 200ms) back into one notification.
+
+Replying: every delivered message carries `[reply with: ccsend <id> "..."]`.
+That header exists ONLY on a delivered message — text pasted into a session by
+hand is an ordinary user turn with no header, so telling a session to "reply
+using the header" of a pasted prompt asks for something it cannot do. When
+pasting, state your own id (`echo $CLAUDE_CODE_SESSION_ID`) in the text.
 """
 import argparse
 import base64
