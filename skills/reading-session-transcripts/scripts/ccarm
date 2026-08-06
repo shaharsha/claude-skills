@@ -155,7 +155,11 @@ _emit_file() {
 while IFS= read -r _f; do
   [ -n "$_f" ] || continue
   _emit_file "$_f"
-  rm -f "$_f"
+  # `rm -f --`: a QUOTED path is still parsed for options, so a relative mailbox beginning with a
+  # dash made `rm` fail with "illegal option" (measured: rc=64, file left in place). The status was
+  # ignored, so the batch survived and the NEXT watcher emitted it again — a duplicate delivery
+  # caused purely by cleanup failing. `--` ends option parsing; quoting alone never did.
+  rm -f -- "$_f"
   : > "$INBOX.recovered"            # a marker a human can find; harmless if unread
 done <<RECOVER_EOF
 $(
@@ -170,7 +174,7 @@ $(
     if [ "$_p" != "$$" ]; then
       kill -0 "$_p" 2>/dev/null && continue          # owner alive: not ours to touch
     fi
-    [ -s "$_c" ] || { rm -f "$_c"; continue; }       # empty orphan: nothing to recover
+    [ -s "$_c" ] || { rm -f -- "$_c"; continue; }       # empty orphan: nothing to recover
     printf '%s\t%s\n' "$(_mtime "$_c")" "$_c"
   done | sort -n | cut -f2-
 )
@@ -244,7 +248,7 @@ trap 'exit 130' INT
 # window sees an empty file and calls a healthy watcher dead. A rename within one
 # directory is atomic, so every reader sees either the old pid or the new one.
 _beat() {
-  printf %s "$$" > "$HEARTBEAT.$$.tmp" && mv -f "$HEARTBEAT.$$.tmp" "$HEARTBEAT"
+  printf %s "$$" > "$HEARTBEAT.$$.tmp" && mv -f -- "$HEARTBEAT.$$.tmp" "$HEARTBEAT"
 }
 _beat
 
@@ -254,7 +258,7 @@ while true; do
     mv "$INBOX" "$t"
     touch "$INBOX"
     _emit_file "$t"
-    rm -f "$t"
+    rm -f -- "$t"
   fi
   _beat                           # refresh mtime: senders read staleness as dead
   sleep 1
