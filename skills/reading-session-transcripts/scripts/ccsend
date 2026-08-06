@@ -49,7 +49,11 @@ import sys
 import textwrap
 import time
 
-MAILBOX = os.path.expanduser("~/.claude/mailbox")
+# Honour CCREAD_MAILBOX exactly as ccarm does (`${CCREAD_MAILBOX:-$HOME/.claude/mailbox}`).
+# This was hardcoded, and ccarm was not: a watcher armed with the override wrote its heartbeat
+# somewhere ccsend never looked, so every check here reported a perfectly healthy lane as unarmed.
+# It also made isolated testing impossible — a probe mailbox could not be pointed at.
+MAILBOX = os.environ.get("CCREAD_MAILBOX") or os.path.expanduser("~/.claude/mailbox")
 ROOT = os.environ.get("CCREAD_ROOT", os.path.expanduser("~/.claude/projects"))
 
 # The receiving side lives in ccarm, not inline here. An inline copy would
@@ -212,6 +216,148 @@ def is_armed(sid):
         return False
 
 
+def self_check(me):
+    """THIS session's own watcher lease. Exit 0 fresh, 1 none, 3 cannot tell.
+
+    Why this exists: from inside a session, a dead inbox and a quiet sprint are the SAME
+    observation — silence. "I received a message recently" is consistent with a live inbox and
+    with one that delivered that message and then died. So the check has to be a POSITIVE
+    signal, non-empty when healthy, and re-runnable at any moment.
+
+    Why it does NOT say "watcher live". The evidence is a fresh mtime plus `kill(pid, 0)`, and
+    a PID CAN BE REUSED: a watcher killed just after a refresh, whose pid is recycled inside
+    the 10s window, makes that probe succeed for an unrelated process. So the success wording
+    is what the evidence actually supports — a fresh lease naming a pid that currently exists.
+    Binding a process-start identity would close it; that is deliberately not in this change,
+    and overclaiming here would be the defect this ticket is about.
+
+    Why THREE states. "I could not tell" is not "you have no watcher": as 0 it certifies an
+    unmeasured check, as 1 it reports a defect nobody observed. `is_armed()` collapses both
+    into False on purpose — every send path must fail closed — so the distinction lives here.
+    """
+    if not me:
+        print("CANNOT TELL — CLAUDE_CODE_SESSION_ID is unset, so there is no 'self' to check")
+        return 3
+    hb = os.path.join(MAILBOX, f"{me}.armed")
+    try:
+        age = time.time() - os.path.getmtime(hb)
+    except FileNotFoundError:
+        print(f"NO LEASE — no heartbeat file for {me[:8]}. Nothing is draining your inbox.")
+        print("  Re-arm: Monitor(command=ccarm, persistent=true). Messages sent meanwhile were REFUSED,")
+        print("  so the senders know; you were not silently skipped.")
+        return 1
+    except OSError as e:
+        print(f"CANNOT TELL — cannot stat {hb}: {e}")
+        return 3
+    try:
+        pid = int(open(hb).read().strip())
+    except (OSError, ValueError):
+        print(f"CANNOT TELL — heartbeat for {me[:8]} is unreadable or malformed (age {age:.0f}s)")
+        return 3
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        print(f"NO LEASE — watcher pid {pid} is gone; last heartbeat {age:.0f}s ago.")
+        print(f"  Journal: {os.path.join(MAILBOX, me + '.journal')} — a START with no STOP means an")
+        print("  unclean termination (SIGKILL or a harness restart), which no trap can record.")
+        return 1
+    except PermissionError:
+        print(f"CANNOT TELL — pid {pid} exists but is not ours to probe (age {age:.0f}s)")
+        return 3
+    if age > HEARTBEAT_STALE_SECONDS:
+        print(f"NO LEASE — heartbeat is {age:.0f}s stale (limit {HEARTBEAT_STALE_SECONDS}s); "
+              f"pid {pid} exists but is not refreshing it.")
+        return 1
+    print(f"FRESH LEASE — {me[:8]}: heartbeat {age:.1f}s old names pid {pid}, which currently exists.")
+    print("  That is a lease, NOT proof of delivery: it does not show a Monitor is attached to")
+    print("  that watcher's stdout. Use `ccsend --ping` for the round trip that does.")
+    return 0
+
+
+def ping(me, timeout):
+    """Round-trip a token through the real delivery path. The only proof of DELIVERY.
+
+    `--self` proves a watcher process holds a lease. It cannot prove the lane can RECEIVE:
+    ccarm drains the inbox to stdout, and Monitor is what turns stdout into a notification. A
+    watcher whose consumer is gone still holds a fresh heartbeat.
+
+    ARRIVAL is positive proof and is the point. NON-arrival is ambiguous on its own — which is
+    exactly why --self stays: together they separate "no watcher" from "watcher running, but
+    nothing is consuming what it emits".
+    """
+    if not me:
+        print("CANNOT TELL — CLAUDE_CODE_SESSION_ID is unset")
+        return 3
+    token = f"ccping-{os.getpid()}-{int(time.time() * 1000)}"
+    # Look for the ENCODED line, not the token. The inbox holds base64, so searching it for the
+    # plain token matches nothing the instant it is written — the wait would fall through on its
+    # first pass and report DELIVERED having observed precisely nothing. That is the same
+    # "the control rewards non-delivery" defect this whole check exists to close, and it was
+    # sitting in the first draft of the check itself.
+    wire = base64.b64encode(f"[ccsend --ping] {token}".encode()).decode()
+    inbox = inbox_for(me)
+    try:
+        with open(inbox, "a") as fh:
+            # Same wire format the real send path uses (ccsend:523): one base64 line, which is
+            # what ccarm decodes. A plain-text line would still be delivered — ccarm falls back
+            # when the decode fails — but it would not be exercising the encoding this check
+            # exists to prove works end to end.
+            fh.write(wire + "\n")
+    except OSError as e:
+        print(f"CANNOT TELL — could not write to your own inbox: {e}")
+        return 3
+    # The watcher CONSUMES the inbox: it moves the file aside, so the token vanishing is the
+    # observable proof it was picked up for delivery. Waiting for it to disappear is therefore
+    # a real signal, not a timeout dressed up as one.
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            if wire not in open(inbox).read():
+                print(f"DELIVERED — {token} was drained by the watcher within "
+                      f"{timeout - (deadline - time.time()):.1f}s.")
+                print("  The token now reaches you as a notification iff a Monitor is attached to")
+                print("  that watcher. If you do not SEE it in this session, the watcher is running")
+                print("  and its output is going nowhere — re-arm.")
+                return 0
+        except OSError:
+            pass
+        time.sleep(0.2)
+    print(f"NOT DRAINED — {token} still sits in your inbox after {timeout:.0f}s.")
+    print("  Nothing is consuming it. Ambiguous alone; run `ccsend --self` to tell 'no watcher'")
+    print("  from 'watcher holds a lease but is not draining'.")
+    return 1
+
+
+def heartbeat_sids():
+    """Every SID with a heartbeat file, whether or not it has a transcript."""
+    try:
+        return {f[: -len(".armed")] for f in os.listdir(MAILBOX) if f.endswith(".armed")}
+    except OSError:
+        return set()
+
+
+def inventory(all_s, caller=None):
+    """The listing/resolution universe: transcripts UNION heartbeats UNION the caller.
+
+    `sessions()` alone is not it, and the gap is not cosmetic. It enumerates
+    `ROOT/*/*.jsonl` and skips any transcript under 2000 bytes, so a lane that armed before
+    its transcript grew — or whose transcript lives elsewhere — is ABSENT while its watcher
+    is live and draining. Measured 2026-08-06: `--list` printed 25 of 199 sessions and 13 of
+    34 armed lanes were invisible.
+
+    The caller is a third source because it belongs in the listing precisely when it has
+    NEITHER of the other two: a session whose watcher exited cleanly has no heartbeat, and a
+    new one may have no qualifying transcript. That is the dead-inbox state most in need of a
+    row, and it is the one both earlier drafts dropped.
+
+    Placeholder rows carry the same 6-tuple shape so every consumer can stay uniform.
+    """
+    known = {s[0] for s in all_s}
+    extra = [sid for sid in sorted(heartbeat_sids() | ({caller} if caller else set()))
+             if sid not in known]
+    return list(all_s) + [(sid, "(no transcript)", "", 0.0, False, "") for sid in extra]
+
+
 def resolve(needle, all_s):
     hits = [s for s in all_s if s[0].startswith(needle)]
     if not hits:
@@ -242,6 +388,12 @@ def main():
     p.add_argument("--from", dest="sender", default=os.environ.get("CCSEND_FROM", ""),
                    help="label recorded as the sender")
     p.add_argument("--list", action="store_true", help="show who can receive right now")
+    p.add_argument("--self", dest="self_check", action="store_true",
+                   help="report THIS session's own watcher lease (0 fresh, 1 none, 3 cannot tell)")
+    p.add_argument("--ping", action="store_true",
+                   help="send this session a token and wait for it to come back — the only "
+                        "check that proves DELIVERY rather than a live process")
+    p.add_argument("--timeout", type=float, default=8.0, help="seconds --ping waits")
     p.add_argument("--arm", action="store_true", help="print the Monitor command for a target")
     p.add_argument("--force", action="store_true", help="queue even if no watcher is armed")
     p.add_argument("-h", "--help", action="store_true")
@@ -250,18 +402,46 @@ def main():
     # is the natural way to type this. Leftovers are message text.
     a, extra = p.parse_known_args()
     a.message = list(a.message) + [x for x in extra if not x.startswith("--")]
-    if a.help or (not a.target and not a.list):
+    # `--self` and `--ping` take no target and are not `--list`, so they fall into this branch
+    # unless named here. Measured: without them, every one of their controls printed the
+    # docstring and exited 0 — including the two that MUST fail, which is the only reason it
+    # was caught rather than recorded as six passes.
+    if a.help or (not a.target and not a.list and not a.self_check and not a.ping):
         print(__doc__)
         return
 
     all_s = sessions()
 
+    me = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+    # ONE inventory for listing AND resolution. Two would let --list advertise a lane that
+    # `ccsend <that-id>` then refuses with "no session matches" — an advertised receiver you
+    # cannot send to is worse than an omitted one, because it converts a silent gap into a
+    # confident wrong answer.
+    all_s = inventory(all_s, caller=me or None)
+
+    if a.self_check:
+        return self_check(me)
+    if a.ping:
+        return ping(me, a.timeout)
+
     if a.list:
         print("armed sessions can receive now; unarmed ones cannot:\n")
-        for sid, title, cwd, mt, *_ in all_s[:25]:
-            idle = int((time.time() - mt) / 60)
+        armed = [s for s in all_s if is_armed(s[0])]
+        rest = [s for s in all_s if not is_armed(s[0])]
+        mine = [s for s in rest if me and s[0] == me]
+        # NEVER cap an armed row: those are the rows that gate delivery, and the old
+        # `all_s[:25]` hid 13 of 34 of them. Cap only the idle tail — and pin the caller's own
+        # row outside that cap, since it is capped away exactly when it matters most.
+        capped = [s for s in rest if s not in mine][:25]
+        omitted = len(rest) - len(mine) - len(capped)
+        for sid, title, cwd, mt, *_ in armed + mine + capped:
+            idle = "   ?" if not mt else f"{int((time.time() - mt) / 60):>4}"
             mark = "📬 armed  " if is_armed(sid) else "   unarmed"
-            print(f"{mark} {sid[:8]}  {idle:>4}m ago  {title[:52]}")
+            you = "  <- you" if me and sid == me else ""
+            print(f"{mark} {sid[:8]}  {idle}m ago  {title[:52]}{you}")
+        if omitted:
+            # Say what was dropped. Silent truncation reads as "that is everyone".
+            print(f"\n… {omitted} older unarmed session(s) not shown (armed rows are never hidden)")
         return
 
     sid, title, _cwd, _mt, *_ = resolve(a.target, all_s)
@@ -366,6 +546,9 @@ def main():
 
 if __name__ == "__main__":
     try:
-        main()
+        # main() returns an exit code for the diagnostic paths (--self, --ping) and None for
+        # the rest. Without propagating it, a three-state check collapses to "always 0" — the
+        # verdict would print correctly and every caller gating on the status would proceed.
+        sys.exit(main() or 0)
     except BrokenPipeError:
         pass

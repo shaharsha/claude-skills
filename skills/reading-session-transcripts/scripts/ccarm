@@ -74,10 +74,50 @@ if [ -s "$INFLIGHT" ]; then
   : > "$INBOX.recovered"          # a marker a human can find; harmless if unread
 fi
 
-# Remove the heartbeat on any exit, so a stopped watcher stops claiming to be
-# alive within one poll rather than lingering as a stale claim.
-trap 'rm -f "$HEARTBEAT"' EXIT INT TERM
-printf %s "$$" > "$HEARTBEAT"
+# A JOURNAL, so a death can be BOUNDED rather than guessed (TOR-355).
+# A lane that finds itself unarmed could previously say only "it died at some
+# point"; the coordinator's audit of who had missed a message could not be
+# answered by anyone. START/STOP gives both ends of the window.
+#
+# A START with no STOP means an UNCLEAN OR UNKNOWN termination — NOT a dated
+# kill. It equally describes a watcher still running and a host that rebooted.
+# Do not "fix" the missing STOP lines: SIGKILL and a process-group kill are not
+# trappable, and their absence is the only signal that one of those happened.
+JOURNAL="$MAILBOX/$SID.journal"
+printf '%s START pid=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$" >> "$JOURNAL" 2>/dev/null || true
+
+# On exit: record it, and DO NOT unlink the heartbeat.
+#
+# Unlinking looks tidier and is a race. The heartbeat is a SHARED PATHNAME with
+# no ownership: on a harness restart, watcher B can publish its pid here before
+# watcher A finishes its exit handler, and A's `rm` then deletes B's — leaving a
+# healthy lane un-advertised until B's next refresh, which is the exact failure
+# this file exists to prevent. Establishing ownership needs a generation or a
+# lock; NOT deleting needs nothing.
+#
+# Leaving it costs nothing, because it already fails closed: `is_armed` requires
+# a live pid AND a fresh mtime, so a heartbeat whose process is gone is rejected
+# within one poll either way. Retaining it also PRESERVES its mtime, which is the
+# only record of when the watcher was last alive.
+#
+# INT and TERM must EXIT. Trapping a signal replaces its default terminating
+# action, so a handler that only records would return into the loop below and
+# refresh the heartbeat again — `kill -TERM` would not stop this script, and the
+# STOP line would be a lie told one second before the next heartbeat. Measured on
+# the pre-fix version: it did not stop.
+_stop() { printf '%s STOP\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$JOURNAL" 2>/dev/null || true; }
+trap '_stop' EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
+
+# Publish the heartbeat ATOMICALLY: write a temp file, then rename over it.
+# `printf > "$HEARTBEAT"` truncates before it writes, so a reader landing in that
+# window sees an empty file and calls a healthy watcher dead. A rename within one
+# directory is atomic, so every reader sees either the old pid or the new one.
+_beat() {
+  printf %s "$$" > "$HEARTBEAT.$$.tmp" && mv -f "$HEARTBEAT.$$.tmp" "$HEARTBEAT"
+}
+_beat
 
 while true; do
   if [ -s "$INBOX" ]; then
@@ -96,6 +136,6 @@ while true; do
     done < "$t"
     rm -f "$t"
   fi
-  printf %s "$$" > "$HEARTBEAT"   # refresh mtime: senders read staleness as dead
+  _beat                           # refresh mtime: senders read staleness as dead
   sleep 1
 done
