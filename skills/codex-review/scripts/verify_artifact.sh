@@ -1,0 +1,215 @@
+#!/usr/bin/env bash
+# Decide whether a codex round's .md still holds the bytes recorded when it was
+# generated, by comparing it against `artifact_sha256` in its .provenance sidecar.
+#
+# THREE VERDICTS, and the third is the point:
+#
+#   UNCHANGED    (0)  a valid recorded digest, and it matches
+#   CHANGED      (1)  a valid recorded digest, and it differs
+#   CANNOT-TELL  (2)  there is nothing to check against
+#
+# CANNOT-TELL must never collapse into either neighbour. As 0 it would certify an
+# artifact nobody examined; as 1 it would accuse one nobody examined. Every round
+# generated before `artifact_sha256` existed is in this class, permanently -- that
+# is a fact about the evidence, not a defect in the file.
+#
+# ⚠️ CHANGED IS NOT AN ACCUSATION. It means "differs from what was recorded at
+# generation", nothing more. This tool compares bytes, and bytes cannot distinguish
+# tampering from a legitimate regeneration -- re-rendering a .md from its .json with
+# render_review.py, for instance, changes it honestly. Claiming to tell those apart
+# would assert a discrimination the method cannot make.
+
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: verify_artifact.sh <artifact.md>       verify one artifact
+       verify_artifact.sh --dir <directory>   verify every .md in a directory
+       verify_artifact.sh --self-test         prove this script's own verdicts fire
+
+exit: 0 UNCHANGED · 1 CHANGED · 2 CANNOT-TELL (worst verdict wins in --dir mode)
+USAGE
+  exit 64
+}
+
+# Read the recorded digest out of a sidecar, or explain why we cannot.
+# Echoes "<status>\t<detail>", where status is OK | NOSIDECAR | NOKEY | DUP | SENTINEL | MALFORMED.
+#
+# The grammar is strict on purpose. Sidecar values are printf'd unescaped by
+# codex_review.sh and `--label` is not sanitised, so a hostile or merely careless
+# label can inject an extra line. Refusing anything that is not exactly one
+# 64-character lowercase digest is what stops a malformed sidecar producing a
+# CONFIDENT verdict -- the failure mode being avoided is a wrong answer, not a crash.
+_recorded_digest() {
+  local prov="$1" lines value
+  [[ -f "$prov" && -r "$prov" ]] || { printf 'NOSIDECAR\t%s\n' "$prov"; return 0; }
+  lines="$(grep -c '^artifact_sha256=' "$prov" 2>/dev/null || true)"
+  lines="${lines:-0}"
+  case "$lines" in
+    0) printf 'NOKEY\t\n'; return 0 ;;
+    1) : ;;
+    *) printf 'DUP\t%s\n' "$lines"; return 0 ;;
+  esac
+  value="$(sed -n 's/^artifact_sha256=//p' "$prov" 2>/dev/null || true)"
+  if [[ "$value" == "unavailable" ]]; then
+    printf 'SENTINEL\t\n'
+  elif [[ "$value" =~ ^[0-9a-f]{64}$ ]]; then
+    printf 'OK\t%s\n' "$value"
+  else
+    printf 'MALFORMED\t%s\n' "$value"
+  fi
+}
+
+VERDICT=""   # set by verify_one
+DETAIL=""
+
+# Classify ONE .md. Never returns non-zero for a "bad" verdict -- the caller reads
+# $VERDICT -- so that `set -e` cannot turn a CHANGED finding into an abort.
+verify_one() {
+  local md="$1" prov actual parsed status recorded
+  prov="${md%.md}.provenance"
+
+  if [[ ! -f "$md" || ! -r "$md" ]]; then
+    VERDICT="CANNOT-TELL"; DETAIL="artifact missing or unreadable"; return 0
+  fi
+
+  parsed="$(_recorded_digest "$prov")"
+  status="${parsed%%$'\t'*}"
+  recorded="${parsed#*$'\t'}"
+
+  case "$status" in
+    NOSIDECAR) VERDICT="CANNOT-TELL"; DETAIL="no .provenance sidecar (round predates artifact_sha256, or is not a round artifact)"; return 0 ;;
+    NOKEY)     VERDICT="CANNOT-TELL"; DETAIL="sidecar has no artifact_sha256 key (generated before this check existed)"; return 0 ;;
+    DUP)       VERDICT="CANNOT-TELL"; DETAIL="sidecar has $recorded artifact_sha256 keys; exactly one is required"; return 0 ;;
+    SENTINEL)  VERDICT="CANNOT-TELL"; DETAIL="sidecar records artifact_sha256=unavailable — the hash could not be computed at generation"; return 0 ;;
+    MALFORMED) VERDICT="CANNOT-TELL"; DETAIL="sidecar artifact_sha256 is not 64 lowercase hex characters"; return 0 ;;
+  esac
+
+  actual="$(shasum -a 256 "$md" 2>/dev/null | awk '{print $1}' || true)"
+  if [[ -z "$actual" ]]; then
+    VERDICT="CANNOT-TELL"; DETAIL="could not hash the artifact now"; return 0
+  fi
+  if [[ "$actual" == "$recorded" ]]; then
+    VERDICT="UNCHANGED"; DETAIL="$recorded"
+  else
+    VERDICT="CHANGED";   DETAIL="recorded $recorded · now $actual"
+  fi
+  return 0
+}
+
+_worst() {  # 1 (CHANGED) beats 2 (CANNOT-TELL) beats 0
+  local a="$1" b="$2"
+  [[ "$a" == 1 || "$b" == 1 ]] && { echo 1; return; }
+  [[ "$a" == 2 || "$b" == 2 ]] && { echo 2; return; }
+  echo 0
+}
+
+_code_for() { case "$1" in UNCHANGED) echo 0 ;; CHANGED) echo 1 ;; *) echo 2 ;; esac; }
+
+verify_dir() {
+  local dir="$1" worst=0 n_ok=0 n_changed=0 n_cant=0 total=0 md
+  local -a cant=()
+  [[ -d "$dir" ]] || { echo "no such directory: $dir" >&2; exit 66; }
+
+  # EVERY .md is classified. There is no membership predicate and no exclusion
+  # bucket, deliberately: three successive attempts to define "which .md files are
+  # rounds" were each defeated by a case one step up (a shape match admitted
+  # *.prompt.md; an evidence match dropped a real round whose .json had been
+  # cleaned up). A file we cannot verify is REPORTED as CANNOT-TELL rather than
+  # dropped, so no real round can leave the denominator. Saying "I cannot verify
+  # PR-BODY-x.md" is true and costs one line.
+  while IFS= read -r -d '' md; do
+    total=$((total + 1))
+    verify_one "$md"
+    case "$VERDICT" in
+      UNCHANGED) n_ok=$((n_ok + 1)) ;;
+      CHANGED)   n_changed=$((n_changed + 1)); printf 'CHANGED      %s\n              %s\n' "${md##*/}" "$DETAIL" ;;
+      *)         n_cant=$((n_cant + 1)); cant+=("${md##*/} — $DETAIL") ;;
+    esac
+    worst="$(_worst "$worst" "$(_code_for "$VERDICT")")"
+  done < <(find "$dir" -maxdepth 1 -type f -name '*.md' -print0 | sort -z)
+
+  # The coverage fraction is stated, always, and never as a bare CLEAN. A checker
+  # that examined half its population and said "clean" is the exact defect this
+  # tool was built after.
+  local conclusive=$((n_ok + n_changed))
+  printf '\n%s of %s verified · UNCHANGED %s · CHANGED %s · CANNOT-TELL %s\n' \
+    "$conclusive" "$total" "$n_ok" "$n_changed" "$n_cant"
+  if (( n_cant > 0 )); then
+    printf '\nCANNOT-TELL:\n'
+    printf '  %s\n' "${cant[@]}"
+  fi
+  exit "$worst"
+}
+
+# ------------------------------------------------------------------ self-test --
+# Every control below must be watched failing before it is believed, so each one
+# names what it would catch. THE CLEAN CONTROL RUNS FIRST AND THE RUN STOPS IF IT
+# IS NOT GREEN: every other control expects a NON-UNCHANGED verdict, so a verifier
+# broken against correct input satisfies all of them "successfully" and the defect
+# is masked by the controls meant to find it.
+_st_fail=0
+_expect() {  # _expect <label> <wanted-verdict> <md>
+  local label="$1" want="$2" md="$3"
+  verify_one "$md"
+  if [[ "$VERDICT" == "$want" ]]; then
+    printf '  ok    %-34s -> %s\n' "$label" "$VERDICT"
+  else
+    printf '  FAIL  %-34s -> %s (wanted %s: %s)\n' "$label" "$VERDICT" "$want" "$DETAIL"
+    _st_fail=$((_st_fail + 1))
+  fi
+}
+
+self_test() {
+  local d; d="$(mktemp -d)"; trap 'rm -rf "$d"' RETURN
+  local md="$d/20260101-000000-fixture.md" prov="$d/20260101-000000-fixture.provenance"
+  printf 'the artifact body\n' > "$md"
+  local real; real="$(shasum -a 256 "$md" | awk '{print $1}')"
+
+  printf 'CLEAN CONTROL FIRST — if this is not ok, every result below is meaningless\n'
+  printf 'sha=abc\nartifact_sha256=%s\n' "$real" > "$prov"
+  _expect 'untouched pair' UNCHANGED "$md"
+  if (( _st_fail > 0 )); then
+    printf '\nSTOPPING: the clean control failed. The verifier is broken against CORRECT\n'
+    printf 'input, so every mutation control below would "pass" for the wrong reason.\n'
+    return 1
+  fi
+
+  printf '\nmutation control — must be detected\n'
+  printf 'the artifact body, edited\n' > "$md"
+  _expect 'one byte changed' CHANGED "$md"
+  printf 'the artifact body\n' > "$md"   # restore
+
+  printf '\nCANNOT-TELL controls — one per cause, each must NOT masquerade as a verdict\n'
+  rm -f "$prov";                                              _expect 'no sidecar'        CANNOT-TELL "$md"
+  printf 'sha=abc\n' > "$prov";                               _expect 'sidecar, no key'   CANNOT-TELL "$md"
+  printf 'artifact_sha256=unavailable\n' > "$prov";           _expect 'sentinel'          CANNOT-TELL "$md"
+  printf 'artifact_sha256=NOTAHASH\n' > "$prov";              _expect 'malformed'         CANNOT-TELL "$md"
+  printf 'artifact_sha256=%s\nartifact_sha256=%s\n' "$real" "$real" > "$prov"
+  _expect 'duplicate keys' CANNOT-TELL "$md"
+  printf 'artifact_sha256=%s\n' "$real" > "$prov"
+  _expect 'artifact missing' CANNOT-TELL "$d/nonexistent.md"
+
+  # An uppercase digest is refused deliberately: shasum emits lowercase, so an
+  # uppercase value did not come from the generator and its provenance is unknown.
+  printf 'artifact_sha256=%s\n' "$(printf '%s' "$real" | tr 'a-f' 'A-F')" > "$prov"
+  _expect 'uppercase hex refused' CANNOT-TELL "$md"
+
+  printf '\n'
+  if (( _st_fail == 0 )); then printf 'self-test: all controls behaved as specified\n'; return 0
+  else printf 'self-test: %s control(s) FAILED\n' "$_st_fail"; return 1; fi
+}
+
+# ------------------------------------------------------------------------ main --
+[[ $# -ge 1 ]] || usage
+case "$1" in
+  --self-test) self_test ;;
+  --dir)       [[ $# -ge 2 ]] || usage; verify_dir "$2" ;;
+  -h|--help)   usage ;;
+  -*)          usage ;;
+  *)
+    verify_one "$1"
+    printf '%-12s %s\n            %s\n' "$VERDICT" "${1##*/}" "$DETAIL"
+    exit "$(_code_for "$VERDICT")"
+    ;;
+esac
