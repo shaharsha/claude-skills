@@ -44,6 +44,18 @@ if [ -z "$SID" ]; then
 fi
 
 MAILBOX="${CCREAD_MAILBOX:-$HOME/.claude/mailbox}"
+# Normalise a RELATIVE path beginning with a dash to `./…` once, here, before anything derives a
+# pathname from it. Every utility below — mkdir, touch, mv, rm — parses a leading dash as OPTIONS
+# even when the argument is quoted, and the failures are silent enough to be lethal: measured with
+# CCREAD_MAILBOX=-mbox, the heartbeat published (so `ccsend` ACCEPTED and reported delivery) while
+# `mv: illegal option -- m` left the message in the inbox, undelivered, forever.
+#
+# Doing it HERE rather than adding `--` at each call site is deliberate. I added `--` to three call
+# sites and missed the fourth — the main drain — and the review found it. One normalisation covers
+# every present and future use of $MAILBOX; a per-call-site guard has to be remembered each time.
+case "$MAILBOX" in
+  -*) MAILBOX="./$MAILBOX" ;;
+esac
 INBOX="$MAILBOX/$SID.inbox"
 # Proof-of-life for senders. Holding a pid and a fresh mtime lets a sender
 # distinguish a real watcher from any process that merely mentions the inbox
