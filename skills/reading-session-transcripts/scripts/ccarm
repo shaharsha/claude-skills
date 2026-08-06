@@ -54,6 +54,26 @@ HEARTBEAT="$MAILBOX/$SID.armed"
 mkdir -p "$MAILBOX"
 touch "$INBOX"
 
+# RECOVER a batch stranded by a previous death (TOR-351, 2026-08-06).
+# The drain below moves the whole inbox aside before delivering it, so ANY death
+# between that move and the end of the loop strands the batch: gone from the inbox,
+# never delivered, and — when this used mktemp — sitting in an unnamed file nobody
+# would look for. SIGPIPE lands precisely there, because the write that kills the
+# process IS the delivery write.
+#
+# Fixing it by trapping the signal cannot work: SIGKILL and a harness restart leave
+# the same wreckage. So the in-flight batch has a STABLE name and is recovered on
+# the next arm, which covers every death mode uniformly.
+#
+# Order matters: the stranded batch is OLDER than anything now in the inbox, so it
+# goes first.
+INFLIGHT="$MAILBOX/$SID.inflight"
+if [ -s "$INFLIGHT" ]; then
+  cat "$INBOX" >> "$INFLIGHT" 2>/dev/null || true
+  mv "$INFLIGHT" "$INBOX"
+  : > "$INBOX.recovered"          # a marker a human can find; harmless if unread
+fi
+
 # Remove the heartbeat on any exit, so a stopped watcher stops claiming to be
 # alive within one poll rather than lingering as a stale claim.
 trap 'rm -f "$HEARTBEAT"' EXIT INT TERM
@@ -61,7 +81,7 @@ printf %s "$$" > "$HEARTBEAT"
 
 while true; do
   if [ -s "$INBOX" ]; then
-    t=$(mktemp)
+    t="$INFLIGHT"
     mv "$INBOX" "$t"
     touch "$INBOX"
     while IFS= read -r line; do
