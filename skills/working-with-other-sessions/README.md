@@ -1,6 +1,6 @@
 # working-with-other-sessions
 
-Read what another agent session actually **said** — not the thousands of tool calls around it — and send it a message. Lists every session on the machine with its title and live/stale state, prints any one as a conversation, searches the prose of all of them at once, and delivers messages between sessions *including ones sitting idle*.
+Read what another agent session actually **said** — not the thousands of tool calls around it — and send it a message. Lists every session on the machine with its title and live/stale state, prints any one as a conversation, searches the prose of all of them at once, and hands messages to sessions *including ones sitting idle* — acceptance into an armed inbox, which is not proof of receipt.
 
 Part of [shaharsha/claude-skills](../..). MIT.
 
@@ -69,9 +69,9 @@ scripts/ccread "TOR-55" --tools                  # with tool calls interleaved
 scripts/ccread --all --grep "credential" --since 2026-07-29
 
 # message
-/arm-inbox                                       # make THIS session reachable
-scripts/ccsend --list                            # who can receive right now
-scripts/ccsend --self                            # can *I* still receive?  0 lease · 1 none · 3 unknown
+/arm-inbox                                       # make THIS session hold a lease
+scripts/ccsend --list                            # who is armed (not who will receive)
+scripts/ccsend --self                            # do *I* still hold a lease?  0 lease · 1 none · 3 unknown
 scripts/ccsend --ping                            # round-trip: proves the inbox was DRAINED, not receipt
 scripts/ccsend "TOR-55" "PR #14 merged, you're unblocked"
 ```
@@ -87,8 +87,8 @@ The title shown is the **human-set** one (`customTitle`) when a session has been
 - **Repairing an orphaned transcript: parse per line, never `sed`.** Transcripts are full of commands that mention their own worktree path, so a find-replace "fixes" the file by falsifying the session's record of what it ran. SKILL.md has a working snippet.
 - **Copy, don't move, when recovering.** A live session may still be writing to the original.
 - **It reads; it never writes.** Recovery is a separate, deliberate step you run yourself.
-- **A message reaches an idle session; a hook does not.** Hooks fire on tool calls, and an idle session makes none. Monitor events arrive "even if one lands while you're waiting for the user to answer a question" — which is why the receive path is a Monitor and not a hook.
-- **`ccsend` refuses when no watcher is live.** Writing to an unwatched inbox looks exactly like success. A watcher can also die silently, so the listing is the only current truth about who is reachable.
+- **A message can be picked up by an idle session; a hook cannot fire at all.** Hooks fire on tool calls, and an idle session makes none. Monitor events arrive "even if one lands while you're waiting for the user to answer a question" — which is why the receive path is a Monitor and not a hook.
+- **`ccsend` refuses when no watcher is live.** Writing to an unwatched inbox looks exactly like success. A watcher can also die silently, so the listing is the best available evidence about who holds a lease — never a guarantee of receipt.
 - **Your own inbox dies silently, and you cannot notice it from inside.** A dead inbox and a quiet hour are the same observation: silence. "I got a message recently" is consistent with a live watcher *and* with one that delivered that message and then died. Run **`ccsend --self`** — it is a positive signal, re-runnable, and it names which half failed.
 - **`persistent: true` prevents the TIMEOUT death only, and that is not the common one.** Measured 2026-08-06 on one session: three watcher deaths, **all three harness restarts, zero timeouts** — with `persistent: true` set every time. No arming flag survives a restart, which is why the remedy is a check you re-run rather than a flag you set once.
 - **A fresh lease is not proof of delivery.** `--self` shows a heartbeat naming a live pid. It does *not* show a Monitor is attached to that watcher's stdout, and a **pid can be reused** inside the 10-second freshness window. **`ccsend --ping`** narrows it further, but proves only that the inbox was **drained** — and draining happens *before* the watcher emits anything, so a detached consumer looks identical. **Nothing this tool can run proves receipt; the only confirmation is you SEEING the token.** The two checks together separate "no watcher" from "watcher running, nobody consuming it".

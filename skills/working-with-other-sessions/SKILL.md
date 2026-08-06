@@ -190,7 +190,7 @@ That refusal is correct behaviour. If you need a peer to *act*, `SendMessage` in
 only channel where the origin claim is enforced rather than asserted.
 
 ```bash
-ccsend --list                        # who can receive RIGHT NOW
+ccsend --list                        # who is ARMED — not who will receive
 ccsend "TOR-55" "PR #14 is merged, you're unblocked"
 ccsend "TOR-55" --file notes.md      # longer body from a file
 
@@ -203,7 +203,7 @@ EOF
 
 **This is not a `ccsend` problem — it is a shell problem, so it applies to every command that takes a body as an argument.** `gh pr comment --body`, `gh pr create --body`, `gh issue comment --body`: same trap, same silence. Measured 2026-07-30: a code review posted through `gh pr comment --body "…"` arrived with **three empty code blocks** where its fenced examples had been, and `gh` reported success — the shell had already run the backticked contents as commands and spliced in their (empty) output. Reviews are the worst case, because a garbled review still reads as authoritative. Use `--body-file` / `--file` for anything containing backticks, `$`, or code, and if you catch it late, **delete and repost** rather than leaving a review with holes in it.
 
-**To become reachable yourself, run `/arm-inbox`** — or call Monitor directly with `command: ccarm`, `persistent: true`. `ccarm` needs no argument: the harness exports `CLAUDE_CODE_SESSION_ID`, so a session can arm itself without being told who it is.
+**To hold a lease yourself, run `/arm-inbox`** (a lease, not a guarantee of receipt) — or call Monitor directly with `command: ccarm`, `persistent: true`. `ccarm` needs no argument: the harness exports `CLAUDE_CODE_SESSION_ID`, so a session can arm itself without being told who it is.
 
 **A session receives only while it holds an open Monitor on its inbox.** That watch is the entire mechanism, and it is what reaches a session sitting *idle* waiting for its human — which hooks, MCP channels and process wrappers all fail to do (a hook fires on tool calls; an idle session makes none). Monitor is explicit that events arrive "even if one lands while you're waiting for the user to answer a question."
 
@@ -245,9 +245,9 @@ The corollary for senders: a constraint buried mid-message in a long body is a c
 
 ### Verify, never assume, that a target is reachable
 
-`ccsend` **refuses by default when no watcher is live**, because writing to an unwatched file looks exactly like success. `--force` queues anyway, which only helps if you know the target will arm later — the backlog *is* delivered on arm.
+`ccsend` **refuses by default when no watcher is live**, because writing to an unwatched file looks exactly like success. `--force` queues anyway, which only helps if you know the target will arm later — arming lets the backlog be picked up, but does not prove it was seen (see TOR-425, detached-watcher drain).
 
-A watcher can also die without the session noticing: UI stop, teardown, timeout, session end. **`ccsend --list` is the only current truth about who can receive**; an earlier successful send is not evidence that the next one will land.
+A watcher can also die without the session noticing: UI stop, teardown, timeout, session end. **`ccsend --list` is the best available evidence about who holds a lease** — not about who will receive, since a detached watcher holds a fresh lease and drains to nobody. An earlier successful send is not evidence that the next one will land.
 
 ### Checking your OWN inbox — you cannot notice this from inside
 

@@ -3,12 +3,15 @@
 
     ccsend <id|title> "your message"
     ccsend <id|title> --file notes.md
-    ccsend --list                      who can receive right now
+    ccsend --list                      fleet inventory: who is armed (not who will receive)
     ccsend <id|title> --arm            print the Monitor call the target must run
 
-A session receives only while it holds an open Monitor on its inbox. That watch
-is what makes delivery work even when the session is sitting idle waiting for
-its human — the one thing hooks, channels and process wrappers all fail to do.
+A session picks messages up only while it holds an open Monitor on its inbox.
+That watch is what lets a message be picked up even when the session is idle
+waiting for its human — the one thing hooks, channels and process wrappers all
+fail to do. Holding a lease is NOT the same as receiving: a watcher whose
+Monitor consumer has detached keeps its lease fresh AND drains the inbox, so
+the message is consumed and nobody sees it (TOR-425, detached-watcher drain).
 
 The corollary is the reason this tool refuses by default: a session that never
 armed its inbox has no watcher, so a write lands in a file nobody reads and
@@ -447,7 +450,11 @@ def main():
                                   "(use a quoted heredoc for anything with backticks)")
     p.add_argument("--from", dest="sender", default=os.environ.get("CCSEND_FROM", ""),
                    help="label recorded as the sender")
-    p.add_argument("--list", action="store_true", help="show who can receive right now")
+    p.add_argument("--list", action="store_true",
+                   # NOTE: never rendered — add_help=False at the ArgumentParser and the help
+                   # branch prints __doc__, so no argparse help formatter ever runs. Kept
+                   # correct anyway: the day someone enables add_help it becomes user-facing.
+                   help="show which sessions are armed — armed is not a promise of receipt")
     p.add_argument("--self", dest="self_check", action="store_true",
                    help="report THIS session's own watcher lease (0 fresh, 1 none, 3 cannot tell)")
     p.add_argument("--ping", action="store_true",
@@ -518,11 +525,16 @@ def main():
     all_s = inventory(all_s, caller=me or None)
 
     if a.list:
-        print("armed sessions can receive now; unarmed ones cannot:\n")
+        # Deliberately carries NO row token: `unarmed` contains `armed`, so a header
+        # mentioning either is indistinguishable from a data row to `grep -c armed`
+        # (it over-counted by 2 — this line and the footer). TOR-474.
+        print("# \U0001f4ec = a fresh lease AT THIS SNAPSHOT, not receipt. Sends re-check;")
+        print("# without a fresh lease then, only --force queues.\n")
         # Probe each SID EXACTLY ONCE. Calling is_armed twice makes the two partitions
         # non-complementary: a watcher that dies between the passes lands in both (printed
         # twice), and one that starts between them lands in neither (omitted while armed) —
-        # in a tool whose entire job is to say who is reachable. Watcher death and restart are
+        # in a tool whose job is to produce one coherent watcher-lease snapshot. Watcher
+        # death and restart are
         # routine here, so this is an ordinary interleaving, not a rare one.
         live = {s[0]: is_armed(s[0]) for s in all_s}
         armed = [s for s in all_s if live[s[0]]]
@@ -540,14 +552,16 @@ def main():
             print(f"{mark} {sid[:8]}  {idle}m ago  {title[:52]}{you}")
         if omitted:
             # Say what was dropped. Silent truncation reads as "that is everyone".
-            print(f"\n… {omitted} older unarmed session(s) not shown (armed rows are never hidden)")
+            # No row token here either — see the header comment above. TOR-474.
+            print(f"\n… {omitted} older session(s) with no watcher not shown "
+                  f"(\U0001f4ec rows are never hidden)")
         return
 
     sid, title, _cwd, _mt, *_ = resolve(a.target, all_s)
     inbox = inbox_for(sid)
 
     if a.arm:
-        print(f"# {sid[:8]} ({title}) can receive once it runs /arm-inbox,")
+        print(f"# {sid[:8]} ({title}) can be armed via /arm-inbox — arming is not receipt,")
         print("# or calls Monitor with persistent: true and this command:\n")
         print(f"{CCARM} {sid}")
         return
@@ -637,9 +651,12 @@ def main():
 
     where = f"{sid[:8]} ({title})"
     if armed:
-        print(f"✓ delivered to {where} — a watcher is live, it arrives now [{mode}]")
+        # ACCEPTED, not delivered: this proves the message was written to the inbox of a
+        # session holding a fresh lease. It does NOT prove anyone saw it — a detached
+        # watcher drains the inbox to nobody (TOR-425, detached-watcher drain).
+        print(f"\u2713 accepted for {where} — a fresh lease; NOT proof it was seen [{mode}]")
     else:
-        print(f"⏸ queued for {where} — NO watcher; it arrives only if one is armed [{mode}]")
+        print(f"\u23f8 queued for {where} — NO watcher; picked up only if one arms [{mode}]")
     print(f"  full text: {path}")
 
 
