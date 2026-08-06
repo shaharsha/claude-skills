@@ -98,7 +98,14 @@ for _f in "$MAILBOX/$SID.inflight."*; do
   [ -e "$_f" ] || continue                       # the glob itself when nothing matches
   _p=${_f##*.}
   case "$_p" in (*[!0-9]*|"") continue;; esac     # not a pid suffix — leave it alone
-  kill -0 "$_p" 2>/dev/null && continue           # owner alive: not ours to touch
+  # An orphan bearing OUR OWN pid is ours to adopt, not to skip. `kill -0 $$` succeeds because
+  # it probes this very process, so the liveness test below reads a recycled-pid orphan as
+  # "still owned" — and the first drain then does `mv "$INBOX" "$INFLIGHT"` straight over it,
+  # destroying the batch. This runs before $INFLIGHT is ever written, so a file already at that
+  # name necessarily belongs to a DEAD predecessor that happened to hold this pid.
+  if [ "$_p" != "$$" ]; then
+    kill -0 "$_p" 2>/dev/null && continue         # owner alive: not ours to touch
+  fi
   [ -s "$_f" ] || { rm -f "$_f"; continue; }      # empty orphan: nothing to recover
   cat "$INBOX" >> "$_f" 2>/dev/null || true
   mv "$_f" "$INBOX"

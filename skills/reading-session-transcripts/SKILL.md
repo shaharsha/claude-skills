@@ -180,7 +180,7 @@ ccsend --ping      # 0 DRAINED (the watcher picked a token up) · 1 not drained
 | FRESH LEASE | drained | **no** | draining into a detached consumer — re-arm |
 | FRESH LEASE | drained | yes | reachable |
 
-⚠️ **If you re-arm while the old watcher may still be alive, that is safe now but was not.** Each watcher uses its own `.inflight.<pid>` drain file, so two watchers on one session cannot overwrite each other's in-flight batch. Do not "simplify" that back to one shared name.
+⚠️ **Re-arming while the old watcher may still be alive is NOT fully safe, and the honest statement is narrower than it looks.** Per-watcher `.inflight.<pid>` drain files stop two watchers destroying each other's in-flight batch — do not "simplify" that back to one shared name. But **both watchers still race for the inbox itself**: if the detached one wins a given message, it drains and emits it to a consumer nobody is reading, and the live one never sees it. So a `--ping` that you *do* see proves that ping arrived; it does **not** promise the next message will. Ownership fencing between watchers is not built — [TOR-414].
 
 ### What a message is, and isn't
 
