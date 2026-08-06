@@ -88,12 +88,20 @@ ISO_MB="$(mktemp -d)"   || { echo "CORPUS BROKEN — cannot create isolation mai
 # design, and while its title under empty roots is the fixed literal "(no transcript)" and
 # therefore safe, unsetting it makes the corpus fully deterministic — 0 rows, header only.
 # (The footer prints only when rows are omitted, so it is covered by the source scan below.)
-emit 'ccsend --list'      0 env -u CLAUDE_CODE_SESSION_ID \
-                              CCREAD_ROOT="$ISO_ROOT" CCREAD_MAILBOX="$ISO_MB" "$CCSEND" --list
+LIST_OUT="$(env -u CLAUDE_CODE_SESSION_ID CCREAD_ROOT="$ISO_ROOT" CCREAD_MAILBOX="$ISO_MB" \
+            "$CCSEND" --list 2>&1)"; list_rc=$?
+[ "$list_rc" = 0 ] || { echo "CORPUS BROKEN — isolated --list exited $list_rc, expected 0"; exit 3; }
+[ -n "$LIST_OUT" ] || { echo "CORPUS BROKEN — no output from: isolated ccsend --list"; exit 3; }
+CORPUS+="$LIST_OUT"$'\n'
 # Assert the PROPERTY, not the mechanism: under isolation the listing must contain ZERO
 # session rows. If any row appears, something leaked a real root in and the corpus is
 # contaminated with titles nobody here controls — exactly what this probe exists to prevent.
-if printf '%s' "$CORPUS" | grep -qE '^(📬 armed|   unarmed) '; then
+#
+# Scoped to the LIST output alone. Asserting over the accumulated corpus attributed any
+# row-shaped line to --list no matter which surface produced it: documenting the row format
+# in ccsend's docstring makes `--help` render it legitimately, and a CORRECT tree then exits 3
+# claiming the isolation failed. Measured.
+if printf '%s' "$LIST_OUT" | grep -qE '^(📬 armed|   unarmed) '; then
   echo "CORPUS BROKEN — isolated --list produced session rows; isolation did not take effect"
   rmdir "$ISO_ROOT" "$ISO_MB" 2>/dev/null
   exit 3
@@ -124,9 +132,38 @@ emit 'README.md'          0 cat "$SKILL_DIR/README.md"
 #
 # RESIDUE, named rather than hidden: a TRAILING comment on a line of code is not stripped,
 # so quoting an old string after live code still trips it. Move such a note to its own line.
-strip_comments() { sed -E 's/^[[:space:]]*#.*$//' "$1"; }
-emit 'ccsend source'      0 strip_comments "$CCSEND"
-emit 'ccarm source'       0 strip_comments "$CCARM"
+# Python source: drop COMMENT tokens, keep STRING tokens. The previous rule was a lexical
+# sed on lines starting with `#`, which is syntax-BLIND in both directions — it removed a
+# `# it arrives now` line living inside a live triple-quoted string, hiding a real promise.
+# tokenize knows the difference; sed cannot.
+strip_py_comments() {
+  python3 - "$1" <<'PYEOF'
+import io, sys, tokenize
+src = open(sys.argv[1], encoding='utf-8').read()
+out, last = [], (1, 0)
+try:
+    for tok in tokenize.generate_tokens(io.StringIO(src).readline):
+        if tok.type == tokenize.COMMENT:
+            continue
+        out.append(tok)
+except (tokenize.TokenError, IndentationError):
+    # Tokenizing failed: emit the file UNCHANGED rather than a partial one. A truncated
+    # corpus would hide promises in whatever came after the failure point.
+    sys.stdout.write(src); sys.exit(0)
+sys.stdout.write(tokenize.untokenize(out))
+PYEOF
+}
+# Shell source: no tokenizer here, so the lexical rule stays.
+#
+# RESIDUE, named and LIVE — I first wrote that ccarm "contains no heredoc today" and the
+# control I cited in the same sentence refuted it. ccarm:179-196 IS a heredoc (`done
+# <<RECOVER_EOF`), and four of its body lines begin with `#`. Stripping those is harmless
+# because they are genuine shell comments inside code the heredoc evaluates — but the gap is
+# real, not hypothetical: a forbidden string placed on a `#`-leading line inside a heredoc
+# body would be missed. Keep such text off `#`-leading lines in shell sources.
+strip_sh_comments() { sed -E 's/^[[:space:]]*#.*$//' "$1"; }
+emit 'ccsend source'      0 strip_py_comments "$CCSEND"
+emit 'ccarm source'       0 strip_sh_comments "$CCARM"
 
 # No prose "positive control" anchor here. The previous version grepped for a documentation
 # sentence, which a legitimate later edit could rephrase — turning a correct tree into
