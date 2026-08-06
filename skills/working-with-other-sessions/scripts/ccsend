@@ -659,9 +659,12 @@ def main():
         # present-tense fact this code never established. TOR-474.
         print(f"\u2713 accepted for {where} — lease was fresh at preflight; NOT proof it was seen [{mode}]")
     else:
-        # `is_armed` collapses every exception to False, so this branch also covers "could not
-        # tell". A draining watcher with an unreadable heartbeat can still pick this up.
-        print(f"\u23f8 queued for {where} — NO fresh lease at preflight; pickup unproven [{mode}]")
+        # NOT CONFIRMED, never "no lease": `is_armed` collapses every exception to False, so
+        # this branch covers absent, stale AND unreadable alike. A live draining watcher whose
+        # heartbeat we merely failed to read lands here, and telling the sender there was no
+        # lease states as fact something the probe did not establish.
+        print(f"\u23f8 queued for {where} — fresh lease NOT CONFIRMED at preflight; "
+              f"pickup unproven [{mode}]")
     print(f"  full text: {path}")
 
 

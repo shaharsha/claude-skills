@@ -71,7 +71,19 @@ emit() {
 }
 
 emit 'ccsend --help'      0 "$CCSEND" --help
-emit 'ccsend --list'      0 "$CCSEND" --list
+# --list runs against EMPTY roots. Live session TITLES are rendered into its output
+# (ccsend:552 prints title[:52]), so with the real roots the corpus contains ~51 titles
+# nobody here controls — and a lane titled e.g. "Why it arrives now is misleading" would
+# match a forbidden fragment and fail a correct tree. Demonstrated. The header and footer
+# strings this probe exists to check are emitted regardless of how many sessions exist.
+ISO_ROOT="$(mktemp -d)"; ISO_MB="$(mktemp -d)"
+# CLAUDE_CODE_SESSION_ID is unset too: the caller's own row is pinned into the listing by
+# design, and while its title under empty roots is the fixed literal "(no transcript)" and
+# therefore safe, unsetting it makes the corpus fully deterministic — 0 rows, header only.
+# (The footer prints only when rows are omitted, so it is covered by the source scan below.)
+emit 'ccsend --list'      0 env -u CLAUDE_CODE_SESSION_ID \
+                              CCREAD_ROOT="$ISO_ROOT" CCREAD_MAILBOX="$ISO_MB" "$CCSEND" --list
+rmdir "$ISO_ROOT" "$ISO_MB" 2>/dev/null || true
 emit 'ccarm --help'       0 "$CCARM"  --help
 emit 'argparse error'     2 "$CCSEND" --timeout nope --ping
 emit 'SKILL.md'           0 cat "$SKILL_DIR/SKILL.md"
@@ -98,12 +110,18 @@ emit 'ccarm source'       0 cat "$CCARM"
 # CORPUS BROKEN. Per-surface status validation above is the structural form of the same
 # assertion and does not depend on any wording surviving.
 
+# Read grep's status explicitly. `if grep -qF ...; then` collapses EVERY nonzero status
+# into the else-branch, so an operational grep error (2) was indistinguishable from "no
+# match" and the script reported CLEAN — while documenting an exit 2 that no path could
+# produce. A documented state that cannot occur is a false claim about the instrument.
 hits=0
 for s in "${FORBIDDEN[@]}"; do
-  if printf '%s' "$CORPUS" | grep -qF -- "$s"; then
-    echo "FORBIDDEN STRING PRESENT: $s"
-    hits=$((hits + 1))
-  fi
+  printf '%s' "$CORPUS" | grep -qF -- "$s"; g=$?
+  case $g in
+    0) echo "FORBIDDEN STRING PRESENT: $s"; hits=$((hits + 1)) ;;
+    1) ;;
+    *) echo "PROBE BROKE — grep exited $g on: $s; nothing was concluded"; exit 2 ;;
+  esac
 done
 
 case $hits in
