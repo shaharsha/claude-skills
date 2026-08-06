@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ccsend — deliver a message to another agent session on this machine.
+"""ccsend — accept a message into another agent session's inbox on this machine.
 
     ccsend <id|title> "your message"
     ccsend <id|title> --file notes.md
@@ -654,9 +654,14 @@ def main():
         # ACCEPTED, not delivered: this proves the message was written to the inbox of a
         # session holding a fresh lease. It does NOT prove anyone saw it — a detached
         # watcher drains the inbox to nobody (TOR-425, detached-watcher drain).
-        print(f"\u2713 accepted for {where} — a fresh lease; NOT proof it was seen [{mode}]")
+        # Describe ONLY what was sampled. The lease was read at preflight (`is_armed` above);
+        # the append happens later, so the watcher can die in between. "a fresh lease" asserts a
+        # present-tense fact this code never established. TOR-474.
+        print(f"\u2713 accepted for {where} — lease was fresh at preflight; NOT proof it was seen [{mode}]")
     else:
-        print(f"\u23f8 queued for {where} — NO watcher; picked up only if one arms [{mode}]")
+        # `is_armed` collapses every exception to False, so this branch also covers "could not
+        # tell". A draining watcher with an unreadable heartbeat can still pick this up.
+        print(f"\u23f8 queued for {where} — NO fresh lease at preflight; pickup unproven [{mode}]")
     print(f"  full text: {path}")
 
 

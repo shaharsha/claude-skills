@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ccarm — hold this session's inbox open so other sessions can reach it.
+# ccarm — hold a lease while draining this session's inbox.
 #
 #   Monitor(command="ccarm <session-id>", persistent=true)
 #
