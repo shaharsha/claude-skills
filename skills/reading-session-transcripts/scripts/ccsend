@@ -442,7 +442,21 @@ def main():
     # parse_known_args, not parse_args: argparse cannot gather a `nargs="*"`
     # positional that appears AFTER an option, and `ccsend <id> --from x "msg"`
     # is the natural way to type this. Leftovers are message text.
-    a, extra = p.parse_known_args()
+    # Honour the conventional `--` separator BEFORE parsing. Everything after it is message text,
+    # verbatim, whatever it starts with. Without it there is no way to send a body that begins with
+    # a dash, and the failure is not uniform — measured on this build:
+    #   "--blocked pending review"  delivered      (argparse assigned it to the positional)
+    #   "--unknownflag"             rejected, 2
+    #   "--force"                   consumed AS the flag -> "empty message"
+    #   "--list"                    consumed AS the flag -> it LISTED instead of sending
+    # That last one is the reason this matters beyond ergonomics: a message body equal to a known
+    # flag silently performs a DIFFERENT ACTION and reports success.
+    argv = sys.argv[1:]
+    forced_body = []
+    if "--" in argv:
+        i = argv.index("--")
+        argv, forced_body = argv[:i], argv[i + 1:]
+    a, extra = p.parse_known_args(argv)
     # REFUSE an unrecognised flag. `parse_known_args` hands them back in `extra`, and this line
     # used to DROP them — so `ccsend --sef` (a typo for --self) printed usage and exited 0, and
     # `ccsend --self; [ $? -eq 0 ] && healthy` reported HEALTHY for a flag that does not exist.
@@ -459,7 +473,7 @@ def main():
         print("Run `ccsend` with no arguments for usage. For message text that begins with a dash, "
               "use `--file -` and a quoted heredoc.", file=sys.stderr)
         return 2
-    a.message = list(a.message) + list(extra)
+    a.message = list(a.message) + list(extra) + forced_body
     # `--self` and `--ping` take no target and are not `--list`, so they fall into this branch
     # unless named here. Measured: without them, every one of their controls printed the
     # docstring and exited 0 — including the two that MUST fail, which is the only reason it

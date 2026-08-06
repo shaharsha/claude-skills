@@ -121,10 +121,21 @@ _emit_file() {
 # boundary — a death mid-emit replays that one file — but a fully delivered batch can no longer be
 # duplicated, and a concurrent append can no longer be destroyed.
 #
+# Read paths a LINE at a time, quoted. `for _f in $(...)` word-splits, so a CCREAD_MAILBOX
+# containing a space was torn into fragments and every orphan under it skipped — forever, since
+# each new watcher repeats it. Measured: '/tmp/agent mailbox' delivered 0 of 1 and left the batch
+# in place. `ccarm` supports that variable, so the path is not hypothetical.
+#
 # Oldest first, by mtime. Second-resolution ties are possible and are not ordered by this: two
 # batches stranded within the same second may emit in either order. Ordering strictly needs a
 # sequence written when the batch is created — TOR-425.
-for _f in $(
+while IFS= read -r _f; do
+  [ -n "$_f" ] || continue
+  _emit_file "$_f"
+  rm -f "$_f"
+  : > "$INBOX.recovered"            # a marker a human can find; harmless if unread
+done <<RECOVER_EOF
+$(
   for _c in "$MAILBOX/$SID.inflight."*; do
     [ -e "$_c" ] || continue                        # the glob itself when nothing matches
     _p=${_c##*.}
@@ -139,11 +150,8 @@ for _f in $(
     [ -s "$_c" ] || { rm -f "$_c"; continue; }       # empty orphan: nothing to recover
     printf '%s\t%s\n' "$(_mtime "$_c")" "$_c"
   done | sort -n | cut -f2-
-); do
-  _emit_file "$_f"
-  rm -f "$_f"
-  : > "$INBOX.recovered"            # a marker a human can find; harmless if unread
-done
+)
+RECOVER_EOF
 
 # The PREVIOUS release wrote ONE unsuffixed `$SID.inflight`. This version does NOT adopt it, and
 # that is a decision rather than an oversight.
@@ -158,10 +166,13 @@ done
 # and REPORTED: recoverable by a human, and incapable of duplicating or stealing.
 _legacy="$MAILBOX/$SID.inflight"
 if [ -s "$_legacy" ]; then
-  echo "[ccarm] NOTE: a batch from the previous release is stranded at $_legacy"
-  echo "[ccarm] NOT auto-recovered - it carries no owner id, and the release that writes it can"
-  echo "[ccarm] drop its heartbeat while still delivering. Recover by hand once no watcher holds"
-  echo "[ccarm] this session, then delete it. See TOR-425."
+  echo "[ccarm] NOTE: a batch from the previous release exists at $_legacy"
+  echo "[ccarm] Its OWNERSHIP IS UNKNOWN. It may be stranded, or a legacy watcher may still be"
+  echo "[ccarm] delivering it: that release drops its heartbeat on TERM without exiting, so no"
+  echo "[ccarm] heartbeat check - including this one - can tell the two apart."
+  echo "[ccarm] Do NOT replay it on the strength of this notice: if it is still owned, the"
+  echo "[ccarm] recipient gets the message twice. Replay only after establishing that no legacy"
+  echo "[ccarm] watcher for this session survives, which this tool cannot establish. See TOR-425."
 fi
 
 # A JOURNAL, so a death can be BOUNDED rather than guessed (TOR-355).
