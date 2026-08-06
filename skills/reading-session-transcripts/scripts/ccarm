@@ -105,7 +105,12 @@ printf '%s START pid=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$" >> "$JOURNAL" 2
 # refresh the heartbeat again — `kill -TERM` would not stop this script, and the
 # STOP line would be a lie told one second before the next heartbeat. Measured on
 # the pre-fix version: it did not stop.
-_stop() { printf '%s STOP\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$JOURNAL" 2>/dev/null || true; }
+# STOP carries the pid, because START does and an unlabelled STOP cannot be paired with it.
+# The comment above admits watcher B can start before A finishes exiting, so a journal can
+# read `START pid=A` `START pid=B` `STOP` — and pairing that by recency marks B clean when it
+# was A that stopped, while FIFO pairing is wrong in the symmetric case. Either way an audit
+# bounds the wrong watcher's death, which is the one thing this journal exists to do.
+_stop() { printf '%s STOP pid=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$" >> "$JOURNAL" 2>/dev/null || true; }
 trap '_stop' EXIT
 trap 'exit 143' TERM
 trap 'exit 130' INT
