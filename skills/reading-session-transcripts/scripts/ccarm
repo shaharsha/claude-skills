@@ -67,12 +67,43 @@ touch "$INBOX"
 #
 # Order matters: the stranded batch is OLDER than anything now in the inbox, so it
 # goes first.
-INFLIGHT="$MAILBOX/$SID.inflight"
-if [ -s "$INFLIGHT" ]; then
-  cat "$INBOX" >> "$INFLIGHT" 2>/dev/null || true
-  mv "$INFLIGHT" "$INBOX"
+# The in-flight file is PER WATCHER (`.inflight.<pid>`), not per session.
+#
+# One shared `$SID.inflight` is a data-loss race as soon as two watchers exist for a session,
+# and two watchers is a state this tool now ACTIVELY CAUSES: `--self`/`--ping` can diagnose "a
+# watcher is draining into a detached consumer" and the remedy is to re-arm, which starts B
+# while A is still alive. Then:
+#
+#   A: mv inbox -> inflight ; touch inbox        (A's batch is in the shared file)
+#   B: mv inbox -> inflight                      (B OVERWRITES it with the empty one)
+#   A: reads the now-empty file, rm's it         (A's batch is gone, permanently)
+#
+# Per-pid names remove the collision entirely rather than serialising it: two watchers cannot
+# name the same file, so neither can overwrite the other's batch.
+INFLIGHT="$MAILBOX/$SID.inflight.$$"
+
+# RECOVER batches stranded by a previous death (TOR-351, 2026-08-06).
+# The drain below moves the whole inbox aside before delivering it, so ANY death between that
+# move and the end of the loop strands the batch: gone from the inbox and never delivered.
+# SIGPIPE lands precisely there, because the write that kills the process IS the delivery write.
+# Trapping the signal cannot help — SIGKILL and a harness restart leave identical wreckage — so
+# recovery happens on the next arm, which covers every death mode uniformly.
+#
+# Recover ONLY files whose owning pid is gone. A live watcher's in-flight batch is its own and
+# is mid-delivery; stealing it would recreate the loss this exists to prevent, with two
+# processes reading one file.
+#
+# Oldest first: a stranded batch predates anything now in the inbox.
+for _f in "$MAILBOX/$SID.inflight."*; do
+  [ -e "$_f" ] || continue                       # the glob itself when nothing matches
+  _p=${_f##*.}
+  case "$_p" in (*[!0-9]*|"") continue;; esac     # not a pid suffix — leave it alone
+  kill -0 "$_p" 2>/dev/null && continue           # owner alive: not ours to touch
+  [ -s "$_f" ] || { rm -f "$_f"; continue; }      # empty orphan: nothing to recover
+  cat "$INBOX" >> "$_f" 2>/dev/null || true
+  mv "$_f" "$INBOX"
   : > "$INBOX.recovered"          # a marker a human can find; harmless if unread
-fi
+done
 
 # A JOURNAL, so a death can be BOUNDED rather than guessed (TOR-355).
 # A lane that finds itself unarmed could previously say only "it died at some
