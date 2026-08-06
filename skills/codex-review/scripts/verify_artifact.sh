@@ -41,9 +41,21 @@ USAGE
 # 64-character lowercase digest is what stops a malformed sidecar producing a
 # CONFIDENT verdict -- the failure mode being avoided is a wrong answer, not a crash.
 _recorded_digest() {
-  local prov="$1" line value
+  local prov="$1" line value bytes stripped
   local -a vals=()
   [[ -f "$prov" && -r "$prov" ]] || { printf 'NOSIDECAR\t%s\n' "$prov"; return 0; }
+
+  # Reject NUL bytes BEFORE parsing. `read` stops at a NUL, so a line of the form
+  # `artifact_sha256=<valid digest>\0<junk>` is delivered as just the digest and
+  # sails through the shape check -- a malformed sidecar producing a CONFIDENT
+  # UNCHANGED, which is the one outcome this tool must never produce. The shape
+  # check cannot catch it because the bytes that make it malformed are the bytes
+  # `read` discarded, so the test has to happen at the byte level, before parsing.
+  bytes="$(wc -c < "$prov")"
+  stripped="$(LC_ALL=C tr -d '\000' < "$prov" | wc -c)"
+  if [[ "$bytes" != "$stripped" ]]; then
+    printf 'MALFORMED\t\n'; return 0
+  fi
 
   # Read once and collect, rather than `grep -c` + `sed`. `grep -c` exits 1 for a
   # legitimate zero count and >1 for a real error, so a `|| true` that makes the
@@ -136,7 +148,10 @@ verify_dir() {
   # `find` and `sort` is OBSERVABLE. Through `done < <(find … | sort -z)` a failed
   # enumeration is indistinguishable from an empty directory, and the run would
   # report success having listed nothing.
-  list="$(mktemp)"; trap 'rm -f "$list"' RETURN
+  # EXIT, not RETURN: this function always ends in `exit`, and a RETURN trap does
+  # not fire on `exit` -- so the enumeration file would leak on every single run.
+  # `$list.s` is named too, because a failing `sort` leaves it behind.
+  list="$(mktemp)"; trap 'rm -f "$list" "$list.s"' EXIT
   find "$dir" -maxdepth 1 -type f -name '*.md' -print0 > "$list" || {
     echo "could not enumerate $dir; nothing was checked" >&2; exit 2; }
   sort -z < "$list" > "$list.s" || {
@@ -237,6 +252,12 @@ self_test() {
   # fails the hex match, and a perfectly good artifact reports CANNOT-TELL.
   printf 'artifact_sha256=%s\r\n' "$real" > "$prov"
   _expect 'CRLF sidecar' UNCHANGED "$md"
+
+  # A NUL truncates `read`, so the junk after it vanishes and the digest looks
+  # valid. This control is the reason the byte-level check exists; without it the
+  # sidecar is malformed and the verdict is a confident UNCHANGED.
+  { printf 'artifact_sha256=%s' "$real"; printf '\000junk\n'; } > "$prov"
+  _expect 'NUL-suffixed digest refused' CANNOT-TELL "$md"
 
   printf '\nHASHER controls — a failing hasher must not produce a CONFIDENT verdict\n'
   printf 'artifact_sha256=%s\n' "$real" > "$prov"
