@@ -247,7 +247,8 @@ def self_check(me):
         fh = open(hb)
     except FileNotFoundError:
         print(f"NO LEASE — no heartbeat file for {me[:8]}. Nothing is draining your inbox.")
-        print("  Re-arm: Monitor(command=ccarm, persistent=true). Messages sent meanwhile were REFUSED,")
+        print("  Re-arm: Monitor(command=ccarm, persistent=true). SAFE here — no watcher exists,")
+        print("  so arming cannot put you behind a second one. Messages sent meanwhile were REFUSED,")
         print("  so the senders know; you were not silently skipped.")
         return 1
     except OSError as e:
@@ -270,6 +271,7 @@ def self_check(me):
         return 3
     except ProcessLookupError:
         print(f"NO LEASE — watcher pid {pid} is gone; last heartbeat {age:.0f}s ago.")
+        print("  Re-arm: SAFE here — the owning process is gone, so arming creates no second watcher.")
         print(f"  Journal: {os.path.join(MAILBOX, me + '.journal')} — a START with no STOP means an")
         print("  unclean OR UNKNOWN termination. SIGKILL and a harness restart cannot be trapped —")
         print("  and the journal append is best-effort, so a clean exit whose STOP could not be")
@@ -284,6 +286,14 @@ def self_check(me):
     if age > HEARTBEAT_STALE_SECONDS:
         print(f"NO LEASE — heartbeat is {age:.0f}s stale (limit {HEARTBEAT_STALE_SECONDS}s); "
               f"pid {pid} exists but is not refreshing it.")
+        # The ONE branch where re-arming is not obviously right: a process is there and wedged.
+        # Arming now leaves TWO watchers racing for the inbox, and the wedged one can still win a
+        # message and emit it where nobody reads (TOR-425 §2, open). The other two branches have no
+        # live process, so arming cannot create that state — which is why the advice differs by
+        # branch rather than being printed uniformly.
+        print(f"  A process IS alive. Re-arming now leaves two watchers racing for your inbox, and")
+        print(f"  the wedged one can still win a message. Prefer stopping pid {pid} first; if you")
+        print(f"  cannot, re-arm and treat delivery as unproven until you SEE a message arrive.")
         return 1
     print(f"FRESH LEASE — {me[:8]}: heartbeat {age:.1f}s old names pid {pid}, which currently exists.")
     print("  That is a lease, NOT proof of delivery: it does not show a Monitor is attached to")

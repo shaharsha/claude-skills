@@ -175,12 +175,12 @@ ccsend --ping      # 0 DRAINED (the watcher picked a token up) · 1 not drained
 
 | `--self` | `--ping` | you see the token | meaning |
 |---|---|---|---|
-| NO LEASE | — | — | no watcher at all — re-arm |
+| NO LEASE | — | — | no watcher — **re-arm, safe**: nothing is alive to race with |
 | FRESH LEASE | not drained | — | a process holds a lease but is not draining |
-| FRESH LEASE | drained | **no** | draining into a detached consumer — re-arm |
+| FRESH LEASE | drained | **no** | draining into a detached consumer — **re-arming is NOT a clean fix**: the old watcher is alive and can still win the next message. See the caveat below |
 | FRESH LEASE | drained | yes | reachable |
 
-⚠️ **Re-arming while the old watcher may still be alive is NOT fully safe, and the honest statement is narrower than it looks.** Per-watcher `.inflight.<pid>` drain files stop two watchers destroying each other's in-flight batch — do not "simplify" that back to one shared name. But **both watchers still race for the inbox itself**: if the detached one wins a given message, it drains and emits it to a consumer nobody is reading, and the live one never sees it. So a `--ping` that you *do* see proves that ping arrived; it does **not** promise the next message will. Ownership fencing between watchers is not built — [TOR-414].
+⚠️ **Re-arming while the old watcher may still be alive is NOT fully safe, and the honest statement is narrower than it looks.** Per-watcher `.inflight.<pid>` drain files stop two watchers destroying each other's in-flight batch — do not "simplify" that back to one shared name. But **both watchers still race for the inbox itself**: if the detached one wins a given message, it drains and emits it to a consumer nobody is reading, and the live one never sees it. So a `--ping` that you *do* see proves that ping arrived; it does **not** promise the next message will. Ownership fencing between watchers is not built — [TOR-425].
 
 ### What a message is, and isn't
 
