@@ -51,12 +51,27 @@ _recorded_digest() {
   # UNCHANGED, which is the one outcome this tool must never produce. The shape
   # check cannot catch it because the bytes that make it malformed are the bytes
   # `read` discarded, so the test has to happen at the byte level, before parsing.
-  bytes="$(wc -c < "$prov")"
-  stripped="$(LC_ALL=C tr -d '\000' < "$prov" | wc -c)"
+  # Each helper's STATUS is checked, not just its output. Both failing produces two
+  # empty strings, and `"" != ""` is FALSE -- so an unchecked comparison passes the
+  # gate precisely when the check could not run, and a NUL-suffixed digest then
+  # reads as UNCHANGED. Measured with both `wc` calls returning 127: the gate
+  # passed. A check that cannot run must say so, never wave the input through.
+  bytes="$(wc -c < "$prov" 2>/dev/null)" || { printf 'UNCHECKABLE\t\n'; return 0; }
+  stripped="$(LC_ALL=C tr -d '\000' < "$prov" 2>/dev/null | wc -c)" || { printf 'UNCHECKABLE\t\n'; return 0; }
+  if [[ -z "$bytes" || -z "$stripped" ]]; then
+    printf 'UNCHECKABLE\t\n'; return 0
+  fi
   if [[ "$bytes" != "$stripped" ]]; then
     printf 'MALFORMED\t\n'; return 0
   fi
 
+  # KNOWN AND ACCEPTED: the sidecar is opened twice — once above for the NUL check,
+  # once below to parse — so a rewrite landing between them is not detected. Not
+  # fixed, and the reason is that closing it buys nothing: anyone able to rewrite the
+  # sidecar mid-check can simply write a matching digest instead, which no amount of
+  # atomicity here would catch. The race grants an attacker nothing they do not
+  # already have, and sidecars are written once at generation and never revised.
+  #
   # Read once and collect, rather than `grep -c` + `sed`. `grep -c` exits 1 for a
   # legitimate zero count and >1 for a real error, so a `|| true` that makes the
   # normal case work also swallows the error case -- and the two mean opposite
@@ -108,6 +123,7 @@ verify_one() {
     DUP)       VERDICT="CANNOT-TELL"; DETAIL="sidecar has $recorded artifact_sha256 keys; exactly one is required"; return 0 ;;
     SENTINEL)  VERDICT="CANNOT-TELL"; DETAIL="sidecar records artifact_sha256=unavailable — the hash could not be computed at generation"; return 0 ;;
     MALFORMED) VERDICT="CANNOT-TELL"; DETAIL="sidecar artifact_sha256 is not 64 lowercase hex characters"; return 0 ;;
+    UNCHECKABLE) VERDICT="CANNOT-TELL"; DETAIL="the sidecar could not be checked for NUL bytes (wc/tr unavailable or failed); nothing was compared"; return 0 ;;
   esac
 
   # BOTH conditions, and neither alone is enough. A hasher that exits non-zero while
@@ -151,8 +167,23 @@ verify_dir() {
   # EXIT, not RETURN: this function always ends in `exit`, and a RETURN trap does
   # not fire on `exit` -- so the enumeration file would leak on every single run.
   # `$list.s` is named too, because a failing `sort` leaves it behind.
-  list="$(mktemp)"; trap 'rm -f "$list" "$list.s"' EXIT
-  find "$dir" -maxdepth 1 -type f -name '*.md' -print0 > "$list" || {
+  #
+  # The path is a GLOBAL with a reserved name, and the trap is single-quoted so it
+  # reads that global when it fires -- NOT a `local`. Measured on bash 3.2.57 a
+  # local IS still visible to the trap when `exit` is called from inside the
+  # function, so the local form works TODAY. It stops working the moment anyone
+  # changes this function to `return` instead: the frame is gone by then, and the
+  # trap would resolve whatever `list` happens to exist in the environment and
+  # `rm -f` THAT. A one-word rename removes a latent `rm` on an attacker- or
+  # accident-supplied path, and costs nothing.
+  _VERIFY_ARTIFACT_LIST="$(mktemp)"
+  trap 'rm -f "$_VERIFY_ARTIFACT_LIST" "$_VERIFY_ARTIFACT_LIST.s"' EXIT
+  list="$_VERIFY_ARTIFACT_LIST"
+  # `\( -type f -o -type l \)`, never a bare `-type f`: a SYMLINKED .md is still a
+  # .md, and dropping it silently is the exact defect the missing membership
+  # predicate was removed to prevent -- rebuilt one layer down, in `find`. A broken
+  # or unreadable link reaches verify_one and lands in CANNOT-TELL, which is true.
+  find "$dir" -maxdepth 1 \( -type f -o -type l \) -name '*.md' -print0 > "$list" || {
     echo "could not enumerate $dir; nothing was checked" >&2; exit 2; }
   sort -z < "$list" > "$list.s" || {
     echo "could not order the artifact list; nothing was checked" >&2; exit 2; }
@@ -271,6 +302,31 @@ self_test() {
   _expect 'succeeds with malformed output' CANNOT-TELL "$md"
   unset -f shasum
   _expect 'real hasher restored' UNCHANGED "$md"
+
+  # The NUL precheck's own helpers. If they fail, BOTH variables come back empty
+  # and `"" != ""` is false — so the gate passes exactly when it could not run.
+  printf 'artifact_sha256=%s\n' "$real" > "$prov"
+  wc() { return 127; }
+  _expect 'wc unavailable -> not a pass' CANNOT-TELL "$md"
+  unset -f wc
+  _expect 'wc restored' UNCHANGED "$md"
+
+  printf '\nDIRECTORY-MODE control — nothing may leave the denominator silently\n'
+  local dd="$d/dirmode"; mkdir -p "$dd"
+  cp "$md" "$dd/real.md"; cp "$prov" "$dd/real.provenance"
+  ln -s "$dd/real.md" "$dd/linked.md"          # a symlinked .md is still a .md
+  printf 'not a round\n' > "$dd/PR-BODY-x.md"  # and so is a non-round file
+  # Runs the REAL verify_dir in a subshell (it ends in `exit`, which would otherwise
+  # end the self-test) and reads M off its own coverage line — so this exercises the
+  # shipped enumeration rather than a second copy of it.
+  local out
+  out="$( ( verify_dir "$dd" ) 2>/dev/null | sed -n 's/^[0-9]* of \([0-9]*\) verified.*/\1/p' )" || true
+  if [[ "$out" == "3" ]]; then
+    printf '  ok    %-34s -> 3 of 3 classified\n' 'symlink + non-round counted'
+  else
+    printf '  FAIL  %-34s -> %s classified, wanted 3\n' 'symlink + non-round counted' "$out"
+    _st_fail=$((_st_fail + 1))
+  fi
 
   printf '\n'
   if (( _st_fail == 0 )); then printf 'self-test: all controls behaved as specified\n'; return 0
