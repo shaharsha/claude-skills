@@ -291,9 +291,17 @@ def self_check(me):
         # message and emit it where nobody reads (TOR-425 §2, open). The other two branches have no
         # live process, so arming cannot create that state — which is why the advice differs by
         # branch rather than being printed uniformly.
-        print(f"  A process IS alive. Re-arming now leaves two watchers racing for your inbox, and")
-        print(f"  the wedged one can still win a message. Prefer stopping pid {pid} first; if you")
-        print(f"  cannot, re-arm and treat delivery as unproven until you SEE a message arrive.")
+        # Do NOT tell anyone to kill this pid. The same reuse caveat this function already states
+        # for FRESH LEASE applies here: `kill(pid, 0)` proves a process exists, never that it is the
+        # watcher that wrote the heartbeat. A recycled pid can be an editor or another agent, and
+        # "stop pid N" is then advice to terminate an unrelated process — the one remedy in this
+        # tool that could do damage outside the mailbox.
+        print(f"  Pid {pid} EXISTS but is unverified: this cannot tell a wedged watcher from an")
+        print(f"  unrelated process that reused the pid. So it cannot certify re-arming as safe OR")
+        print(f"  unsafe here. Check what {pid} actually is (`ps -p {pid} -o comm=`) before acting.")
+        print(f"  If it is a ccarm for this session, stopping it first avoids two watchers racing;")
+        print(f"  if it is not, re-arming is safe. Either way, treat delivery as unproven until you")
+        print(f"  SEE a message arrive.")
         return 1
     print(f"FRESH LEASE — {me[:8]}: heartbeat {age:.1f}s old names pid {pid}, which currently exists.")
     print("  That is a lease, NOT proof of delivery: it does not show a Monitor is attached to")

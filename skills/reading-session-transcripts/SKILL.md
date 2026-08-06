@@ -175,7 +175,8 @@ ccsend --ping      # 0 DRAINED (the watcher picked a token up) · 1 not drained
 
 | `--self` | `--ping` | you see the token | meaning |
 |---|---|---|---|
-| NO LEASE | — | — | no watcher — **re-arm, safe**: nothing is alive to race with |
+| NO LEASE *(no heartbeat, or dead pid)* | — | — | no watcher — **re-arm, safe**: nothing is alive to race with |
+| NO LEASE *(stale heartbeat, pid still EXISTS)* | — | — | **not safe to assume either way.** The pid may be a wedged watcher or an unrelated process that reused it — check with `ps` before stopping anything |
 | FRESH LEASE | not drained | — | a process holds a lease but is not draining |
 | FRESH LEASE | drained | **no** | draining into a detached consumer — **re-arming is NOT a clean fix**: the old watcher is alive and can still win the next message. See the caveat below |
 | FRESH LEASE | drained | yes | reachable |
