@@ -1,0 +1,1 @@
+Commit all changes, push the branch, and open a PR. Then monitor CI checks until they complete. If any check fails, read the logs, diagnose the root cause, fix it, and re-push. If you can't fix it after 2 attempts, stop and explain what's failing. Once all checks pass, merge the PR.
