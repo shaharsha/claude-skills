@@ -171,7 +171,16 @@ _reserve_base() {
   # reports the wrong cause.
   [[ -w "$OUT_DIR" ]] || { echo "artifact directory is not writable: $OUT_DIR" >&2; exit 73; }
   while :; do
-    if (set -o noclobber; : > "$candidate.lock") 2>/dev/null; then
+    # Two different collisions, and the lock only covers one of them. The O_EXCL
+    # create excludes a CONCURRENT peer; it says nothing about a run that already
+    # finished this second and released its lock at exit. Without the second test a
+    # later same-second, same-label run silently overwrites a completed round's
+    # artifacts. So: probe for any output already at this base, then take the lock.
+    # The probe is check-then-act and cannot stand alone -- the lock is what closes
+    # the race -- but the completed-run case has no race to lose.
+    if [[ -e "$candidate.md" || -e "$candidate.json" || -e "$candidate.log" || -e "$candidate.provenance" ]]; then
+      :
+    elif (set -o noclobber; : > "$candidate.lock") 2>/dev/null; then
       BASE="$candidate"
       return 0
     fi
@@ -319,13 +328,17 @@ fi
 # that cannot be computed must degrade to an honest `unavailable`, never to a lost
 # artifact. `|| true` on the substitution and a `:-` default are both required: the
 # first stops the abort, the second covers a success that produced no output.
-ARTIFACT_SHA="$(shasum -a 256 "$MD" 2>/dev/null | awk '{print $1}' || true)"
-# Shape-check what came back, don't just check that SOMETHING came back. A hasher
-# that exits 0 with malformed output would otherwise be recorded verbatim, putting
-# a value in the sidecar that looks like data and is not. Measured: without this,
-# a stub emitting "not-a-digest" landed in the sidecar unchanged. `unavailable` is
-# the honest answer for every way of not having a digest, and it is one answer so a
-# reader never has to interpret a novel one.
+# `|| ARTIFACT_SHA=unavailable` sits OUTSIDE the substitution, deliberately. Written
+# as "$(pipeline || true)" the failure is swallowed INSIDE, so a hasher that exits
+# non-zero while emitting a valid-looking digest passes the shape check below and
+# gets recorded as fact -- and every later verification then reports CHANGED for an
+# untouched artifact. The `||` form keeps the pipeline's status (pipefail is on) and
+# still cannot abort under `set -e`, because a compound with `||` is tested.
+ARTIFACT_SHA="$(shasum -a 256 "$MD" 2>/dev/null | awk '{print $1}')" || ARTIFACT_SHA="unavailable"
+# Then shape-check, because SUCCESS is not the same as a digest: a hasher exiting 0
+# with malformed output would otherwise be recorded verbatim, putting a value in the
+# sidecar that looks like data and is not. `unavailable` is the single honest answer
+# for every way of not having a digest, so a reader never interprets a novel one.
 [[ "$ARTIFACT_SHA" =~ ^[0-9a-f]{64}$ ]] || ARTIFACT_SHA="unavailable"
 
 # Machine-readable sidecar, written UNCONDITIONALLY -- this is what a checker must read.

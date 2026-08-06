@@ -41,22 +41,35 @@ USAGE
 # 64-character lowercase digest is what stops a malformed sidecar producing a
 # CONFIDENT verdict -- the failure mode being avoided is a wrong answer, not a crash.
 _recorded_digest() {
-  local prov="$1" lines value
+  local prov="$1" line value
+  local -a vals=()
   [[ -f "$prov" && -r "$prov" ]] || { printf 'NOSIDECAR\t%s\n' "$prov"; return 0; }
-  lines="$(grep -c '^artifact_sha256=' "$prov" 2>/dev/null || true)"
-  lines="${lines:-0}"
-  case "$lines" in
+
+  # Read once and collect, rather than `grep -c` + `sed`. `grep -c` exits 1 for a
+  # legitimate zero count and >1 for a real error, so a `|| true` that makes the
+  # normal case work also swallows the error case -- and the two mean opposite
+  # things. Counting here leaves no status to misread. `|| [[ -n $line ]]` catches
+  # a final line with no newline; `%$'\r'` tolerates a CRLF sidecar.
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    [[ "$line" == artifact_sha256=* ]] && vals+=("${line#artifact_sha256=}")
+  done < "$prov"
+
+  case "${#vals[@]}" in
     0) printf 'NOKEY\t\n'; return 0 ;;
     1) : ;;
-    *) printf 'DUP\t%s\n' "$lines"; return 0 ;;
+    *) printf 'DUP\t%s\n' "${#vals[@]}"; return 0 ;;
   esac
-  value="$(sed -n 's/^artifact_sha256=//p' "$prov" 2>/dev/null || true)"
+  value="${vals[0]}"
   if [[ "$value" == "unavailable" ]]; then
     printf 'SENTINEL\t\n'
   elif [[ "$value" =~ ^[0-9a-f]{64}$ ]]; then
     printf 'OK\t%s\n' "$value"
   else
-    printf 'MALFORMED\t%s\n' "$value"
+    # The value is deliberately NOT echoed back: it has already failed validation,
+    # and a malformed value can itself contain a tab, which would corrupt the
+    # TAB-joined result this function returns.
+    printf 'MALFORMED\t\n'
   fi
 }
 
@@ -85,9 +98,17 @@ verify_one() {
     MALFORMED) VERDICT="CANNOT-TELL"; DETAIL="sidecar artifact_sha256 is not 64 lowercase hex characters"; return 0 ;;
   esac
 
-  actual="$(shasum -a 256 "$md" 2>/dev/null | awk '{print $1}' || true)"
-  if [[ -z "$actual" ]]; then
-    VERDICT="CANNOT-TELL"; DETAIL="could not hash the artifact now"; return 0
+  # BOTH conditions, and neither alone is enough. A hasher that exits non-zero while
+  # emitting the recorded digest would otherwise be read as UNCHANGED -- certifying an
+  # artifact on the word of a command that reported failure. One emitting malformed
+  # output with status 0 would be read as CHANGED, accusing an untouched file. Both
+  # are confident wrong answers, which is the only class of bug that matters here;
+  # the honest verdict when no valid digest was obtained is CANNOT-TELL.
+  actual="$(shasum -a 256 "$md" 2>/dev/null | awk '{print $1}')" || {
+    VERDICT="CANNOT-TELL"; DETAIL="the hasher failed on this artifact; nothing was compared"; return 0
+  }
+  if [[ ! "$actual" =~ ^[0-9a-f]{64}$ ]]; then
+    VERDICT="CANNOT-TELL"; DETAIL="the hasher returned something that is not a digest; nothing was compared"; return 0
   fi
   if [[ "$actual" == "$recorded" ]]; then
     VERDICT="UNCHANGED"; DETAIL="$recorded"
@@ -107,9 +128,20 @@ _worst() {  # 1 (CHANGED) beats 2 (CANNOT-TELL) beats 0
 _code_for() { case "$1" in UNCHANGED) echo 0 ;; CHANGED) echo 1 ;; *) echo 2 ;; esac; }
 
 verify_dir() {
-  local dir="$1" worst=0 n_ok=0 n_changed=0 n_cant=0 total=0 md
+  local dir="$1" worst=0 n_ok=0 n_changed=0 n_cant=0 total=0 md list
   local -a cant=()
   [[ -d "$dir" ]] || { echo "no such directory: $dir" >&2; exit 66; }
+
+  # Enumerate into a file rather than a process substitution, so the status of
+  # `find` and `sort` is OBSERVABLE. Through `done < <(find … | sort -z)` a failed
+  # enumeration is indistinguishable from an empty directory, and the run would
+  # report success having listed nothing.
+  list="$(mktemp)"; trap 'rm -f "$list"' RETURN
+  find "$dir" -maxdepth 1 -type f -name '*.md' -print0 > "$list" || {
+    echo "could not enumerate $dir; nothing was checked" >&2; exit 2; }
+  sort -z < "$list" > "$list.s" || {
+    echo "could not order the artifact list; nothing was checked" >&2; exit 2; }
+  mv "$list.s" "$list"
 
   # EVERY .md is classified. There is no membership predicate and no exclusion
   # bucket, deliberately: three successive attempts to define "which .md files are
@@ -127,7 +159,13 @@ verify_dir() {
       *)         n_cant=$((n_cant + 1)); cant+=("${md##*/} — $DETAIL") ;;
     esac
     worst="$(_worst "$worst" "$(_code_for "$VERDICT")")"
-  done < <(find "$dir" -maxdepth 1 -type f -name '*.md' -print0 | sort -z)
+  done < "$list"
+
+  # An empty population is CANNOT-TELL, never success. `worst` starts at 0, so
+  # without this an empty or wrongly-pointed directory exits 0 — the documented
+  # UNCHANGED code — having checked nothing at all. "I verified everything" and
+  # "there was nothing to verify" must not share an exit status.
+  (( total == 0 )) && worst=2
 
   # The coverage fraction is stated, always, and never as a bare CLEAN. A checker
   # that examined half its population and said "clean" is the exact defect this
@@ -194,6 +232,24 @@ self_test() {
   # uppercase value did not come from the generator and its provenance is unknown.
   printf 'artifact_sha256=%s\n' "$(printf '%s' "$real" | tr 'a-f' 'A-F')" > "$prov"
   _expect 'uppercase hex refused' CANNOT-TELL "$md"
+
+  # A CRLF sidecar must still parse — otherwise the digest silently carries a \r,
+  # fails the hex match, and a perfectly good artifact reports CANNOT-TELL.
+  printf 'artifact_sha256=%s\r\n' "$real" > "$prov"
+  _expect 'CRLF sidecar' UNCHANGED "$md"
+
+  printf '\nHASHER controls — a failing hasher must not produce a CONFIDENT verdict\n'
+  printf 'artifact_sha256=%s\n' "$real" > "$prov"
+  # A function shadows the command for verify_one, which runs in this same shell.
+  # The dangerous case is the FIRST one: output that matches, from a command that
+  # reported failure. Read as UNCHANGED it certifies an artifact on the word of a
+  # hasher that said it failed.
+  shasum() { printf '%s  -\n' "$real"; return 7; }
+  _expect 'fails BUT emits the right digest' CANNOT-TELL "$md"
+  shasum() { printf 'not-a-digest  -\n'; return 0; }
+  _expect 'succeeds with malformed output' CANNOT-TELL "$md"
+  unset -f shasum
+  _expect 'real hasher restored' UNCHANGED "$md"
 
   printf '\n'
   if (( _st_fail == 0 )); then printf 'self-test: all controls behaved as specified\n'; return 0
