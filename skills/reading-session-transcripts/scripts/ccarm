@@ -94,6 +94,10 @@ INFLIGHT="$MAILBOX/$SID.inflight.$$"
 # processes reading one file.
 #
 # Oldest first: a stranded batch predates anything now in the inbox.
+# mtime in epoch seconds, portable across BSD (macOS) and GNU stat.
+_mtime() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0; }
+
+_recoverable=""
 for _f in "$MAILBOX/$SID.inflight."*; do
   [ -e "$_f" ] || continue                       # the glob itself when nothing matches
   _p=${_f##*.}
@@ -107,10 +111,46 @@ for _f in "$MAILBOX/$SID.inflight."*; do
     kill -0 "$_p" 2>/dev/null && continue         # owner alive: not ours to touch
   fi
   [ -s "$_f" ] || { rm -f "$_f"; continue; }      # empty orphan: nothing to recover
-  cat "$INBOX" >> "$_f" 2>/dev/null || true
-  mv "$_f" "$INBOX"
-  : > "$INBOX.recovered"          # a marker a human can find; harmless if unread
+  _recoverable="$_recoverable$_f
+"
 done
+
+# The PREVIOUS release wrote ONE unsuffixed `$SID.inflight`, and the glob above cannot match it.
+# That version is deployed and running right now, so a batch it strands would become permanently
+# invisible the moment this one takes over — a silent regression introduced by the rename itself.
+# It carries no pid, so ownership is read from the session's heartbeat instead: adopt it only when
+# nothing currently holds this session, which is true by construction at the moment we arm.
+_legacy="$MAILBOX/$SID.inflight"
+if [ -s "$_legacy" ]; then
+  _holder=$(cat "$MAILBOX/$SID.armed" 2>/dev/null || true)
+  _held=0
+  case "$_holder" in (""|*[!0-9]*) ;; (*) kill -0 "$_holder" 2>/dev/null && _held=1;; esac
+  if [ "$_held" -eq 0 ]; then
+    _recoverable="$_recoverable$_legacy
+"
+  fi
+fi
+
+# OLDEST FIRST, and by AGE rather than by name. The glob orders by pid, which is unrelated to when
+# a batch was stranded, and the previous shape prepended each file in turn — so the LAST one visited
+# was delivered FIRST. Two stranded batches came back reversed while the comment claimed otherwise.
+# Build one file in age order, then append whatever is in the inbox now, then swap once.
+if [ -n "$_recoverable" ]; then
+  _staged="$MAILBOX/$SID.recovering.$$"
+  : > "$_staged"
+  printf '%s' "$_recoverable" | while IFS= read -r _r; do
+    [ -n "$_r" ] || continue
+    printf '%s %s\n' "$(_mtime "$_r")" "$_r"
+  done | sort -n | while read -r _ts _r; do
+    cat "$_r" >> "$_staged" 2>/dev/null || true
+  done
+  cat "$INBOX" >> "$_staged" 2>/dev/null || true
+  mv "$_staged" "$INBOX"
+  printf '%s' "$_recoverable" | while IFS= read -r _r; do
+    [ -n "$_r" ] && rm -f "$_r"
+  done
+  : > "$INBOX.recovered"          # a marker a human can find; harmless if unread
+fi
 
 # A JOURNAL, so a death can be BOUNDED rather than guessed (TOR-355).
 # A lane that finds itself unarmed could previously say only "it died at some

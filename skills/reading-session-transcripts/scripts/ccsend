@@ -262,6 +262,12 @@ def self_check(me):
         return 3
     try:
         os.kill(pid, 0)
+    except OverflowError:
+        # A heartbeat holding a number too large for a pid_t raises OverflowError, not
+        # ProcessLookupError — so an unguarded probe replaced the three-state verdict with a
+        # traceback, in the check whose entire contract is that it always answers 0, 1 or 3.
+        print(f"CANNOT TELL — heartbeat for {me[:8]} names {pid}, which is not a usable pid")
+        return 3
     except ProcessLookupError:
         print(f"NO LEASE — watcher pid {pid} is gone; last heartbeat {age:.0f}s ago.")
         print(f"  Journal: {os.path.join(MAILBOX, me + '.journal')} — a START with no STOP means an")
@@ -271,6 +277,9 @@ def self_check(me):
         return 1
     except PermissionError:
         print(f"CANNOT TELL — pid {pid} exists but is not ours to probe (age {age:.0f}s)")
+        return 3
+    except OSError as e:
+        print(f"CANNOT TELL — probing pid {pid} failed: {e}")
         return 3
     if age > HEARTBEAT_STALE_SECONDS:
         print(f"NO LEASE — heartbeat is {age:.0f}s stale (limit {HEARTBEAT_STALE_SECONDS}s); "
