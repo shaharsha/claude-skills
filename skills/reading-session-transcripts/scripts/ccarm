@@ -51,6 +51,29 @@ INBOX="$MAILBOX/$SID.inbox"
 # sent on that evidence lands nowhere while reporting success.
 HEARTBEAT="$MAILBOX/$SID.armed"
 
+# REFUSE a mailbox path containing a newline, rather than silently losing messages in it.
+#
+# Recovery reads orphan paths a LINE at a time, so a newline inside the path is indistinguishable
+# from a separator: the batch is skipped and left in place, and every later watcher repeats it.
+# Measured: a path containing a newline delivered 0 of 1 and stranded the orphan, while space, `*`,
+# `[ ]` and a leading dash all deliver correctly.
+#
+# This refuses instead of fixing because the failure it prevents is EXACTLY the one this file exists
+# to stop — an accepted message that is never delivered and never reported. A startup error is
+# visible; a stranded batch is not. A NUL-delimited pipeline would handle it, and would add new
+# logic to the one path in this change that has needed six rounds of correction.
+# The pattern must contain a LITERAL newline. `$(printf '\n')` yields the EMPTY string — command
+# substitution strips trailing newlines — so `*""*` matched every path and refused all of them.
+# Caught by the controls: the newline case went red as intended and so did all five others.
+case "$MAILBOX" in
+  *'
+'*)
+    echo "ccarm: CCREAD_MAILBOX contains a newline; refusing, because recovery would silently" >&2
+    echo "       strand messages under it. Use a path without one." >&2
+    exit 2
+    ;;
+esac
+
 mkdir -p "$MAILBOX"
 touch "$INBOX"
 
