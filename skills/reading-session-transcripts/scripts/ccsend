@@ -443,7 +443,23 @@ def main():
     # positional that appears AFTER an option, and `ccsend <id> --from x "msg"`
     # is the natural way to type this. Leftovers are message text.
     a, extra = p.parse_known_args()
-    a.message = list(a.message) + [x for x in extra if not x.startswith("--")]
+    # REFUSE an unrecognised flag. `parse_known_args` hands them back in `extra`, and this line
+    # used to DROP them — so `ccsend --sef` (a typo for --self) printed usage and exited 0, and
+    # `ccsend --self; [ $? -eq 0 ] && healthy` reported HEALTHY for a flag that does not exist.
+    # A health check whose typo is indistinguishable from a pass is this cluster's own defect:
+    # a mitigation that is present and protects nobody. It also converts to a silent no-op the day
+    # anyone renames the flag, which is precisely how the instruction telling lanes to run it would
+    # rot. Found by `01f19563` while writing that instruction.
+    #
+    # Exit 2 keeps it out of the diagnostic's 0/1/3 vocabulary: "you asked for something that does
+    # not exist" is a different answer from "your inbox is fine / broken / unmeasurable".
+    unknown = [x for x in extra if x.startswith("-") and x != "-"]
+    if unknown:
+        print(f"ccsend: unrecognised option {unknown[0]!r}", file=sys.stderr)
+        print("Run `ccsend` with no arguments for usage. For message text that begins with a dash, "
+              "use `--file -` and a quoted heredoc.", file=sys.stderr)
+        return 2
+    a.message = list(a.message) + list(extra)
     # `--self` and `--ping` take no target and are not `--list`, so they fall into this branch
     # unless named here. Measured: without them, every one of their controls printed the
     # docstring and exited 0 — including the two that MUST fail, which is the only reason it
