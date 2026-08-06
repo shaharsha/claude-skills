@@ -76,6 +76,8 @@ scripts/ccsend "TOR-55" "PR #14 merged, you're unblocked"
 
 Sessions resolve by id prefix **or** by a substring of the title or cwd, so you rarely need a uuid.
 
+The title shown is the **human-set** one (`customTitle`) when a session has been renamed, falling back to the auto-generated `aiTitle` from its first message. Both are searchable, so a rename never makes a lane unreachable by its old name — but see the SKILL's note that *every* title goes stale, human-set ones most convincingly, and `ccread --doing` is what actually tells two lanes apart.
+
 ## Gotchas
 
 - **`--from 07:00` on an overnight session.** A bare `HH:MM` is anchored to the session's *last* day, because comparing time-of-day across days silently matches yesterday too. Pass a full ISO stamp when you want to be explicit.

@@ -48,7 +48,8 @@ def sessions(root):
                 continue
         except OSError:
             continue
-        title = cwd = None
+        custom_title = ai_title = cwd = None
+        doing = ""
         ts = []
         try:
             with open(f, errors="replace") as fh:
@@ -59,16 +60,38 @@ def sessions(root):
                         o = json.loads(line)
                     except ValueError:
                         continue
-                    title = o.get("aiTitle") or title
+                    # TWO kinds of title, and only one is the name the human sees. `ai-title`
+                    # carries `aiTitle`, generated from the session's FIRST message. `custom-title`
+                    # carries `customTitle` — what a human RENAMED the session to, which is what the
+                    # picker shows and what they will say out loud. Reading only `aiTitle` reports a
+                    # first-message summary as if it were the session's name; measured 2026-08-04,
+                    # that had a coordinator hand its user seven wrong lane names twice in a row,
+                    # including two lanes whose ai-titles differed only in capitalisation while their
+                    # real names were different tickets. Last of each wins — a session can be renamed
+                    # more than once, and the newest rename is the current name.
+                    custom_title = o.get("customTitle") or custom_title
+                    ai_title = o.get("aiTitle") or ai_title
                     cwd = o.get("cwd") or cwd
                     if o.get("timestamp"):
                         ts.append(o["timestamp"])
+                    # The title is the session's FIRST message and goes stale within hours; two
+                    # sessions can also share one. Keep the newest assistant prose so the listing can
+                    # say what a session is doing NOW, which is what you actually choose on.
+                    if o.get("type") == "assistant":
+                        msg = o.get("message") or {}
+                        for blk in (msg.get("content") or []):
+                            if isinstance(blk, dict) and blk.get("type") == "text":
+                                txt = (blk.get("text") or "").strip()
+                                if txt:
+                                    doing = txt
         except OSError:
             continue
         if not ts:
             continue
         out.append(dict(
-            path=f, sid=os.path.basename(f)[:8], title=title or "(untitled)",
+            path=f, sid=os.path.basename(f)[:8],
+            title=custom_title or ai_title or "(untitled)",
+            named_by_human=bool(custom_title), ai_title=ai_title or "", doing=doing,
             cwd=cwd or "", start=ts[0], end=ts[-1],
             project=os.path.basename(os.path.dirname(f)),
             mtime=os.path.getmtime(f),
@@ -90,9 +113,18 @@ def dedupe(all_s):
         if prev is None:
             by[s["sid"]] = dict(s, copies=1)
         elif s["mtime"] > prev["mtime"]:
-            by[s["sid"]] = dict(s, copies=prev["copies"] + 1)
+            # Carry a human-set name across the swap. A rename is recorded in whichever copy was
+            # live when it happened, so a session renamed BEFORE it moved worktrees has its real
+            # name only in the older file — and taking the newest copy wholesale would silently
+            # demote it back to the ai-title. The transcript still comes from the newest copy;
+            # only the name is inherited.
+            keep = prev["title"] if (prev.get("named_by_human") and not s.get("named_by_human")) else s["title"]
+            by[s["sid"]] = dict(s, copies=prev["copies"] + 1, title=keep,
+                                named_by_human=s.get("named_by_human") or prev.get("named_by_human"))
         else:
             prev["copies"] += 1
+            if s.get("named_by_human") and not prev.get("named_by_human"):
+                prev["title"], prev["named_by_human"] = s["title"], True
     return sorted(by.values(), key=lambda s: s["start"])
 
 
@@ -135,7 +167,10 @@ def resolve(needle, all_s):
     hits = [s for s in all_s if s["sid"].startswith(needle)]
     if not hits:
         n = needle.lower()
-        hits = [s for s in all_s if n in s["title"].lower() or n in s["cwd"].lower()]
+        # Match the display name, the cwd, AND the superseded ai-title — renaming a session must
+        # not make it unreachable by the name an older note or handover calls it by.
+        hits = [s for s in all_s if n in s["title"].lower() or n in s["cwd"].lower()
+                or n in (s.get("ai_title") or "").lower()]
     if not hits:
         sys.exit(f"no session matches {needle!r} — run `ccread` to list them")
     if len({h["sid"] for h in hits}) > 1:
@@ -165,6 +200,9 @@ def main():
     p.add_argument("--tools", action="store_true", help="interleave tool calls")
     p.add_argument("--grep", help="only turns matching this regex (case-insensitive)")
     p.add_argument("--all", action="store_true", help="search across every session")
+    p.add_argument("--doing", action="store_true",
+                   help="in the listing, show each session's newest line — what it is working on NOW, "
+                        "which the title does not tell you")
     p.add_argument("--width", type=int, default=100)
     p.add_argument("-h", "--help", action="store_true")
     a = p.parse_args()
@@ -216,6 +254,11 @@ def main():
             tail = f'  {DIM}({", ".join(notes)}){RST}' if notes else ""
             print(f'{live} {s["sid"]}  {s["start"][5:16]} → {s["end"][5:16]}  '
                   f'{s["title"][:58]}{tail}')
+            if a.doing and s.get("doing"):
+                # One line of the newest assistant prose. Titles say where a session STARTED; this
+                # says where it IS, and that is what tells two same-titled lanes apart.
+                flat = " ".join(s["doing"].split())
+                print(f'{DIM}     ↳ {flat[:150]}{RST}')
         return
 
     # ── one session ─────────────────────────────────────────────────────────

@@ -68,7 +68,7 @@ def sessions():
         except OSError:
             continue
         sid = os.path.basename(f)[: -len(".jsonl")]
-        title = cwd = None
+        custom_title = ai_title = cwd = None
         try:
             with open(f, errors="replace") as fh:
                 for line in fh:
@@ -78,13 +78,28 @@ def sessions():
                         o = json.loads(line)
                     except ValueError:
                         continue
-                    title = o.get("aiTitle") or title
+                    # `customTitle` (a human renamed this session) beats `aiTitle` (generated from
+                    # the first message). The human-set name is what the picker shows and what they
+                    # will say out loud — and here it also decides DELIVERY, since `resolve()` below
+                    # matches the target against this string. Matching only ai-titles means
+                    # `ccsend "TOR-214"` finds nothing while the user is looking straight at a lane
+                    # named exactly that. Last of each wins; a session can be renamed repeatedly.
+                    custom_title = o.get("customTitle") or custom_title
+                    ai_title = o.get("aiTitle") or ai_title
                     cwd = o.get("cwd") or cwd
         except OSError:
             continue
         mt = os.path.getmtime(f)
-        if sid not in out or mt > out[sid][3]:
-            out[sid] = (sid, title or "(untitled)", cwd or "", mt)
+        title = custom_title or ai_title or "(untitled)"
+        prev = out.get(sid)
+        # Inherit a human-set name from an older copy: a rename lands in whichever file was live at
+        # the time, so a session renamed BEFORE it moved worktrees carries its real name only there.
+        if prev is not None and not custom_title and prev[4]:
+            title, custom_title = prev[1], True
+        if prev is None or mt > prev[3]:
+            out[sid] = (sid, title, cwd or "", mt, bool(custom_title), ai_title or "")
+        elif custom_title and not prev[4]:
+            out[sid] = (prev[0], title, prev[2], prev[3], True, prev[5])
     return sorted(out.values(), key=lambda s: s[3], reverse=True)
 
 
@@ -201,7 +216,13 @@ def resolve(needle, all_s):
     hits = [s for s in all_s if s[0].startswith(needle)]
     if not hits:
         n = needle.lower()
-        hits = [s for s in all_s if n in s[1].lower() or n in s[2].lower()]
+        # Match the DISPLAY name, the cwd, and the superseded ai-title. Renaming a session must not
+        # make it unreachable by the name it used to have: an older message, note or handover refers
+        # to it by whatever it was called then, and "no session matches" reads as "that lane is gone"
+        # rather than "it was renamed".
+        hits = [s for s in all_s
+                if n in s[1].lower() or n in s[2].lower()
+                or (len(s) > 5 and s[5] and n in s[5].lower())]
     if not hits:
         sys.exit(f"no session matches {needle!r} — run `ccsend --list`")
     if len({h[0] for h in hits}) > 1:
@@ -237,13 +258,13 @@ def main():
 
     if a.list:
         print("armed sessions can receive now; unarmed ones cannot:\n")
-        for sid, title, cwd, mt in all_s[:25]:
+        for sid, title, cwd, mt, *_ in all_s[:25]:
             idle = int((time.time() - mt) / 60)
             mark = "📬 armed  " if is_armed(sid) else "   unarmed"
             print(f"{mark} {sid[:8]}  {idle:>4}m ago  {title[:52]}")
         return
 
-    sid, title, _cwd, _mt = resolve(a.target, all_s)
+    sid, title, _cwd, _mt, *_ = resolve(a.target, all_s)
     inbox = inbox_for(sid)
 
     if a.arm:

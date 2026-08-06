@@ -29,6 +29,7 @@ Three scripts, no install: `scripts/ccread` (read), `scripts/ccsend` (send), `sc
 | Need | Command |
 |---|---|
 | What's running, and what's stale | `ccread` |
+| **Which lane is which** (every title goes stale) | `ccread --doing` |
 | Only recent | `ccread --since 2026-07-29` |
 | Read one session's conversation | `ccread "TOR-55"` |
 | What is it doing right now | `ccread <id> --last 20` |
@@ -38,6 +39,14 @@ Three scripts, no install: `scripts/ccread` (read), `scripts/ccsend` (send), `sc
 | Find a topic across all sessions | `ccread --all --grep "credential" --since 2026-07-29` |
 
 Sessions resolve by id prefix **or** title/cwd substring, so `ccread "TOR-55"` beats copying a uuid.
+
+**There are two kinds of title, and only one is the name your human sees.** A transcript carries `type: "ai-title"` (`aiTitle`) generated from the session's **first message**, and — if a human ever renamed it — `type: "custom-title"` (`customTitle`), which is what the picker shows and what they will say out loud. `ccread` and `ccsend` prefer `customTitle`, fall back to `aiTitle`, and take the **last** of each, since a session can be renamed repeatedly. They also still *match* on the superseded ai-title, so renaming never makes a lane unreachable by the name an older handover calls it by.
+
+Reading only `aiTitle` reports a first-message summary as if it were the session's name. Measured 2026-08-04: a coordinator asked "which session is which" gave its human seven wrong lane names, twice in a row — the real names were `Sprint1 TOR-199: …`, `Sprint1 TOR-214: …`, while it reported `Implement durable ingest-completion signal` and `Fix 22 dead TBR integration tests`. Two of the lanes had ai-titles differing **only in capitalisation** (`Review ARM inbox` / `Review arm inbox`) while their human-set names were entirely different tickets — so the report was not just wrong, it was wrong in the way most likely to send an instruction to the wrong lane.
+
+**A human-set title still goes stale — differently, and more convincingly.** It is set at kickoff and names the ticket the lane *started* on; hours later that lane may be three tickets downstream, and it now reads authoritative because a person wrote it. On 2026-08-04 a lane named `Sprint1 TOR-197: legacy data into silver` was in fact building the chart compiler, and the lane named for the acceptance-DB gate was landing an unrelated docstring PR.
+
+So: resolve by title to *find* a session, and confirm what it is doing with `ccread --doing` or `ccread <id> --last 2` before acting on which one it is. Measured 2026-07-30: two adjacent PR numbers, both measurement tools, opened within the hour — a coordinator told the wrong lane to merge, and only the lane checking first stopped it merging someone else's work.
 
 The listing marks 🟢 active / 🟡 recent / ⚪ stale, plus `worktree-filed` and `N copies` — see *Orphaned transcripts* below.
 
@@ -50,10 +59,17 @@ Three facts explain nearly every surprise:
 1. **A transcript is filed by cwd**, at `~/.claude/projects/<cwd-slug>/<session-id>.jsonl`. The slug encodes the directory the session ran in.
 2. **A session that changes directory gets a new file** under the new slug. One session can therefore have several copies on disk, only the newest of which is current.
 3. **Most `type: "user"` entries are not from a human.** They carry `tool_result` blocks. A real human turn is a bare string, or a list containing a `text` block — and even then the harness injects turns (skill re-invocations, compaction notices, interrupt markers) that read like speech.
+4. **The session's name lives in `type: "custom-title"` (`customTitle`), not `type: "ai-title"` (`aiTitle`).** Both appear, repeatedly, interleaved through the file. `aiTitle` summarises the first message; `customTitle` is a human rename and is what the picker shows. Take the last of each and prefer the custom one.
 
-`ccread` handles all three. If you parse transcripts by hand, handle them yourself or your answer will be wrong.
+`ccread` handles all four. If you parse transcripts by hand, handle them yourself or your answer will be wrong.
+
+One extra trap in (4) if you do parse by hand: a rename is written to whichever copy was live when it happened, so a session renamed **before** it moved worktrees carries its real name only in the *older* file. Taking the newest copy wholesale silently demotes it back to the ai-title. `ccread`/`ccsend` inherit a human-set name across that swap while still reading the newest copy for content.
 
 ## Orphaned transcripts
+
+**First, check whether the worktree still exists — the common case is not orphaning at all.** The harness lists sessions by **cwd**, so a session that ran in a worktree only appears in the picker *from that directory*. From the main checkout it is simply absent, which looks identical to having been lost.
+
+Measured 2026-07-30: a session was reported missing from the session list; its worktree was intact at `…/.claude/worktrees/tor-164-plan`, and opening that folder brought it straight back. **Do not run the recovery below in that case** — copying leaves two transcripts, and if the copy is resumed the original silently diverges. `ccread <id>` prints the recorded `cwd`; test it with `[ -d ]` before assuming anything is broken.
 
 Deleting a worktree does not delete the transcript of a session that ran in it — it strands it. The file stays under a project directory whose folder no longer exists, so the session vanishes from the harness's list while sitting intact on disk. `ccread` still finds it and flags it `worktree-filed`.
 
@@ -94,6 +110,8 @@ EOF
 
 **Use the quoted heredoc for anything containing code.** A message passed as a shell argument is parsed by the shell first, so a backticked `identifier` is **command substitution** — the shell runs it and splices in the output, which is empty. The recipient gets a sentence with holes where every identifier was, and `ccsend` still prints `✓ delivered`, because by the time it sees `argv` the words are already gone and nothing downstream can detect it. Measured 2026-07-30 on a real handover: `` `with` `` arrived as nothing, leaving "must run inside ONE  block". The `<<'EOF'` quoting (note the quotes) disables every expansion, so backticks, `$vars`, and both quote styles survive byte-for-byte.
 
+**This is not a `ccsend` problem — it is a shell problem, so it applies to every command that takes a body as an argument.** `gh pr comment --body`, `gh pr create --body`, `gh issue comment --body`: same trap, same silence. Measured 2026-07-30: a code review posted through `gh pr comment --body "…"` arrived with **three empty code blocks** where its fenced examples had been, and `gh` reported success — the shell had already run the backticked contents as commands and spliced in their (empty) output. Reviews are the worst case, because a garbled review still reads as authoritative. Use `--body-file` / `--file` for anything containing backticks, `$`, or code, and if you catch it late, **delete and repost** rather than leaving a review with holes in it.
+
 **To become reachable yourself, run `/arm-inbox`** — or call Monitor directly with `command: ccarm`, `persistent: true`. `ccarm` needs no argument: the harness exports `CLAUDE_CODE_SESSION_ID`, so a session can arm itself without being told who it is.
 
 **A session receives only while it holds an open Monitor on its inbox.** That watch is the entire mechanism, and it is what reaches a session sitting *idle* waiting for its human — which hooks, MCP channels and process wrappers all fail to do (a hook fires on tool calls; an idle session makes none). Monitor is explicit that events arrive "even if one lands while you're waiting for the user to answer a question."
@@ -128,6 +146,12 @@ When you **send** through `ccsend`, say nothing: the header is already there and
 
 **Why the cap matters more than it sounds.** The two caps interact to look like corruption rather than a limit: short lines around a long paragraph arrive intact while the paragraph dies mid-sentence, so the message reads as though the *sender* trailed off. On 2026-07-30 four long technical handovers went out with their second halves missing and nobody — sender or recipient — could tell. **A received message that ends without a closing thought should be treated as suspect**: check for a `[PREVIEW …]` banner and read the spool file before acting.
 
+**And "read the spool file" means `Read` it — not `head`, `tail` or `grep`.** The preview already gave you the beginning, so the instinct is to fetch only the rest with `tail -N`. Head-plus-tail is not the message: it leaves a hole in the middle, exactly where a numbered list of constraints tends to sit, and nothing marks the gap.
+
+Measured 2026-08-04. A lane was given four constraints on a guard; it read the preview (lines 1–30) and ran `tail -22` (lines 42–63), and **constraint 3 was on line 35**. It then implemented the narrower design that constraint warned against, and wrote a code comment confidently arguing for it. The coordinator read that as a deliberate unflagged deviation — and from the sender's side **an unflagged deviation and an unread constraint are indistinguishable**, so the misread compounded into a second wrong conclusion about the lane's judgment. The hole was real: reverting to the narrower guard made the control test fail.
+
+The corollary for senders: a constraint buried mid-message in a long body is a constraint you may not have sent. Put anything load-bearing where truncation and skimming cannot both miss it, and number them so a reader can tell one is absent.
+
 ### Verify, never assume, that a target is reachable
 
 `ccsend` **refuses by default when no watcher is live**, because writing to an unwatched file looks exactly like success. `--force` queues anyway, which only helps if you know the target will arm later — the backlog *is* delivered on arm.
@@ -154,6 +178,29 @@ Two things make this hold in practice rather than in theory:
 - **The value is in the case where the receiver AGREES.** The session that held this line three times had reached the same conclusion the coordinator had, and said so to its human. Its own framing: *"the rule is worth exactly as much as it is worth when I disagree with the instruction, which here I do not."* A rule only exercised on bad instructions is a rule nobody has tested.
 
 The corollary for the coordinator is cheap: route freely, and phrase anything outward-facing as *"put this to your human"* rather than as a decision. Nothing is lost — the lane was going to ask anyway — and the boundary stays legible to everyone.
+
+### A handoff is a summary, and a summary of two things describes one of them
+
+The most valuable thing a stopping session leaves behind is a handoff — but reading one is not reading the source, and the failure has a shape worth knowing in advance.
+
+**When a handoff covers more than one subject, it tends to characterise the one its author looked at hardest and assume the other matches.** Not carelessness — that is what summarising *does*.
+
+Measured 2026-07-30. A lane migrating two near-identical page slots wrote a careful handoff naming the one difference it had found between them. The next lane read both sources instead and found **eight**, including two that inverted the handoff's own advice: the "shared" number format existed on only one slot, and the canonical filter rule stated in the comment was one slot's rule — applying it to the other would have silently dropped rows that slot deliberately includes. A coordinator had already repeated the wrong rule into the next lane's kickoff.
+
+So: **use a handoff to find out what to look at, then look at it.** The two habits that catch this —
+
+- if a handoff describes N things with one rule, verify the rule against **each** source, not the one it was clearly derived from
+- when you correct a handoff, **add a comment rather than editing theirs** — how the error happened is as useful as the correction, and the original author measured honestly
+
+### Posting to an external surface is not delivering
+
+A session sees its inbox. It does not see GitHub, Linear, or anything else you write to. **A review left as a PR comment has not reached the lane that is waiting for it** — and the lane has no reason to poll, so it sits idle on finished work while you believe you have unblocked it.
+
+Measured 2026-07-30: three lanes idle simultaneously, each waiting on an approval that had been sitting on its PR for up to nineteen minutes. The coordinator had reviewed all three.
+
+So when the durable record belongs somewhere else — and it usually does; a PR review should live on the PR — **do both**: post it there, then `ccsend` the verdict. The message can be two lines and a link; what matters is that the session learns the state changed.
+
+The same holds in reverse for anything a session is told to wait on. If you are waiting, say so on the channel the other party actually reads.
 
 ## Common mistakes
 
