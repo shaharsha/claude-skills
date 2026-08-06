@@ -77,6 +77,26 @@ REPO="$(cd "$REPO" && pwd)"
 OUT_DIR="$REPO/.codex-review"
 SESSIONS="$OUT_DIR/sessions.json"
 
+# --- attribution ---------------------------------------------------------------
+# Artifacts land in ONE directory per repo, so when several agents review in the
+# same clone the filenames are all "<stamp>-review.md" and nothing distinguishes
+# them. Measured 2026-08-05: three lanes' artifacts sat side by side in one
+# .codex-review/, separable only by timestamp -- and the rendered .md names no
+# branch, so a misread makes one lane cite another lane's verdict.
+#
+# --label already existed and was simply not used. Defaulting it from the branch
+# makes the common case attributable without anyone remembering a flag, which is
+# the difference between a guard and a request for vigilance.
+if [[ "$LABEL" == "review" ]]; then
+  _branch="$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  if [[ -n "$_branch" && "$_branch" != "HEAD" ]]; then
+    # me/tor-222-gained-cases -> tor-222-gained-cases, then trimmed for filename sanity
+    LABEL="$(printf '%s' "${_branch##*/}" | tr -c 'A-Za-z0-9._-' '-' | cut -c1-48)"
+    LABEL="${LABEL%-}"
+    [[ -n "$LABEL" ]] || LABEL="review"
+  fi
+fi
+
 if [[ $LIST_ONLY -eq 1 ]]; then
   python3 - "$SESSIONS" <<'PY'
 import json, sys, pathlib
@@ -136,6 +156,34 @@ BASE="$OUT_DIR/$STAMP-$LABEL"
 RAW="$BASE.json"
 MD="$BASE.md"
 LOG="$BASE.log"
+
+# --- what the reviewer actually READ -------------------------------------------
+# Captured BEFORE the run, because the tree can move under a long review.
+#
+# A verdict and the bytes it read are one unit. Without the sha, "three rounds,
+# all clean" is a claim about a revision nobody can name -- measured 2026-08-05:
+# a lane's round covered dbcaeaa while they were asking for approval on ae2495f,
+# three commits later, and nothing in the .md could have revealed it. The sha
+# appeared only in the .log, and only because the reviewer happened to run git
+# while exploring: incidental, not recorded.
+#
+# DIRTY is not a footnote. codex reads the WORKING TREE, so with uncommitted
+# changes the review covers no commit at all and the sha alone would overstate it.
+# The PROMPT is the other half, and for a PLAN round it is the ONLY half that matters:
+# a plan lives in ~/.claude/plans/, outside the repo and outside git, so the repo sha
+# says nothing about the bytes reviewed. Measured 2026-08-05: a lane's plan changed three
+# times while the repo sha it would have recorded stayed put, and "round 3 covers the
+# previous revision" was recoverable only because codex volunteered a hash in its scan
+# notes -- incidental on two rounds, absent on the third.
+PROMPT_SHA="$(shasum -a 256 "$PROMPT_FILE" 2>/dev/null | awk '{print $1}')"
+PROMPT_SHA="${PROMPT_SHA:-unknown}"
+REVIEW_SHA="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || echo unknown)"
+REVIEW_BRANCH="$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+if [[ -n "$(git -C "$REPO" status --porcelain 2>/dev/null)" ]]; then
+  REVIEW_DIRTY="DIRTY — uncommitted changes present; this verdict covers the WORKING TREE, not $REVIEW_SHA"
+else
+  REVIEW_DIRTY="clean"
+fi
 
 COMMON=(
   -m "$MODEL"
@@ -210,8 +258,27 @@ else
   cp "$RAW" "$MD"
 fi
 
+# Stamp provenance into the artifact the gate rule actually points at. Only for
+# the rendered-markdown path -- without --schema the .md is a copy of the raw
+# JSON, and prepending prose would corrupt it, so that case gets the sidecar only.
+if [[ -n "$SCHEMA" && -f "$MD" ]]; then
+  PROV="$(printf '> **Reviewed:** `%s` on `%s` — working tree %s\n> **Prompt artifact:** `%s`  sha256 `%s`\n> **Label:** `%s` · **Session:** `%s`\n>\n> *A verdict covers the bytes it read — the repo sha AND the prompt hash. For a PLAN\n> round the repo sha is nearly meaningless and the prompt hash is the whole claim.\n> Cite them, or the citation is about a revision nobody has.*\n\n' \
+      "$REVIEW_SHA" "$REVIEW_BRANCH" "$REVIEW_DIRTY" "$PROMPT_FILE" "$PROMPT_SHA" "$LABEL" "${SESSION_ID:-unknown}")"
+  printf '%s' "$PROV" | cat - "$MD" > "$MD.tmp" && mv "$MD.tmp" "$MD"
+fi
+# Machine-readable sidecar, written UNCONDITIONALLY -- this is what a checker must read.
+# The markdown header above exists only on the --schema path (without it the .md IS the raw
+# JSON and prepending prose would corrupt it), so a checker keyed on the header would
+# silently pass every --no-schema round: a check that cannot fail, on the artifact that
+# decides whether a merge was reviewed.
+printf 'sha=%s\nbranch=%s\ntree=%s\nprompt=%s\nprompt_sha256=%s\nlabel=%s\nsession=%s\nstamp=%s\n' \
+  "$REVIEW_SHA" "$REVIEW_BRANCH" "$REVIEW_DIRTY" "$PROMPT_FILE" "$PROMPT_SHA" \
+  "$LABEL" "${SESSION_ID:-unknown}" "$STAMP" > "$BASE.provenance"
+
 echo "RAW_JSON=$RAW"
 echo "CODEX_LOG=$LOG"
+echo "REVIEWED_SHA=$REVIEW_SHA"
+echo "REVIEWED_TREE=$REVIEW_DIRTY"
 [[ -n "$SESSION_ID" ]] && echo "SESSION_ID=$SESSION_ID"
 [[ -n "${SESSION_KEY:-}" ]] && echo "SESSION_NAME=$SESSION_KEY"
 echo "REVIEW_MD=$MD"
