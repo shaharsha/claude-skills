@@ -93,63 +93,75 @@ INFLIGHT="$MAILBOX/$SID.inflight.$$"
 # is mid-delivery; stealing it would recreate the loss this exists to prevent, with two
 # processes reading one file.
 #
-# Oldest first: a stranded batch predates anything now in the inbox.
 # mtime in epoch seconds, portable across BSD (macOS) and GNU stat.
 _mtime() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0; }
 
-_recoverable=""
-for _f in "$MAILBOX/$SID.inflight."*; do
-  [ -e "$_f" ] || continue                       # the glob itself when nothing matches
-  _p=${_f##*.}
-  case "$_p" in (*[!0-9]*|"") continue;; esac     # not a pid suffix — leave it alone
-  # An orphan bearing OUR OWN pid is ours to adopt, not to skip. `kill -0 $$` succeeds because
-  # it probes this very process, so the liveness test below reads a recycled-pid orphan as
-  # "still owned" — and the first drain then does `mv "$INBOX" "$INFLIGHT"` straight over it,
-  # destroying the batch. This runs before $INFLIGHT is ever written, so a file already at that
-  # name necessarily belongs to a DEAD predecessor that happened to hold this pid.
-  if [ "$_p" != "$$" ]; then
-    kill -0 "$_p" 2>/dev/null && continue         # owner alive: not ours to touch
-  fi
-  [ -s "$_f" ] || { rm -f "$_f"; continue; }      # empty orphan: nothing to recover
-  _recoverable="$_recoverable$_f
-"
+# ONE decoder, shared by recovery and the main loop. Two copies of "how a message becomes a
+# notification" is the drift this file warns about elsewhere.
+_emit_file() {
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    # `fold -s -w 400` is belt-and-braces: ccsend already wraps, but a message written straight into
+    # the inbox by hand, or sent by an older ccsend, still arrives with long lines — and one stdout
+    # line over ~500 chars is truncated by the notification channel with no marker at either end.
+    { printf %s "$line" | base64 --decode 2>/dev/null || printf '%s' "$line"; } | fold -s -w 400
+    echo
+  done < "$1"
+}
+
+# RECOVERY: DRAIN each orphan in place, then delete it. Never copy it into the inbox.
+#
+# The previous shape staged orphans into one file, swapped it over the inbox, and only then removed
+# the sources. That PUBLISHED the data while the sources were still independently recoverable, so a
+# death in that window made the next watcher recover the same batch again and the recipient saw the
+# message TWICE. Replacing the inbox pathname could also unlink a message a sender had just appended.
+#
+# Draining in place has neither problem: nothing is copied, the inbox is never replaced, and each
+# file is removed only after its own contents are emitted. Delivery stays at-least-once at the
+# boundary — a death mid-emit replays that one file — but a fully delivered batch can no longer be
+# duplicated, and a concurrent append can no longer be destroyed.
+#
+# Oldest first, by mtime. Second-resolution ties are possible and are not ordered by this: two
+# batches stranded within the same second may emit in either order. Ordering strictly needs a
+# sequence written when the batch is created — TOR-425.
+for _f in $(
+  for _c in "$MAILBOX/$SID.inflight."*; do
+    [ -e "$_c" ] || continue                        # the glob itself when nothing matches
+    _p=${_c##*.}
+    case "$_p" in (*[!0-9]*|"") continue;; esac      # not a pid suffix — leave it alone
+    # An orphan bearing OUR OWN pid is ours to adopt, not to skip: `kill -0 $$` succeeds because it
+    # probes this very process, so a recycled pid reads as "still owned", is skipped, and is then
+    # overwritten by our first drain. Recovery runs before $INFLIGHT is written, so a file already
+    # at that name necessarily belongs to a DEAD predecessor.
+    if [ "$_p" != "$$" ]; then
+      kill -0 "$_p" 2>/dev/null && continue          # owner alive: not ours to touch
+    fi
+    [ -s "$_c" ] || { rm -f "$_c"; continue; }       # empty orphan: nothing to recover
+    printf '%s\t%s\n' "$(_mtime "$_c")" "$_c"
+  done | sort -n | cut -f2-
+); do
+  _emit_file "$_f"
+  rm -f "$_f"
+  : > "$INBOX.recovered"            # a marker a human can find; harmless if unread
 done
 
-# The PREVIOUS release wrote ONE unsuffixed `$SID.inflight`, and the glob above cannot match it.
-# That version is deployed and running right now, so a batch it strands would become permanently
-# invisible the moment this one takes over — a silent regression introduced by the rename itself.
-# It carries no pid, so ownership is read from the session's heartbeat instead: adopt it only when
-# nothing currently holds this session, which is true by construction at the moment we arm.
+# The PREVIOUS release wrote ONE unsuffixed `$SID.inflight`. This version does NOT adopt it, and
+# that is a decision rather than an oversight.
+#
+# It carries no owner identity, so the only gate available was "does the heartbeat name a live pid"
+# — and that gate is unsound against exactly the release that writes this file: its trap is
+# `rm -f "$HEARTBEAT"` on TERM WITHOUT exiting, so a TERM'd legacy watcher deletes its own heartbeat
+# and keeps delivering. Adopting on an absent heartbeat would take a batch from a watcher still
+# reading it, and the message would arrive twice.
+#
+# Automatic migration needs an owner id the old release does not write. So the file is left intact
+# and REPORTED: recoverable by a human, and incapable of duplicating or stealing.
 _legacy="$MAILBOX/$SID.inflight"
 if [ -s "$_legacy" ]; then
-  _holder=$(cat "$MAILBOX/$SID.armed" 2>/dev/null || true)
-  _held=0
-  case "$_holder" in (""|*[!0-9]*) ;; (*) kill -0 "$_holder" 2>/dev/null && _held=1;; esac
-  if [ "$_held" -eq 0 ]; then
-    _recoverable="$_recoverable$_legacy
-"
-  fi
-fi
-
-# OLDEST FIRST, and by AGE rather than by name. The glob orders by pid, which is unrelated to when
-# a batch was stranded, and the previous shape prepended each file in turn — so the LAST one visited
-# was delivered FIRST. Two stranded batches came back reversed while the comment claimed otherwise.
-# Build one file in age order, then append whatever is in the inbox now, then swap once.
-if [ -n "$_recoverable" ]; then
-  _staged="$MAILBOX/$SID.recovering.$$"
-  : > "$_staged"
-  printf '%s' "$_recoverable" | while IFS= read -r _r; do
-    [ -n "$_r" ] || continue
-    printf '%s %s\n' "$(_mtime "$_r")" "$_r"
-  done | sort -n | while read -r _ts _r; do
-    cat "$_r" >> "$_staged" 2>/dev/null || true
-  done
-  cat "$INBOX" >> "$_staged" 2>/dev/null || true
-  mv "$_staged" "$INBOX"
-  printf '%s' "$_recoverable" | while IFS= read -r _r; do
-    [ -n "$_r" ] && rm -f "$_r"
-  done
-  : > "$INBOX.recovered"          # a marker a human can find; harmless if unread
+  echo "[ccarm] NOTE: a batch from the previous release is stranded at $_legacy"
+  echo "[ccarm] NOT auto-recovered - it carries no owner id, and the release that writes it can"
+  echo "[ccarm] drop its heartbeat while still delivering. Recover by hand once no watcher holds"
+  echo "[ccarm] this session, then delete it. See TOR-425."
 fi
 
 # A JOURNAL, so a death can be BOUNDED rather than guessed (TOR-355).
@@ -207,16 +219,7 @@ while true; do
     t="$INFLIGHT"
     mv "$INBOX" "$t"
     touch "$INBOX"
-    while IFS= read -r line; do
-      [ -n "$line" ] || continue
-      # `fold -s -w 400` is belt-and-braces: ccsend already wraps, but a message
-      # written straight into the inbox by hand, or sent by an older ccsend, still
-      # arrives with long lines — and one stdout line over ~500 chars is truncated
-      # by the notification channel with no marker at either end. Folding at word
-      # boundaries costs nothing on already-short lines.
-      { printf %s "$line" | base64 --decode 2>/dev/null || printf '%s' "$line"; } | fold -s -w 400
-      echo
-    done < "$t"
+    _emit_file "$t"
     rm -f "$t"
   fi
   _beat                           # refresh mtime: senders read staleness as dead
