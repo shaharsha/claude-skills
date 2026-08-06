@@ -76,13 +76,28 @@ emit 'ccsend --help'      0 "$CCSEND" --help
 # nobody here controls — and a lane titled e.g. "Why it arrives now is misleading" would
 # match a forbidden fragment and fail a correct tree. Demonstrated. The header and footer
 # strings this probe exists to check are emitted regardless of how many sessions exist.
-ISO_ROOT="$(mktemp -d)"; ISO_MB="$(mktemp -d)"
+# Guard BOTH mktemps. Unchecked, a failure (read-only sandbox, full or unusable TMPDIR)
+# leaves the substitution EMPTY — and ccsend reads `os.environ.get(...) or <default>`, so an
+# empty CCREAD_MAILBOX is FALSY and falls back to the REAL mailbox. Measured. The isolation
+# silently does not happen, live titles re-enter the corpus, and the run still reports clean:
+# the r2-F2 fix undone with no signal.
+ISO_ROOT="$(mktemp -d)" || { echo "CORPUS BROKEN — cannot create isolation root"; exit 3; }
+ISO_MB="$(mktemp -d)"   || { echo "CORPUS BROKEN — cannot create isolation mailbox"; rmdir "$ISO_ROOT" 2>/dev/null; exit 3; }
+[ -d "$ISO_ROOT" ] && [ -d "$ISO_MB" ] || { echo "CORPUS BROKEN — isolation dirs missing"; exit 3; }
 # CLAUDE_CODE_SESSION_ID is unset too: the caller's own row is pinned into the listing by
 # design, and while its title under empty roots is the fixed literal "(no transcript)" and
 # therefore safe, unsetting it makes the corpus fully deterministic — 0 rows, header only.
 # (The footer prints only when rows are omitted, so it is covered by the source scan below.)
 emit 'ccsend --list'      0 env -u CLAUDE_CODE_SESSION_ID \
                               CCREAD_ROOT="$ISO_ROOT" CCREAD_MAILBOX="$ISO_MB" "$CCSEND" --list
+# Assert the PROPERTY, not the mechanism: under isolation the listing must contain ZERO
+# session rows. If any row appears, something leaked a real root in and the corpus is
+# contaminated with titles nobody here controls — exactly what this probe exists to prevent.
+if printf '%s' "$CORPUS" | grep -qE '^(📬 armed|   unarmed) '; then
+  echo "CORPUS BROKEN — isolated --list produced session rows; isolation did not take effect"
+  rmdir "$ISO_ROOT" "$ISO_MB" 2>/dev/null
+  exit 3
+fi
 rmdir "$ISO_ROOT" "$ISO_MB" 2>/dev/null || true
 emit 'ccarm --help'       0 "$CCARM"  --help
 emit 'argparse error'     2 "$CCSEND" --timeout nope --ping
@@ -102,8 +117,16 @@ emit 'README.md'          0 cat "$SKILL_DIR/README.md"
 # and the weakness is named rather than hidden: a string reachable only through source is
 # proof the literal is absent from the code, not proof of what a user sees. The two together
 # are strictly stronger than either alone.
-emit 'ccsend source'      0 cat "$CCSEND"
-emit 'ccarm source'       0 cat "$CCARM"
+# Whole-line comments are stripped from the SOURCE scan. A maintainer writing a truthful
+# note — "# the old wording 'it arrives now' was removed" — is not a promise, but a
+# context-free fixed string cannot tell an affirmation from a citation of one. Demonstrated:
+# such a comment made the checker FAIL a correct tree.
+#
+# RESIDUE, named rather than hidden: a TRAILING comment on a line of code is not stripped,
+# so quoting an old string after live code still trips it. Move such a note to its own line.
+strip_comments() { sed -E 's/^[[:space:]]*#.*$//' "$1"; }
+emit 'ccsend source'      0 strip_comments "$CCSEND"
+emit 'ccarm source'       0 strip_comments "$CCARM"
 
 # No prose "positive control" anchor here. The previous version grepped for a documentation
 # sentence, which a legitimate later edit could rephrase — turning a correct tree into
