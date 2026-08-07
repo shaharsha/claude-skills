@@ -190,7 +190,7 @@ That refusal is correct behaviour. If you need a peer to *act*, `SendMessage` in
 only channel where the origin claim is enforced rather than asserted.
 
 ```bash
-ccsend --list                        # who can receive RIGHT NOW
+ccsend --list                        # who is ARMED — not who will receive
 ccsend "TOR-55" "PR #14 is merged, you're unblocked"
 ccsend "TOR-55" --file notes.md      # longer body from a file
 
@@ -199,11 +199,11 @@ The `page_snapshot()` contract: one `with` block per page, $vars intact.
 EOF
 ```
 
-**Use the quoted heredoc for anything containing code.** A message passed as a shell argument is parsed by the shell first, so a backticked `identifier` is **command substitution** — the shell runs it and splices in the output, which is empty. The recipient gets a sentence with holes where every identifier was, and `ccsend` still prints `✓ delivered`, because by the time it sees `argv` the words are already gone and nothing downstream can detect it. Measured 2026-07-30 on a real handover: `` `with` `` arrived as nothing, leaving "must run inside ONE  block". The `<<'EOF'` quoting (note the quotes) disables every expansion, so backticks, `$vars`, and both quote styles survive byte-for-byte.
+**Use the quoted heredoc for anything containing code.** A message passed as a shell argument is parsed by the shell first, so a backticked `identifier` is **command substitution** — the shell runs it and splices in the output, which is empty. The recipient gets a sentence with holes where every identifier was, and `ccsend` still prints its acceptance line, because by the time it sees `argv` the words are already gone and nothing downstream can detect it. Measured 2026-07-30 on a real handover: `` `with` `` arrived as nothing, leaving "must run inside ONE  block". The `<<'EOF'` quoting (note the quotes) disables every expansion, so backticks, `$vars`, and both quote styles survive byte-for-byte.
 
 **This is not a `ccsend` problem — it is a shell problem, so it applies to every command that takes a body as an argument.** `gh pr comment --body`, `gh pr create --body`, `gh issue comment --body`: same trap, same silence. Measured 2026-07-30: a code review posted through `gh pr comment --body "…"` arrived with **three empty code blocks** where its fenced examples had been, and `gh` reported success — the shell had already run the backticked contents as commands and spliced in their (empty) output. Reviews are the worst case, because a garbled review still reads as authoritative. Use `--body-file` / `--file` for anything containing backticks, `$`, or code, and if you catch it late, **delete and repost** rather than leaving a review with holes in it.
 
-**To become reachable yourself, run `/arm-inbox`** — or call Monitor directly with `command: ccarm`, `persistent: true`. `ccarm` needs no argument: the harness exports `CLAUDE_CODE_SESSION_ID`, so a session can arm itself without being told who it is.
+**To hold a lease yourself, run `/arm-inbox`** (a lease, not a guarantee of receipt) — or call Monitor directly with `command: ccarm`, `persistent: true`. `ccarm` needs no argument: the harness exports `CLAUDE_CODE_SESSION_ID`, so a session can arm itself without being told who it is.
 
 **A session receives only while it holds an open Monitor on its inbox.** That watch is the entire mechanism, and it is what reaches a session sitting *idle* waiting for its human — which hooks, MCP channels and process wrappers all fail to do (a hook fires on tool calls; an idle session makes none). Monitor is explicit that events arrive "even if one lands while you're waiting for the user to answer a question."
 
@@ -231,7 +231,7 @@ When you **send** through `ccsend`, say nothing: the header is already there and
 - **`touch` the inbox before reading it.** `tail -f`/read on a missing file exits instantly, so the session looks armed and receives nothing.
 - **Drain, don't follow.** Starting at end-of-file skips anything queued *before* arming — losing messages that were already accepted. `ccarm` moves the file aside and decodes it, so a message arriving mid-drain lands in the fresh inbox and is caught next pass.
 - **One message is one base64 line.** Monitor emits per line, so a raw multi-line body arrives as several disconnected notifications. Encoded, the decoded lines re-batch into one.
-- **A notification is capped, twice, and both caps cut silently.** Measured 2026-07-30 against a live armed session, by sending position-marked text and reading where it stopped: **~500 chars per line** and **~3000 chars per event**. The sender still prints "delivered". `ccsend` therefore spools every body to `~/.claude/mailbox/msgs/<sid>/` and wraps lines under the line cap; anything over the event budget arrives as a **preview with the spool path** instead of a body that ends mid-sentence.
+- **A notification is capped, twice, and both caps cut silently.** Measured 2026-07-30 against a live armed session, by sending position-marked text and reading where it stopped: **~500 chars per line** and **~3000 chars per event**. The sender still prints its acceptance line. `ccsend` therefore spools every body to `~/.claude/mailbox/msgs/<sid>/` and wraps lines under the line cap; anything over the event budget arrives as a **preview with the spool path** instead of a body that ends mid-sentence.
 
 `ccarm` handles the first four; `ccsend` handles the fifth. Prefer them to a hand-rolled loop.
 
@@ -245,9 +245,9 @@ The corollary for senders: a constraint buried mid-message in a long body is a c
 
 ### Verify, never assume, that a target is reachable
 
-`ccsend` **refuses by default when no watcher is live**, because writing to an unwatched file looks exactly like success. `--force` queues anyway, which only helps if you know the target will arm later — the backlog *is* delivered on arm.
+`ccsend` **refuses by default when no watcher is live**, because writing to an unwatched file looks exactly like success. `--force` queues anyway, which only helps if you know the target will arm later — arming lets the backlog be picked up, but does not prove it was seen (see TOR-425, detached-watcher drain).
 
-A watcher can also die without the session noticing: UI stop, teardown, timeout, session end. **`ccsend --list` is the only current truth about who can receive**; an earlier successful send is not evidence that the next one will land.
+A watcher can also die without the session noticing: UI stop, teardown, timeout, session end. **`ccsend --list` is the best available evidence about who holds a lease** — not about who will receive, since a detached watcher holds a fresh lease and drains to nobody. An earlier successful send is not evidence that the next one will land.
 
 ### Checking your OWN inbox — you cannot notice this from inside
 

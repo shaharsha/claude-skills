@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# ccarm — hold this session's inbox open so other sessions can reach it.
+# ccarm — hold a lease while draining this session's inbox.
 #
 #   Monitor(command="ccarm <session-id>", persistent=true)
 #
 # Run it through the Monitor tool, not Bash: Monitor turns each stdout line into
-# a notification, and that is what lets a message reach this session even while
-# it sits idle waiting for its human. Under Bash it would just block forever.
+# a notification, and that is what lets a message be PICKED UP by this session even
+# while it sits idle waiting for its human. Under Bash it would just block forever.
+# Note the limit: this loop drains the inbox whether or not a Monitor is still
+# consuming its stdout, so a detached watcher consumes messages nobody sees
+# (TOR-425, detached-watcher drain). Arming is pickup, never proof of receipt.
 #
 # Why a script rather than an inline loop: the loop has three details that are
 # each easy to get wrong and silent when wrong, so it lives in one place.
