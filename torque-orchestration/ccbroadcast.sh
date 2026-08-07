@@ -23,7 +23,7 @@
 # usage:  ccbroadcast.sh --file <path>  [--to <id> ...]   # default: every armed lane except me
 set -uo pipefail
 
-CCSEND="$HOME/.claude/skills/reading-session-transcripts/scripts/ccsend"
+CCSEND="$HOME/.claude/skills/working-with-other-sessions/scripts/ccsend"
 MSGS="$HOME/.claude/mailbox/msgs"
 SELF="$(grep -E '^SESSION_ID=' "$HOME/.claude/torque-orchestration/CURRENT-ORCHESTRATOR" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')"
 

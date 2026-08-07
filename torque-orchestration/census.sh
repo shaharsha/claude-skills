@@ -21,7 +21,7 @@ set -uo pipefail
 
 REPO="${TORQUE_REPO:-$HOME/Projects/torque}"
 GH_REPO="${TORQUE_GH_REPO:-Torque-Capital/torque}"
-CCSEND="$HOME/.claude/skills/reading-session-transcripts/scripts/ccsend"
+CCSEND="$HOME/.claude/skills/working-with-other-sessions/scripts/ccsend"
 
 cd "$REPO" 2>/dev/null || { echo "census: no repo at $REPO" >&2; exit 2; }
 

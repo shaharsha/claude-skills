@@ -1,9 +1,9 @@
 ---
-name: reading-session-transcripts
-description: Use when you need to know what another agent session did, said or decided, or need to get a message to one — auditing parallel sessions running in worktrees, finding which session owns a branch or PR, checking whether one is blocked or has drifted onto someone else's ticket, recovering a session that vanished from the session list, or telling another session something it needs to know. Also use when a finding exists only in a session's prose and not in any diff, PR or ticket, or when a `.jsonl` transcript is too large to read with grep, jq or cat. Triggers include "what is that other session doing", "which session opened this PR", "look at all the sessions", "read the session jsonl", "my session disappeared", "did another session already fix this", "send a message to that session", "tell the other session", "can you message another Claude session".
+name: working-with-other-sessions
+description: Use when you need to know what another agent session did, said or decided, get a message to one, start one from outside it, or when a session exists on disk but is missing from a client's list (the desktop app not showing sessions the VS Code extension shows, or the reverse). Also when a finding exists only in a session's prose and not in any diff, PR or ticket, or a .jsonl transcript is too large for grep or cat. Triggers include "what is that other session doing", "which session opened this PR", "my session disappeared", "did another session already fix this", "send a message to that session", "start a new session for me", "open this session in the desktop app", "why don't I see my sessions in the sidebar".
 ---
 
-# Reading session transcripts
+# Working with other sessions
 
 ## Core principle
 
@@ -52,6 +52,43 @@ The listing marks 🟢 active / 🟡 recent / ⚪ stale, plus `worktree-filed` a
 
 Run `ccread --help` for the rest.
 
+## Creating a session, and making one visible in the Desktop sidebar
+
+Each client only lists sessions **it** created. The VS Code extension enumerates
+`~/.claude/projects/`, so it sees everything; Claude Desktop reads its own index and so sees only
+its own. Upstream gap: anthropics/claude-code #49775, #66229, #65674, #62980.
+
+Claude Desktop registers the **`claude://`** scheme. This is **not** the `claude-cli://` scheme in
+the public docs — that one opens a *terminal*, not the Desktop app. The Desktop routes are
+undocumented; both were read out of `/Applications/Claude.app/Contents/Resources/app.asar` and
+verified live 2026-08-07.
+
+```bash
+open "claude://code/new?q=<urlencoded>&folder=/abs/path"   # prefill a prompt, UNSENT
+open "claude://resume?session=<uuid>"                      # adopt an EXISTING session, no restart
+```
+
+**Assume this is undiscoverable.** Measured 2026-08-07: an agent asked to surface a session in the
+Desktop sidebar searched `claude --help` and concluded *"None exists."* There is no CLI flag for it,
+so an agent working from `--help` will report the task impossible rather than find these.
+
+`code/new` takes `q` (or `prompt`), `folder` (repeatable), `file`. **There is no autosubmit
+parameter** — the only `autoSubmit` in the bundle is voice dictation. To create a session *and* send
+its first message, use two steps:
+
+```bash
+SID=$(uuidgen | tr 'A-Z' 'a-z')
+claude --session-id "$SID" -p "first message"   # creates + sends, headless
+open "claude://resume?session=$SID"             # Desktop adopts it live, writes its own index entry
+```
+
+`claude --session-id` and `claude -r <id> -p` are in `--help` and agents find them unaided — the
+deep links are the part worth remembering.
+
+Two caveats: `--bare` and `--safe-mode` skip hooks, so a session started either way never registers
+itself; and sessions created with `-p` do not appear in the `--resume` picker, though they resume
+fine by id.
+
 ## How transcripts are stored
 
 Three facts explain nearly every surprise:
@@ -97,6 +134,31 @@ with open(SRC) as fi, open(DST, "w") as fo:
 **Parse per line; never `sed` the file.** A transcript is full of commands that mention its own worktree path. A find-replace "fixes" the file by silently falsifying the session's record of what it actually ran — and that record is the whole reason the file is worth keeping. Copy rather than move, so a live session writing to the original is undisturbed.
 
 ## Sending a message to another session
+
+`ccsend` is the right tool for a **live session that is armed** — it is the only one of these
+that delivers to a session sitting idle, and the only one whose message carries a reply address.
+Three other mechanisms exist and are better for different targets. Reach for `ccsend` by default;
+switch when the target does not match.
+
+| Target | Use | Delivery |
+|---|---|---|
+| A live, armed session | `ccsend <id> "…"` | inbox event, live, carries a reply address |
+| Any session, armed or not, live or not | `claude -p --resume <id> --output-format json "…"` | runs a turn in that session and returns the reply **to you**, synchronously |
+| A teammate in your own agent team | `SendMessage` | automatic; the harness tells the recipient it came from an agent, not the human |
+| A live session, when you only need to push | `mcp__ccd_session_mgmt__send_message` | delivers by `sessionId`, **returns no reply**; unavailable for unattended sessions |
+
+**`claude --resume` does not "message" a session — it runs a turn inside it.** The prompt lands in
+that session's transcript as an ordinary user turn and the answer comes back to your shell, not to
+the session's operator. Use it to *drive* a session or *ask it something*, not to notify one.
+
+**A message you send this way is indistinguishable, in context, from one the human typed.** The
+transcript envelope carries `origin: {"kind": "human"}` on real user turns and omits it on injected
+ones, but the model never sees that field — a receiving session can only discover the difference by
+reading its own transcript with tools. Measured 2026-08-07: a session asked "where did this come
+from?" had to investigate to answer, and a peer sent an `[agent-message]` header correctly refused
+to act on it, treating an unverified peer's side-effecting request as data rather than instruction.
+That refusal is correct behaviour. If you need a peer to *act*, `SendMessage` inside a team is the
+only channel where the origin claim is enforced rather than asserted.
 
 ```bash
 ccsend --list                        # who can receive RIGHT NOW

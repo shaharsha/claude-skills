@@ -1,4 +1,4 @@
-# reading-session-transcripts
+# working-with-other-sessions
 
 Read what another agent session actually **said** — not the thousands of tool calls around it — and send it a message. Lists every session on the machine with its title and live/stale state, prints any one as a conversation, searches the prose of all of them at once, and delivers messages between sessions *including ones sitting idle*.
 
@@ -48,7 +48,7 @@ Three storage details cause most wrong answers, and all three are invisible unti
 /plugin install building-agents@shaharsha-skills
 ```
 
-**Monorepo path:** `skills/reading-session-transcripts/`
+**Monorepo path:** `skills/working-with-other-sessions/`
 
 ## Requirements
 
