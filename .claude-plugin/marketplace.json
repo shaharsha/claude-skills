@@ -11,7 +11,7 @@
   "plugins": [
     {
       "name": "shaharsha-skills",
-      "description": "All 21 agent skills - gdoc-sync, gslides-sync, gsheets, presentation-generator, narrating-pptx, deck-to-video, self-presenting-decks, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-instructions, tech-design-doc, namecheap-domains, office-render, viewing-videos, proton-pass, excalidraw-diagrams, tavily-extract, codex-review, reading-session-transcripts",
+      "description": "All 21 agent skills - gdoc-sync, gslides-sync, gsheets, presentation-generator, narrating-pptx, deck-to-video, self-presenting-decks, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-instructions, tech-design-doc, namecheap-domains, office-render, viewing-videos, proton-pass, excalidraw-diagrams, tavily-extract, codex-review, working-with-other-sessions",
       "source": "./",
       "strict": false,
       "skills": [
@@ -35,7 +35,7 @@
         "./skills/excalidraw-diagrams",
         "./skills/tavily-extract",
         "./skills/codex-review",
-        "./skills/reading-session-transcripts"
+        "./skills/working-with-other-sessions"
       ]
     },
     {
@@ -83,7 +83,7 @@
       "skills": [
         "./skills/prompt-engineer",
         "./skills/writing-project-instructions",
-        "./skills/reading-session-transcripts"
+        "./skills/working-with-other-sessions"
       ]
     },
     {

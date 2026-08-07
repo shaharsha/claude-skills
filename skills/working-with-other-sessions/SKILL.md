@@ -1,9 +1,9 @@
 ---
-name: reading-session-transcripts
+name: working-with-other-sessions
 description: Use when you need to know what another agent session did, said or decided, get a message to one, start one from outside it, or when a session exists on disk but is missing from a client's list (the desktop app not showing sessions the VS Code extension shows, or the reverse). Also when a finding exists only in a session's prose and not in any diff, PR or ticket, or a .jsonl transcript is too large for grep or cat. Triggers include "what is that other session doing", "which session opened this PR", "my session disappeared", "did another session already fix this", "send a message to that session", "start a new session for me", "open this session in the desktop app", "why don't I see my sessions in the sidebar".
 ---
 
-# Reading session transcripts
+# Working with other sessions
 
 ## Core principle
 
