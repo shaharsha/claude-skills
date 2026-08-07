@@ -26,6 +26,15 @@ A transcript is ~95% tool calls and tool results. Reading it with `cat`, `grep` 
 
 Three scripts, no install: `scripts/ccread` (read), `scripts/ccsend` (send), `scripts/ccarm` (receive).
 
+⚠️ **Renaming this skill breaks every session already running.** A live session holds the absolute
+path it first resolved — `~/.claude/skills/<old-name>/scripts/ccsend` — in its own context, and no
+amount of re-reading the skill dislodges it. Measured 2026-08-07: the rename to
+`working-with-other-sessions` turned that path into **exit 127** for 46 sessions mid-sprint,
+including the sprint's own coordinator, whose outbound channel simply stopped working with no error
+anyone saw until a lane was asked why it had gone quiet. Leave a `scripts/`-only symlink at the old
+name — no `SKILL.md`, since skill discovery keys on that file and a full-directory symlink registers
+the skill twice under both names.
+
 | Need | Command |
 |---|---|
 | What's running, and what's stale | `ccread` |
@@ -88,6 +97,26 @@ deep links are the part worth remembering.
 Two caveats: `--bare` and `--safe-mode` skip hooks, so a session started either way never registers
 itself; and sessions created with `-p` do not appear in the `--resume` picker, though they resume
 fine by id.
+
+### Renaming a session — you can, and it lands in only one account
+
+`mcp__ccd_session_mgmt__set_session_title` renames **another** session; it refuses the one you are
+in, so your own title is the human's job. Nobody needs to rename by hand — including in bulk.
+
+**It updates only the signed-in account's index entry.** Measured 2026-08-07: after one rename the
+same session read `Demo: session created + prompted automatically` under one account and the stale
+`Reply with exactly this and nothing else: Second demo sessio…` under the other. A machine with two
+accounts drifts a little further apart with every rename, and neither side looks wrong on its own.
+
+What saves it is that the tool **also writes `customTitle` into the transcript**, and the transcript
+is one file both accounts read. So the durable form of a rename is: set the title, then propagate
+that `customTitle` into every account's index entry. Syncing 394 entries that way resolved 7
+divergences, one of them a genuine session reading `Elementor MCP integration` under one account and
+its raw first message `I need to add the elementor-mcp` under the other.
+
+Never sync from `aiTitle` — for the reason in *How transcripts are stored* (4): lanes that run
+`/arm-inbox` first all summarise to `Review ARM inbox`, so an aiTitle sweep renames a whole sprint's
+lanes to the same useless string and destroys the names their human uses out loud.
 
 ## How transcripts are stored
 
