@@ -49,7 +49,12 @@ BARE_RE = re.compile(r"(?<![\w/-])(cc[a-z]+)(?![\w-])")
 
 # Named as retired ON PURPOSE. Mentioning these is history, not an instruction — but if one ever
 # becomes runnable-and-recommended again, that is a decision, not a drift.
-RETIRED = {"ccsend", "ccarm", "ccread", "ccbroadcast.sh"}
+# ⚠️ ccread IS NOT RETIRED, and listing it here was a bug in this file. Native messaging
+# replaced ccsend/ccarm -- the SEND and RECEIVE halves. It never replaced READING a
+# transcript, which is a different job with no successor: `ccread --doing` still answers
+# "what was that session actually doing" and nothing else does. Verified working 2026-08-12.
+# A checker that declares a live tool dead teaches people to ignore its verdicts.
+RETIRED = {"ccsend", "ccarm", "ccbroadcast.sh"}
 
 
 def split_prose_and_commands(text):
