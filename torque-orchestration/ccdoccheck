@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+"""
+ccdoccheck — do the tools these instructions name actually EXIST?
+
+The cheapest check nobody had. On 2026-08-12 the messaging layer was retired mid-sprint and the
+instruction files kept naming it for hours. One of those instructions told lanes that the only
+permitted channel in plan mode was a tool that no longer carries anything — so a lane following it
+would either conclude it could not speak, or USE THE DEAD PATH AND BELIEVE IT HAD SPOKEN.
+
+That second outcome is the expensive one: a lane that thinks it reported, and a coordinator who
+thinks it went silent.
+
+Same evening, the reverse: `ccpeers` was the live tool and was NOT on PATH, while ~/.local/bin held
+symlinks for the three RETIRED ones. The convenience path pointed at the previous generation.
+
+    exit 0   every named tool resolves
+    exit 1   something named does not exist          <- this is the gate
+    exit 2   could not check                         <- NOT a pass
+
+⚠️ This checks EXISTENCE, not correctness. A tool that exists and does the wrong thing passes here.
+It is a spell-checker for infrastructure, not a review.
+"""
+
+import os
+import re
+import shutil
+import subprocess
+import sys
+
+HOME = os.path.expanduser("~")
+
+DOCS = [
+    f"{HOME}/.claude/commands/worker.md",
+    f"{HOME}/.claude/commands/dispatch.md",
+    f"{HOME}/.claude/commands/adjudicate.md",
+    f"{HOME}/.claude/commands/lead.md",
+    f"{HOME}/.claude/commands/arm-inbox.md",
+    f"{HOME}/.claude/commands/lane.md",
+    f"{HOME}/.claude/commands/pr.md",
+    f"{HOME}/.claude/torque-orchestration/LANE-PREAMBLE.md",
+    f"{HOME}/.claude/torque-orchestration/APPROVAL-CRITERIA.md",
+    f"{HOME}/.claude/torque-orchestration/CURRENT-ORCHESTRATOR",
+]
+
+# Paths that look like a tool being invoked.
+PATH_RE = re.compile(r"(?:~|\$HOME|/Users/[a-z]+)[\w./-]*/(?:scripts|bin|torque-orchestration)/[\w.-]+")
+# Bare cc* commands named as things to run.
+BARE_RE = re.compile(r"(?<![\w/-])(cc[a-z]+)(?![\w-])")
+
+# Named as retired ON PURPOSE. Mentioning these is history, not an instruction — but if one ever
+# becomes runnable-and-recommended again, that is a decision, not a drift.
+RETIRED = {"ccsend", "ccarm", "ccread", "ccbroadcast.sh"}
+
+
+def split_prose_and_commands(text):
+    """
+    EXECUTION vs MENTION — the same discriminator that separated 17 grep hits from 5 real ones
+    when a lane audited its own transcript on 2026-08-12.
+
+    A retired tool named in PROSE is a lesson: "ccsend ACCEPTED and reported delivery" is the
+    origin story of a rule still in force, and deleting it would leave the rule standing with
+    its evidence removed. A retired tool named inside a ```bash fence is an INSTRUCTION.
+
+    Only the second is drift. The first version of this checker did not distinguish them and
+    returned 12 findings, all false — which is how a checker teaches people to ignore it.
+
+    Returns (prose, commands).
+    """
+    prose, commands, in_fence = [], [], False
+    for line in text.splitlines():
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        (commands if in_fence else prose).append(line)
+    return "\n".join(prose), "\n".join(commands)
+
+
+def main():
+    checked = broken = 0
+    findings = []
+    missing_docs = []
+
+    for doc in DOCS:
+        if not os.path.exists(doc):
+            missing_docs.append(doc)
+            continue
+        try:
+            raw = open(doc, encoding="utf-8", errors="replace").read()
+        except OSError as e:
+            print(f"CANNOT CHECK — {doc}: {e}", file=sys.stderr)
+            sys.exit(2)
+        prose, commands = split_prose_and_commands(raw)
+        name = os.path.basename(doc)
+
+        # A PATH is unambiguous wherever it appears: if a document names a file that is not
+        # there, the reader cannot use it whether the sentence was prose or a command.
+        for m in PATH_RE.finditer(prose + "\n" + commands):
+            p = m.group(0).replace("~", HOME).replace("$HOME", HOME)
+            checked += 1
+            if not os.path.exists(p):
+                broken += 1
+                findings.append((name, m.group(0), "path does not exist"))
+
+        # A BARE COMMAND only counts inside a fence — that is a thing to run, not a thing
+        # being discussed.
+        for m in BARE_RE.finditer(commands):
+            tool = m.group(1)
+            checked += 1
+            if tool in RETIRED:
+                broken += 1
+                findings.append((name, tool, "RETIRED tool in a COMMAND block"))
+            elif shutil.which(tool) is None:
+                broken += 1
+                findings.append((name, tool, "not on PATH"))
+
+    # CONTROL. If the scan matched nothing at all, it did not reach — and an empty finding list
+    # would read exactly like a clean pass. This is the failure this whole file is about.
+    if checked == 0:
+        print("CANNOT CHECK — the scan matched ZERO tool references across "
+              f"{len(DOCS)} documents.\n"
+              "         That is an instrument that did not reach, not a clean result.",
+              file=sys.stderr)
+        print("exit 2 is not a pass.", file=sys.stderr)
+        sys.exit(2)
+
+    if missing_docs:
+        print(f"⚠️  {len(missing_docs)} document(s) in the list do not exist:")
+        for d in missing_docs:
+            print(f"    ? {d}")
+        print()
+
+    print(f"scanned {len(DOCS) - len(missing_docs)} documents · {checked} tool references")
+
+    if not findings:
+        print("\nCLEAN — every tool these instructions name resolves.")
+        print("\n⚠️  EXISTENCE ONLY. A tool that exists and does the wrong thing passes this.")
+        return 0
+
+    print(f"\n\033[1mBROKEN REFERENCES — {len(findings)}\033[0m")
+    for doc, ref, why in findings:
+        print(f"    ! {doc:24} {ref:46} {why}")
+    print("\nAn instruction naming a tool that does not exist is worse than no instruction:")
+    print("a reader either concludes the capability is unavailable, or uses a dead path and")
+    print("believes it worked. The second one is silent.")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

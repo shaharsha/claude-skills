@@ -1,0 +1,238 @@
+#!/usr/bin/env python3
+"""ccpeers — join the ADDRESSABLE NAME to the SESSION to the TITLE.
+
+The question ListAgents cannot answer
+-------------------------------------
+    ListAgents / /list-agents   ->  "torque-a5 [420562]"   the name SendMessage needs
+    the Desktop sidebar         ->  "Sprint1 TOR-544 …"    the title a human recognises
+    ccstatus                    ->  IN-FLIGHT / SPOKE      what it is doing
+
+Three surfaces, three different keys, and until now nothing joined them. Measured
+2026-08-12: six torque lanes all listed as `torque-xx`, none naming a ticket, and
+the coordinator could not tell which addressable name was which lane.
+
+WHERE THE JOIN COMES FROM
+-------------------------
+Every live session registers itself at ~/.claude/sessions/<pid>.json, carrying BOTH
+the addressable `name` and the `sessionId`:
+
+    {"pid":21575, "sessionId":"919adc21-…", "cwd":"…/Playground",
+     "name":"playground-b6", "nameSource":"derived",
+     "messagingSocketPath":"/tmp/cc-socks/21575.sock", "kind":"interactive"}
+
+sessionId then joins to the transcript at
+~/.claude/projects/<cwd-slug>/<sessionId>.jsonl, which carries the title.
+
+So the coordinator does NOT need every lane to rename itself. It reads the map.
+
+⚠️ THIS READS AN INTERNAL FORMAT. `~/.claude/sessions/*.json` is not a documented
+API. It has held this shape since at least v2.1.227, but a Claude Code upgrade may
+change or remove it. If the roster comes back empty while sessions are plainly
+running, suspect THIS, not the fleet — an empty roster from a broken reader looks
+exactly like an empty roster from a quiet sprint. That failure has been made once
+already on this machine, in ccstatus, and it is why that script asserts a
+must-fire control.
+"""
+import json, os, glob, sys, time
+
+HOME = os.path.expanduser("~")
+SESSIONS = os.path.join(HOME, ".claude", "sessions", "*.json")
+PROJECTS = os.path.join(HOME, ".claude", "projects")
+
+
+def slug(cwd: str) -> str:
+    return cwd.replace("/", "-")
+
+
+def title_for(session_id: str, cwd: str):
+    """Last title written in the transcript. customTitle wins over aiTitle."""
+    path = os.path.join(PROJECTS, slug(cwd), session_id + ".jsonl")
+    if not os.path.exists(path):
+        hits = glob.glob(os.path.join(PROJECTS, "*", session_id + ".jsonl"))
+        if not hits:
+            return None, None
+        path = hits[0]
+    custom = ai = None
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                if '"customTitle"' not in line and '"aiTitle"' not in line:
+                    continue
+                try:
+                    d = json.loads(line)
+                except ValueError:
+                    continue
+                custom = d.get("customTitle", custom)
+                ai = d.get("aiTitle", ai)
+    except OSError:
+        return None, path
+    return (custom or ai), path
+
+
+import uuid
+
+_NS = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
+# ⚠️ ORDER MATTERS AND IT IS NOT THE ORDER YOU WOULD GUESS. The hook writes an entry
+# under BOTH accounts, so both files exist for every session and "first one found" is
+# a coin flip that looks authoritative.
+#
+# Measured 2026-08-12: ~/.claude.json says the signed-in account is 9b880495, but the
+# ids `list_sessions` actually returns are derived from 00de1c30 — the Desktop app is
+# on a different account than the CLI. Returning the CLI's account gives a plausible
+# uuid that `set_session_title` rejects as "Session not found", which is the exact
+# wrong-registry-error-wearing-a-missing-session-error this column exists to end.
+#
+# TO RE-VERIFY if renames start failing: call list_sessions, take any row's id, and
+# check which account reproduces it via uuid5(NS, sessionId + account).
+_ACCOUNTS = ["00de1c30-b8bd-42be-b316-0f4fb4d00e3d",   # what list_sessions uses — keep first
+             "9b880495-47ea-46aa-b382-2ac267ac52fa"]
+_DESKTOP_BASE = os.path.expanduser(
+    "~/Library/Application Support/Claude/claude-code-sessions")
+
+
+def desktop_id(sid: str) -> str:
+    """
+    The DESKTOP-side id for a session, derived rather than looked up.
+
+    ⚠️ THERE ARE TWO ID REGISTRIES AND THEY OFTEN DISAGREE:
+
+        ~/.claude/sessions/*.json    ccpeers · ListAgents · SendMessage
+        Desktop's own index          list_sessions · set_session_title ·
+                                     ccd_session_mgmt__send_message
+
+    `set_session_title` wants the DESKTOP one, so passing the messaging uuid returns
+    "Session not found" — which reads exactly like a missing session and is a
+    wrong-registry error. Following the old recipe from that error adopts an
+    already-indexed session and writes a DUPLICATE sidebar row. Measured 2026-08-12.
+
+    Nothing needs syncing, because the id is COMPUTABLE. ~/.claude/hooks/register-desktop-session.py
+    files CLI-started sessions as local_<uuid5(session_id + account)>, deliberately
+    distinct from Desktop's own local_<session_id> so the two can never collide.
+
+        v5 id   the hook wrote it       -> uuid5(NS, session_id + account)
+        v4 id   Desktop wrote it        -> the id IS the session id
+
+    Verified 2/2 against live sessions on both accounts; a session Desktop created
+    itself falls through to the identity case.
+    """
+    # Entries are filed under <accountUuid>/<organizationUuid>/, not at the base —
+    # so glob rather than assuming the pair. Getting this wrong makes every row
+    # fall through to the identity case, which looks like "the registries agree"
+    # and is the reassuring wrong answer.
+    def present(u):
+        return bool(glob.glob(os.path.join(_DESKTOP_BASE, "*", "*", "local_" + u + ".json")))
+
+    own = sid if present(sid) else None
+    derived = next((c for c in (str(uuid.uuid5(_NS, sid + a)) for a in _ACCOUNTS)
+                    if present(c)), None)
+
+    # ⚠️ BOTH PRESENT = A DUPLICATE SIDEBAR ROW, and it is worth surfacing rather than
+    # resolving. It means the session was adopted via claude://resume when it already
+    # had a hook-written entry — the exact defect the old rename recipe produced.
+    # Picking one silently would hide the thing you most need to know.
+    # Returns a DISPLAY-READY short form. Returning the full uuid and letting the caller
+    # slice it silently ate the !dup marker in the first version of this function —
+    # a flag that cannot survive its own formatting is not a flag.
+    if own and derived:
+        return own[:8] + " !DUP"
+    if own:
+        return own[:8]              # Desktop created it; its own id is the session id
+    if derived:
+        return derived[:8]
+    return "—"                      # no Desktop entry: list_sessions cannot see it
+
+
+def main() -> int:
+    want = sys.argv[1] if len(sys.argv) > 1 else None
+    rows = []
+    for f in glob.glob(SESSIONS):
+        try:
+            d = json.load(open(f))
+        except (ValueError, OSError):
+            continue
+        sid = d.get("sessionId", "")
+        cwd = d.get("cwd", "")
+        title, tpath = title_for(sid, cwd)
+        alive = os.path.exists(d.get("messagingSocketPath", "")) if d.get("messagingSocketPath") else False
+        rows.append({
+            "name": d.get("name", "?"),
+            "nameSource": d.get("nameSource", "?"),
+            "sessionId": sid,
+            "cwd": cwd,
+            "title": title,
+            "socket": alive,
+            "version": d.get("version", "?"),
+            "transcript": tpath,
+            "mtime": os.path.getmtime(tpath) if tpath and os.path.exists(tpath) else 0,
+        })
+
+    if not rows:
+        print("ccpeers: NO SESSIONS REGISTERED.", file=sys.stderr)
+        print("  This is a BROKEN INSTRUMENT until proven otherwise: ~/.claude/sessions/", file=sys.stderr)
+        print("  is an internal path and an upgrade may have moved it. Check it exists", file=sys.stderr)
+        print("  before concluding the fleet is idle.", file=sys.stderr)
+        return 2
+
+    if want:
+        rows = [r for r in rows
+                if want.lower() in (r["name"] or "").lower()
+                or want.lower() in (r["sessionId"] or "").lower()
+                or want.lower() in (r["title"] or "").lower()]
+        if not rows:
+            print(f"ccpeers: nothing matches {want!r}", file=sys.stderr)
+            return 1
+
+    # ⚠️ ONE sessionId CAN HAVE SEVERAL LIVE PROCESSES, each with its own name and its
+    # own live socket. Measured 2026-08-12: three, all alive, all with sockets, one
+    # session. A name-addressed send then picks ONE OF N live processes claiming that
+    # session, and only one is taking the turn — which is a better explanation for a
+    # name-addressed send going nowhere than staleness, and staleness cannot account
+    # for it at all. Not demonstrated: which process actually receives the message.
+    _seen = {}
+    for r in rows:
+        _seen.setdefault(r["sessionId"], []).append(r["name"])
+    for r in rows:
+        peers = [n for n in _seen[r["sessionId"]] if n != r["name"]]
+        r["shared"] = peers
+
+    rows.sort(key=lambda r: (-r["mtime"], r["name"]))
+    now = time.time()
+    untitled = 0
+
+    print(f"{'ADDRESS (SendMessage)':<30} {'SESSION':<10} {'DESKTOP id':<14} {'IDLE':>6}  TITLE")
+    print("-" * 112)
+    for r in rows:
+        idle = f"{int((now - r['mtime']) // 60)}m" if r["mtime"] else "—"
+        if r["socket"]:
+            mark = ""
+        else:
+            # v2.1.224 introduced cross-session messaging. Below it, a session binds
+            # no socket at all and is silently unreachable — measured 2026-08-12 on
+            # the Sprint-1 orchestrator, which sat on v2.1.222 while every lane ran
+            # v2.1.227. Restarting the session is the only fix; it is not a fleet
+            # problem and no message to it will ever land.
+            try:
+                too_old = tuple(int(x) for x in r["version"].split(".")) < (2, 1, 224)
+            except (ValueError, AttributeError):
+                too_old = False
+            mark = f"  [v{r['version']} < 2.1.224 — RESTART to get messaging]" if too_old \
+                   else "  [no socket: UNREACHABLE]"
+        if r.get("shared"):
+            mark += f"  [!SHARED sessionId with {', '.join(r['shared'])} — a name-addressed send picks ONE]"
+        t = r["title"] or "<NO TITLE>"
+        if not r["title"]:
+            untitled += 1
+        print(f"{r['name']:<30} {r['sessionId'][:8]:<10} {desktop_id(r['sessionId']):<14} "
+              f"{idle:>6}  {t[:52]}{mark}")
+
+    print()
+    print(f"{len(rows)} registered · {sum(1 for r in rows if not r['socket'])} unreachable · {untitled} untitled")
+    explicit = sum(1 for r in rows if r["nameSource"] != "derived")
+    if explicit == 0:
+        print("all names are DERIVED from the working directory — the ADDRESS column")
+        print("does not identify a ticket. Address by it; recognise the lane by TITLE.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

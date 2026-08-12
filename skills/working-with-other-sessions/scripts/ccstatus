@@ -1,0 +1,255 @@
+#!/usr/bin/env python3
+"""ccstatus — who is WORKING, who is WAITING on you, who is DONE.
+
+The question `ccsend --list` and `ccread` cannot answer
+---------------------------------------------------------
+    ccsend --list   armed / unarmed          -> "can I reach them?"
+    ccread          inventory, oldest first  -> "what sessions exist?"
+    ccstatus        disposition              -> "who needs me RIGHT NOW?"
+
+⚠️ LAST-ACTIVITY TIME SAYS A SESSION IS ALIVE, NOT THAT IT IS WAITING. Those look
+identical in every existing view, and the gap is expensive: on 2026-08-08 an
+orchestrator ran a "who is waiting on me?" sweep keyed on activity age, reported a
+clean board, and a lane sat blocked on a ruling for SIX HOURS. It had sent and gone
+quiet — which is exactly what working also looks like.
+
+THE DISCRIMINATOR IS THE LAST EVENT'S TYPE, NOT ITS AGE
+-------------------------------------------------------
+A turn in flight ends on a tool call; a turn that finished ends on prose:
+
+    assistant/tool_use    the agent called a tool and is awaiting its result   IN FLIGHT
+    assistant/thinking    mid-reasoning, no output yet                         IN FLIGHT
+    user/tool_result      a tool returned; the agent continues from here       IN FLIGHT
+    assistant/text        the agent SPOKE and stopped                          TURN ENDED
+    user/text|str         a prompt arrived and nothing has happened since      QUEUED
+
+⚠️ THE LITERAL LAST LINE OF A TRANSCRIPT IS USUALLY NOT A CONVERSATIONAL EVENT.
+Measured across six live transcripts: `queue-operation` (194), `attachment` (150),
+`last-prompt` (65), `pr-link` (63), `ai-title` (45), `file-history-snapshot`,
+`worktree-state`, `relocated`, `mode`... Classifying on the last line returns
+`last-prompt` for nearly every session — the same answer for all of them, which
+reads as a working instrument. Only `type` in {assistant, user} is filtered in.
+
+WHY "WAITING" IS READ FROM THE TRANSCRIPT AND NOT FROM THE MAILBOX
+------------------------------------------------------------------
+An incoming message lands in the receiving session's transcript as an ordinary
+`user` turn. So "did anyone reply after they spoke?" is answerable there, exactly
+and locally: if the last conversational event is their own prose, nothing has come
+back since.
+
+The mailbox cannot answer it reliably. `ccsend` spool filenames are
+`<ts>-<sender-slug>.md` and the slug is TRUNCATED — the sender id survives on short
+titles and is eaten on long ones, so matching a lane by filename silently misses its
+messages. That failure was measured before this tool existed, twice, and both times
+it reported a clean board.
+
+WHAT THIS TOOL REFUSES TO DECIDE
+---------------------------------
+⚠️ `IN FLIGHT` cannot distinguish a long tool call from a dead session. Both are "an
+assistant/tool_use with no result yet", forever. Age is printed so a reader can
+judge, and anything past --stale-mins is labelled STALLED? WITH THE QUESTION MARK
+KEPT — never resolved into a verdict this tool has no evidence for.
+
+Likewise `SPOKE` is mechanical: it means the turn ended with prose and nothing has
+arrived since. Whether that prose ASKS you something is a judgement, so the tail is
+printed as evidence rather than scored. The only concession is a `?` hint flag,
+labelled a heuristic, because a question mark is a signal and not a proof.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import pathlib
+import re
+import sys
+import time
+
+#: Only these carry conversation. Everything else in a transcript is bookkeeping —
+#: see the docstring's measured census. Filtering IN by an allowlist rather than
+#: filtering OUT the known noise: a new bookkeeping type added upstream would
+#: otherwise silently become "the last event" for every session at once.
+CONVERSATIONAL = {"assistant", "user"}
+
+DEFAULT_ROOT = pathlib.Path.home() / ".claude" / "projects"
+
+
+def _blocks(entry: dict) -> list[str]:
+    msg = entry.get("message") or {}
+    content = msg.get("content")
+    if isinstance(content, list):
+        return [b.get("type") for b in content if isinstance(b, dict)]
+    if isinstance(content, str):
+        return ["text"]
+    return []
+
+
+def _text_of(entry: dict) -> str:
+    msg = entry.get("message") or {}
+    content = msg.get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return " ".join(
+            b.get("text", "") for b in content
+            if isinstance(b, dict) and b.get("type") == "text"
+        )
+    return ""
+
+
+def classify(entry: dict) -> tuple[str, str]:
+    """(state, why) for the last CONVERSATIONAL entry. Mechanical — no content read."""
+    role = (entry.get("message") or {}).get("role")
+    blocks = _blocks(entry)
+    if role == "assistant":
+        if "tool_use" in blocks:
+            return "IN-FLIGHT", "called a tool, awaiting result"
+        if "thinking" in blocks and "text" not in blocks:
+            return "IN-FLIGHT", "mid-reasoning, no output yet"
+        if "text" in blocks:
+            return "SPOKE", "turn ended with prose; nothing since"
+    if role == "user":
+        if "tool_result" in blocks:
+            return "IN-FLIGHT", "tool returned; continues from here"
+        return "QUEUED", "a prompt arrived; nothing has happened since"
+    return "UNKNOWN", f"role={role!r} blocks={blocks}"
+
+
+def last_conversational(path: pathlib.Path, tail_bytes: int = 400_000):
+    """Newest {assistant,user} entry, or None. Reads only the tail — transcripts are large."""
+    try:
+        size = path.stat().st_size
+        with path.open("rb") as fh:
+            if size > tail_bytes:
+                fh.seek(size - tail_bytes)
+                fh.readline()  # discard the partial line the seek landed inside
+            lines = fh.read().decode("utf-8", "replace").splitlines()
+    except OSError:
+        return None
+    for line in reversed(lines):
+        if not line.strip():
+            continue
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        if entry.get("type") in CONVERSATIONAL and (entry.get("message") or {}).get("role"):
+            return entry
+    return None
+
+
+def session_title(path: pathlib.Path) -> str:
+    """Prefer a human rename (custom-title) over the generated ai-title; take the LAST of each.
+
+    Same rule as ccread/ccsend. Reading only aiTitle reports a first-message summary
+    as the session's name, which is how a coordinator once handed its human seven
+    wrong lane names.
+    """
+    #: ⚠️ The fields are `customTitle` / `aiTitle` — NOT `title`. Measured: an ai-title entry
+    #: has keys {aiTitle, sessionId, type}. The first version of this function read `title`
+    #: AND prefiltered lines on the substring `"title"`, which does not occur in `"aiTitle"`
+    #: either — so it returned "(untitled)" for every session, and the --match filter then
+    #: matched nothing and printed "no sessions matched". An EMPTY BOARD, from a tool whose
+    #: whole purpose is to stop an empty board being mistaken for a quiet one.
+    custom = ai = ""
+    try:
+        with path.open("r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                if 'Title"' not in line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except ValueError:
+                    continue
+                if entry.get("type") == "custom-title":
+                    custom = entry.get("customTitle") or custom
+                elif entry.get("type") == "ai-title":
+                    ai = entry.get("aiTitle") or ai
+    except OSError:
+        pass
+    return custom or ai or "(untitled)"
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(
+        description="Who is working, who is waiting on you, who is done.",
+        epilog="States: IN-FLIGHT (turn running) · SPOKE (ended with prose, nothing since) "
+               "· QUEUED (prompt arrived, no action yet). A '?' flag means the last prose "
+               "contains a question mark — a HEURISTIC hint, not a verdict.",
+    )
+    ap.add_argument("--root", default=os.environ.get("CCREAD_ROOT", str(DEFAULT_ROOT)))
+    ap.add_argument("--match", help="only sessions whose title or path matches this regex")
+    ap.add_argument("--stale-mins", type=int, default=20,
+                    help="an IN-FLIGHT turn older than this is flagged STALLED? (default 20)")
+    ap.add_argument("--max-age-mins", type=int, default=1440,
+                    help="skip sessions untouched for longer than this (default 1440 = 24h)")
+    ap.add_argument("--tail", type=int, default=0, help="print N chars of the last prose")
+    ap.add_argument("--json", action="store_true")
+    args = ap.parse_args()
+
+    root = pathlib.Path(args.root).expanduser()
+    if not root.is_dir():
+        print(f"ccstatus: no transcript root at {root}", file=sys.stderr)
+        return 2
+
+    pattern = re.compile(args.match, re.I) if args.match else None
+    now = time.time()
+    rows = []
+    #: One session can have several transcript copies (it is filed by cwd, so moving
+    #: worktrees creates a new file). Keep only the newest per session id, or a lane
+    #: that changed directory is reported twice with the older copy's stale state.
+    newest: dict[str, pathlib.Path] = {}
+    for path in root.glob("*/*.jsonl"):
+        sid = path.stem
+        prev = newest.get(sid)
+        if prev is None or path.stat().st_mtime > prev.stat().st_mtime:
+            newest[sid] = path
+
+    for sid, path in newest.items():
+        age_min = (now - path.stat().st_mtime) / 60
+        if age_min > args.max_age_mins:
+            continue
+        title = session_title(path)
+        if pattern and not (pattern.search(title) or pattern.search(str(path))):
+            continue
+        entry = last_conversational(path)
+        if entry is None:
+            state, why, prose = "NO-EVENTS", "no assistant/user entry in the tail", ""
+        else:
+            state, why = classify(entry)
+            prose = " ".join(_text_of(entry).split())
+        if state == "IN-FLIGHT" and age_min > args.stale_mins:
+            state = "STALLED?"
+            why = (f"in flight for {age_min:.0f}m — a long tool call and a dead session "
+                   "are INDISTINGUISHABLE here")
+        rows.append({
+            "id": sid[:8], "age_min": round(age_min), "state": state, "why": why,
+            "title": title, "asks": "?" if state == "SPOKE" and "?" in prose[-400:] else "",
+            "prose": prose,
+        })
+
+    rows.sort(key=lambda r: (r["state"] != "SPOKE", r["age_min"]))
+
+    if args.json:
+        print(json.dumps(rows, indent=2))
+        return 0
+
+    if not rows:
+        print("ccstatus: no sessions matched.")
+        return 0
+    print(f"  {'STATE':<10} {'ID':<9} {'AGE':>7}  {'?':<2} TITLE")
+    for r in rows:
+        print(f"  {r['state']:<10} {r['id']:<9} {r['age_min']:>5}m  {r['asks']:<2} {r['title'][:52]}")
+        if args.tail and r["prose"]:
+            print(f"             └─ {r['prose'][-args.tail:]}")
+    print()
+    print("  SPOKE = turn ended with prose and nothing has arrived since — read the tail to")
+    print("  judge whether it is WAITING on you or simply DONE. '?' is a heuristic, not a verdict.")
+    print("  STALLED? keeps its question mark: this tool cannot tell a long tool call from a")
+    print("  dead session, and will not pretend to.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
