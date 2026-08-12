@@ -47,6 +47,36 @@ like that.
    it was the wrong question, and record that that is what happened
 ```
 
+**That second box was the only honour-system rule in the whole split. It is now countable:**
+
+```bash
+ccverify rulings --session <your own session id>     # ccpeers tells you the id
+```
+
+It reads **your own transcript** — which you cannot edit — counts the `/adjudicate` subagents you
+spawned, and names any artifact ruled on more than once. **Run it before you close a merge window.**
+
+⚠️ **A SECOND SPAWN IS NOT MISCONDUCT AND THE TOOL DOES NOT SAY IT IS.** Re-ruling a *changed*
+artifact is correct — approval is a pair, and it expires when either half moves. **The count cannot
+tell a legitimate re-rule from a re-roll; only the ticket can.** That is exactly why the rule is to
+*declare* it rather than to avoid it.
+
+🔑 **This is the subagent form's one weakness, and it is the reason the default is still the
+subagent.** Both forms put one property on convention:
+
+```
+SUBAGENT   independence GUARANTEED (it has seen nothing)
+           auditability by convention  -> and a re-roll leaves a COUNTABLE hole
+
+PEER       auditability GUARANTEED (a message cannot be deleted)
+           independence by convention  -> and saturation leaves NO TRACE AT ALL
+```
+
+**Ruling #7 from a context that had already formed views is indistinguishable from ruling #1.**
+Measured 2026-08-12: a standing adjudicator declined two forks for context saturation, and that
+surfaced *only because it volunteered it* — which is the thing this split exists to stop depending
+on. **Pick the form whose failure you can catch.**
+
 **Use a peer `/adjudicate` SESSION, not a subagent, when YOU are a party:** a lane disputing a ruling
 you made, an appeal, or a question about your own sequencing. There, a subagent you spawn and whose
 prompt you write is not independent review — it is a performance of independent review, and you are

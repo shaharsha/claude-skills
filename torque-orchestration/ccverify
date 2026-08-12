@@ -23,6 +23,8 @@ failure this is meant to catch, so you are shown what it read, not just what it 
 
 import argparse
 import fnmatch
+import glob
+import io
 import json
 import os
 import re
@@ -388,6 +390,135 @@ def cmd_pr(a):
 
 # ---------------------------------------------------------------- cli
 
+
+
+def _norm_artifact(a):
+    """`#527`, `# 527` and `PR 527` are ONE artifact. Without this a re-rule written a
+    different way reads as a different question — the silent direction, and the one that
+    lets a genuine re-roll pass unnoticed."""
+    a = a.strip()
+    return a.upper() if a.upper().startswith("TOR-") else "#" + a.lstrip("#").strip()
+
+
+def _adjudication_spawns(path):
+    """
+    Every /adjudicate subagent the dispatcher spawned, from ITS OWN transcript.
+
+    ⚠️ MATCH ON THE PROMPT *AND* THE DESCRIPTION. Measured 2026-08-12 on a real
+    dispatcher: a spawn whose description read "Adjudicate UNKNOWN verdict honesty"
+    did not mention adjudicate.md in its prompt at all, so a prompt-only test missed
+    a real adjudication. A detector for a rule people can bypass must not have a
+    bypass of its own.
+    """
+    import re as _re
+    out = []
+    try:
+        fh = io.open(path, encoding="utf-8", errors="replace")
+    except OSError:
+        return None                       # cannot read -> the CALLER must exit 2
+    with fh:
+        for line in fh:
+            if '"Agent"' not in line and '"Task"' not in line:
+                continue
+            try:
+                d = json.loads(line)
+            except ValueError:
+                continue
+            c = (d.get("message") or {}).get("content")
+            if not isinstance(c, list):
+                continue
+            for b in c:
+                if b.get("type") != "tool_use" or b.get("name") not in ("Agent", "Task"):
+                    continue
+                inp = b.get("input") or {}
+                blob = str(inp.get("prompt", "")) + " " + str(inp.get("description", ""))
+                if "adjudicat" not in blob.lower():
+                    continue
+                # 🔑 THE SUBJECT, NOT EVERY MENTION. The first version of this collected
+                # every ticket appearing anywhere in the prompt and reported 3 repeats on a
+                # real dispatcher, of which 2 WERE FALSE: a criteria ticket merely CITED by
+                # two unrelated rulings, and a plan -> PR -> delta chain that is three
+                # DIFFERENT questions about one feature. A checker that cries wolf gets
+                # ignored, and the one true finding (#527, ruled twice) gets ignored with it.
+                #
+                # The description names what is being ruled ON — "Adjudicate PR #527
+                # TOR-567" is a ruling on #527 that happens to cite its ticket. Take the
+                # FIRST artifact there; fall back to the prompt only when it names none.
+                desc = str(inp.get("description") or "")
+                pat = r"TOR-\d+|#\s?\d{3,}|(?<=PR )\d{3,}"
+                found = _re.findall(pat, desc) or _re.findall(pat, str(inp.get("prompt", "")))
+                out.append({
+                    "ts": (d.get("timestamp") or "")[11:19],
+                    "desc": desc[:60],
+                    "subject": _norm_artifact(found[0]) if found else None,
+                })
+    return out
+
+
+def cmd_rulings(a):
+    """
+    ONE QUESTION, ONE RULING — the only honour-system rule in the split, made countable.
+
+    dispatch.md says "if you spawn twice on one question, SAY SO in the ticket". Nothing
+    enforced it, and that is the subagent form's single weakness: a ruling you dislike can
+    be re-spawned and the discarded attempt leaves no trace. This counts the spawns.
+
+    ⚠️ A SECOND SPAWN IS NOT MISCONDUCT. Re-ruling a CHANGED artifact is correct and
+    expected -- approval is a pair (diff, base) and expires when either moves. This
+    reports the count so a human can see it; it does not judge intent, and it must not
+    be read as an accusation.
+
+    exit 1 = an artifact was adjudicated more than once
+    exit 2 = COULD NOT CHECK (no transcript). NOT a pass.
+    """
+    path = a.transcript
+    if not path:
+        if not a.session:
+            die("need --session <id> or --transcript <path>: with neither there is "
+                "nothing to read, and an empty result would look like a clean run")
+        hits = glob.glob(os.path.expanduser(
+            "~/.claude/projects/*/" + a.session + "*.jsonl"))
+        if not hits:
+            die("no transcript for session %s — exit 2 is NOT a pass, it means the "
+                "check never ran" % a.session)
+        path = hits[0]
+    spawns = _adjudication_spawns(path)
+    if spawns is None:
+        die("could not read %s — exit 2 is NOT a pass" % path)
+
+    print(bold("adjudication spawns found: %d" % len(spawns)))
+    for s in spawns:
+        print("  %s  %-60s %s" % (s["ts"], s["desc"], s["subject"] or "(none named)"))
+
+    by_art = {}
+    for s in spawns:
+        if s["subject"]:
+            by_art.setdefault(s["subject"], []).append(s)
+    repeats = {k: v for k, v in by_art.items() if len(v) > 1}
+
+    if not spawns:
+        print()
+        print("No adjudications in this transcript. If you expected some, you are "
+              "probably reading the wrong session — check with ccpeers.")
+        return 0
+    if not repeats:
+        print()
+        print(bold("OK — every artifact was adjudicated exactly once."))
+        return 0
+
+    print()
+    print(bold("%d artifact(s) adjudicated MORE THAN ONCE:" % len(repeats)))
+    for art, ss in sorted(repeats.items()):
+        print("  %s  x%d" % (art, len(ss)))
+        for s in ss:
+            print("      %s  %s" % (s["ts"], s["desc"]))
+    print()
+    print("Each of these must be DECLARED in the ticket, with the reason. A re-rule on a")
+    print("CHANGED artifact is correct; a re-spawn because the answer was unwelcome is the")
+    print("failure this counts. The count cannot tell them apart — the ticket must.")
+    return 1
+
+
 def main():
     p = argparse.ArgumentParser(
         prog="ccverify",
@@ -399,6 +530,7 @@ def main():
   ccverify files -d src/charts/ -d src/axis.ts --repo ~/Projects/torque
   ccverify pr 523 --repo ~/Projects/torque
   ccverify pr 523 --green
+  ccverify rulings --session 2c88dc86
 """)
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -422,6 +554,11 @@ def main():
     r.add_argument("--repo", default=".", help="repository (default: cwd)")
     r.add_argument("--green", action="store_true", help="require merged AND all checks passed")
     r.set_defaults(func=cmd_pr)
+
+    j = sub.add_parser("rulings", help="one question, one ruling — count adjudication spawns")
+    j.add_argument("--session", help="dispatcher session id (prefix is enough)")
+    j.add_argument("--transcript", help="path to a transcript .jsonl instead")
+    j.set_defaults(func=cmd_rulings)
 
     a = p.parse_args()
     sys.exit(a.func(a))
