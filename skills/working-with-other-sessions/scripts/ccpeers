@@ -70,6 +70,7 @@ def title_for(session_id: str, cwd: str):
 
 
 import uuid
+import re
 
 _NS = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
 # ⚠️ ORDER MATTERS AND IT IS NOT THE ORDER YOU WOULD GUESS. The hook writes an entry
@@ -88,6 +89,74 @@ _ACCOUNTS = ["00de1c30-b8bd-42be-b316-0f4fb4d00e3d",   # what list_sessions uses
              "9b880495-47ea-46aa-b382-2ac267ac52fa"]
 _DESKTOP_BASE = os.path.expanduser(
     "~/Library/Application Support/Claude/claude-code-sessions")
+
+
+
+_MAIN_LOG = os.path.expanduser("~/Library/Logs/Claude/main.log")
+
+
+def paused_sessions(limit=8):
+    """
+    Sessions the Desktop app PAUSED on a 900-second idle timeout.
+
+    ⚠️ A PAUSED SESSION IS ABSENT FROM EVERY REGISTRY THIS SCRIPT READS, so without
+    this it looks exactly like a session that crashed, and that is not a hypothetical:
+    on 2026-08-12 three sessions spent hours on crash forensics -- memory pressure,
+    OOM, deep-link resumption, sleep/wake -- for an event that was a documented
+    timeout working as designed, and two healthy lanes were held down meanwhile.
+
+    THE MECHANISM, measured to the second:
+
+        [WarmLifecycle:session] Starting idle timeout for local_<id>: 900s   <- after EVERY turn
+        [CCD] Pausing session local_<id> (idle_timeout)                      <- 15m later
+
+        78ba066a  last turn 21:49:55 -> paused 22:04:57   15m02s
+        74f9f379  last turn 21:52:33 -> paused 22:07:35   15m02s
+
+    So a lane pauses BECAUSE IT FINISHED AND WAS WAITING FOR YOU. Activity is what
+    prevents it, not what causes it -- the inverse of what everyone assumed.
+
+    🔑 PAUSED IS NOT DEAD. The same log carried 451 warm/resume events against 30
+    pauses; paused sessions resume with their transcript intact. Do not re-run the
+    forensics, and do not stop resuming lanes.
+
+    Reads the APPLICATION's log. `log show` is blind here (it returns zero lines even
+    for the last two minutes), and that blindness is what made the event look
+    unreachable -- a blind system instrument is not the absence of evidence.
+    """
+    if not os.path.exists(_MAIN_LOG):
+        return []                      # no log: say nothing rather than imply nothing happened
+    # ⚠️ A PAUSE EVENT IS NOT A STATE. Sessions are paused and warmed repeatedly -- this
+    # log carried 451 warm events against 30 pauses. Reporting every pause line lists
+    # sessions that have long since resumed, including, on the first version of this
+    # function, THE ONE RUNNING IT. A pause counts only if nothing warmed it since.
+    paused, warmed = {}, {}
+    try:
+        with open(_MAIN_LOG, "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                if "local_" not in line:
+                    continue
+                m = re.search(r"^(\S+ \S+).*Pausing session local_(\S+) \(idle_timeout\)", line)
+                if m:
+                    paused[m.group(2)] = m.group(1)
+                    continue
+                m = re.search(r"^(\S+ \S+).*(?:Warming up|Resuming) session local_(\S+)", line)
+                if m:
+                    warmed[m.group(2)] = m.group(1)
+    except OSError:
+        return []
+    still = [(t[11:19], u) for u, t in paused.items() if warmed.get(u, "") < t]
+    return sorted(still)[-limit:]
+
+
+def desktop_title(uuid):
+    """Title from the Desktop entry, so a paused row is recognisable without a registry."""
+    for f in glob.glob(os.path.join(_DESKTOP_BASE, "*", "*", "local_" + uuid + ".json")):
+        try:
+            return (json.load(open(f)) or {}).get("title")
+        except Exception:
+            return None
+    return None
 
 
 def desktop_id(sid: str) -> str:
@@ -225,6 +294,18 @@ def main() -> int:
         print(f"{r['name']:<30} {r['sessionId'][:8]:<10} {desktop_id(r['sessionId']):<14} "
               f"{idle:>6}  {t[:52]}{mark}")
 
+    print()
+    live_desktop = {desktop_id(r["sessionId"]).split()[0] for r in rows}
+    paused = [(t, u) for (t, u) in paused_sessions() if u[:8] not in
+              {d[:8] for d in live_desktop}]
+    if paused:
+        print()
+        print("PAUSED by the Desktop app's 900s IDLE TIMEOUT — these are NOT crashes,")
+        print("and they resume with their transcript intact. A lane pauses because it")
+        print("FINISHED and was waiting for work; activity is what prevents it.")
+        for t, u in paused:
+            title = desktop_title(u) or "<no title>"
+            print(f"  {t}  local_{u[:8]}  {title[:56]}")
     print()
     print(f"{len(rows)} registered · {sum(1 for r in rows if not r['socket'])} unreachable · {untitled} untitled")
     explicit = sum(1 for r in rows if r["nameSource"] != "derived")

@@ -102,8 +102,37 @@ STALE REF             "No agent named 'torque-f5 [1c4dcf]' is reachable. Did you
                           minutes apart, same session. This error READS LIKE A DEAD SESSION AND
                           IS NOT. Do not conclude a lane is gone from it.
 
-GENUINELY GONE        no listing entry at all -> check ccpeers before believing it
+PAUSED, NOT GONE      no listing entry at all, AND NOTHING IS WRONG. The Desktop app pauses a
+                      session 900s after its last turn -- so a lane that FINISHED and is waiting
+                      on you disappears from every registry fifteen minutes later.
+                       -> `ccpeers` lists these under PAUSED, read from the app's own log.
+                       -> ⚠️ RESUME IT AND CARRY ON. Paused is not dead; the transcript is intact.
+
+GENUINELY GONE        no listing entry, AND no pause event -> only then is it actually gone
 ```
+
+#### 🔴 "NO LISTING ENTRY" WAS THE MOST EXPENSIVE FALSE POSITIVE OF THE SPRINT
+
+On 2026-08-12 six lanes vanished from `ListAgents` in two waves. **Three sessions spent hours on
+crash forensics** — memory pressure, OOM, sleep/wake, deep-link resumption — and **two healthy lanes
+were held down** because nobody would resume them until the "cause of death" was known.
+
+```
+[WarmLifecycle:session] Starting idle timeout for local_<id>: 900s   <- logged after EVERY turn
+[CCD] Pausing session local_<id> (idle_timeout)                      <- exactly 15m later
+
+78ba066a  last turn 21:49:55 -> paused 22:04:57   15m02s
+74f9f379  last turn 21:52:33 -> paused 22:07:35   15m02s
+```
+
+⚠️ **Every hypothesis was backwards in the same way. ACTIVITY IS WHAT SAVES A SESSION** — each turn
+resets the 900s clock, so the dispatcher and the focused session never paused, and the lanes that had
+just filed *"work landed"* did. **A lane pauses BECAUSE IT FINISHED AND IS WAITING FOR YOU**, which
+makes the pause a signal about *your* queue, not about its health.
+
+🔑 **And resuming was blamed for it.** Four lanes resumed together worked, finished together, and
+paused together fifteen minutes later — so the resume looked like a delayed kill. **It had
+synchronised their idle clocks, nothing more.** Keep resuming.
 
 **So the send procedure is three steps, not one:**
 
