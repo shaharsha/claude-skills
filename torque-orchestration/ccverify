@@ -1,0 +1,568 @@
+#!/usr/bin/env python3
+"""
+ccverify — check a CLAIM against GROUND TRUTH.
+
+Two things a report can assert that this replaces with a measurement:
+
+    ccverify files   "I only touched the files I declared"   -> git
+    ccverify pr N    "that PR landed"                        -> gh
+
+Both exist because a report is not evidence. On 2026-08-12 an orchestrator released a
+merge window on one lane's sentence that a THIRD lane's PR had "landed"; `gh pr view`
+said state OPEN, mergedAt NULL, and the PR's own author had already written "PUSHED,
+NOT YET GREEN" in a message that had been read. Every message in that chain was
+delivered successfully. Delivery was never the problem.
+
+    exit 0   claim holds
+    exit 1   claim does NOT hold      <- this is the gate
+    exit 2   could not check          <- NOT a pass. Never treat as one.
+
+The parse is always printed. A silently-wrong file list would recreate the exact
+failure this is meant to catch, so you are shown what it read, not just what it ruled.
+"""
+
+import argparse
+import fnmatch
+import glob
+import io
+import json
+import os
+import re
+import subprocess
+import sys
+
+# ---------------------------------------------------------------- plumbing
+
+def run(cmd, cwd=None):
+    """-> (rc, stdout, stderr). Never raises."""
+    try:
+        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+        return p.returncode, p.stdout.strip(), p.stderr.strip()
+    except FileNotFoundError:
+        return 127, "", f"not found: {cmd[0]}"
+
+
+def die(msg, code=2):
+    print(f"CANNOT CHECK — {msg}", file=sys.stderr)
+    print("exit 2 is not a pass.", file=sys.stderr)
+    sys.exit(code)
+
+
+def bold(s):
+    return f"\033[1m{s}\033[0m" if sys.stdout.isatty() else s
+
+
+# ---------------------------------------------------------------- the parse
+
+# A path-ish token: has a slash or a dot-extension, no spaces.
+PATHISH = re.compile(r"[A-Za-z0-9_.\-*/]+(?:/[A-Za-z0-9_.\-*/]+|\.[A-Za-z0-9]{1,10})[A-Za-z0-9_\-*/]*")
+
+# Prose that survives the regex and is never a real declaration.
+NOISE = {
+    "e.g.", "i.e.", "etc.", "vs.", "...", "n/a",
+}
+
+
+# A line that switches the parser into PROHIBITION mode. Must be at the start of a line
+# (bullets/bold/heading marks allowed) so that prose mentioning "not touching" does not flip it.
+PROHIBIT_HEAD = re.compile(
+    r"^[\s>#*_\-+]*(?:\*\*)?\s*(NOT[\s_-]*TOUCH(?:ING|ED)?|STAY[\s_-]*OUT(?:\s*OF)?|"
+    r"DO[\s_-]*NOT[\s_-]*TOUCH|OUT[\s_-]*OF[\s_-]*SCOPE|HANDS[\s_-]*OFF)\b",
+    re.I)
+DECLARE_HEAD = re.compile(
+    r"^[\s>#*_\-+]*(?:\*\*)?\s*(FILES?|DECLARED?|TOUCHING|SURFACE)\b\s*(?:\*\*)?\s*:",
+    re.I)
+
+
+def _tokens(line, loose):
+    """Path-ish tokens on one line. Backticked first; loose regex only if asked."""
+    ticked = [t.strip() for t in re.findall(r"`([^`\n]+)`", line)]
+    cands = [t for t in ticked if t and " " not in t]
+    if not cands and loose:
+        cands = PATHISH.findall(line)
+    out = []
+    for c in cands:
+        c = c.strip().strip("(),;:\"'").lstrip("-*+ ").strip()
+        if c.startswith("./"):
+            c = c[2:]
+        if not c or c.lower() in NOISE:
+            continue
+        if not ("/" in c or "." in c):
+            continue
+        out.append(c)
+    return out
+
+
+def parse_declared(text):
+    """
+    Lanes write plans in prose, with TWO kinds of file mention:
+
+        FILES: `a.ts` `b.ts`          a DECLARATION — these may be touched
+        NOT TOUCHING: `c.ts`          a PROHIBITION — these must NOT be touched
+
+    ⚠️ These must never be conflated. Scanning the whole plan for backticked tokens reads a
+    prohibition as a declaration, which turns "you must not touch this" into "you failed to
+    touch this" — and it fails hardest against the most careful lanes, the ones who bother
+    to write the NOT TOUCHING line. It would punish the discipline the gate exists to create.
+    Found by the adjudicator on PR #526, 2026-08-12, mid-ruling.
+
+    Returns (declared, prohibited, mode).
+    """
+    # Does the plan use backticks at all? Decide once, globally, so a plan that ticks its
+    # paths never falls back to the loose regex on one stray line.
+    loose = not [t for t in re.findall(r"`([^`\n]+)`", text) if t.strip() and " " not in t.strip()]
+    mode = "loose (no backticked paths anywhere — CHECK THIS LIST BY EYE)" if loose else "backticked"
+
+    declared, prohibited = [], []
+    section = "declare"
+    for line in text.splitlines():
+        if PROHIBIT_HEAD.search(line):
+            section = "prohibit"
+            prohibited += _tokens(line, loose)
+            continue
+        if DECLARE_HEAD.search(line):
+            section = "declare"
+            declared += _tokens(line, loose)
+            continue
+        (prohibited if section == "prohibit" else declared).extend(_tokens(line, loose))
+
+    def dedupe(xs):
+        seen, out = set(), []
+        for x in xs:
+            if x not in seen:
+                seen.add(x)
+                out.append(x)
+        return out
+
+    prohibited = dedupe(prohibited)
+    # A path named in both sections is a contradiction in the plan. Treat it as PROHIBITED —
+    # the safe direction — and say so rather than silently picking one.
+    declared = [d for d in dedupe(declared) if d not in set(prohibited)]
+    if section == "prohibit" and not prohibited:
+        mode += " · prohibition section found but no paths in it"
+    return declared, prohibited, mode
+
+
+def declared_covers(declared, path):
+    """
+    A declaration matches if it is the path, a glob that matches it, or a directory
+    prefix. Directory prefixes are deliberately allowed — a lane that declares
+    `src/charts/` has declared its blast radius honestly.
+    """
+    for d in declared:
+        if d == path:
+            return d
+        if d.endswith("/") and path.startswith(d):
+            return d
+        if ("*" in d or "?" in d) and fnmatch.fnmatch(path, d):
+            return d
+        if "/" not in d and os.path.basename(path) == d:
+            return d          # bare filename, e.g. `README.md`
+    return None
+
+
+# ---------------------------------------------------------------- files
+
+def cmd_files(a):
+    repo = os.path.abspath(a.repo)
+    rc, _, _ = run(["git", "rev-parse", "--git-dir"], cwd=repo)
+    if rc != 0:
+        die(f"{repo} is not a git repository")
+
+    # --- the declaration
+    if a.plan == "-":
+        text = sys.stdin.read()
+    elif a.plan:
+        if not os.path.exists(a.plan):
+            die(f"plan file not found: {a.plan}")
+        text = open(a.plan, encoding="utf-8", errors="replace").read()
+    elif a.declared:
+        text = "\n".join(f"`{d}`" for d in a.declared)
+    else:
+        die("no declaration given. Use --plan FILE, --plan - (stdin), or -d PATH [-d PATH ...]\n"
+            "         A plan with no file list fails the gate on its own — there is nothing\n"
+            "         to check the diff against. Reject it at planning, not here.")
+
+    declared, prohibited, mode = parse_declared(text)
+    if not declared and prohibited:
+        print(bold("PLAN FAILED — the plan names files it will NOT touch, and none it WILL."))
+        print("A prohibition is not a declaration. There is still nothing to check the diff against.")
+        return 1
+    if not declared:
+        print(bold("PLAN FAILED — no file list could be read from the declaration."))
+        print("A plan that does not name its files cannot be checked and cannot produce a")
+        print("falsifiable DONE. Send it back to planning; do not review the diff.")
+        return 1
+
+    # --- ground truth
+    rc, _, err = run(["git", "rev-parse", "--verify", "--quiet", a.base], cwd=repo)
+    if rc != 0:
+        die(f"base ref not found: {a.base}  (try --base origin/develop, or git fetch)")
+
+    rc, out, err = run(["git", "diff", "--name-only", f"{a.base}...HEAD"], cwd=repo)
+    if rc != 0:
+        die(f"git diff failed: {err}")
+    touched = [f for f in out.splitlines() if f]
+
+    # ⚠️ AN EMPTY RANGE IS ALMOST NEVER "no changes" — IT IS THE WRONG TREE.
+    # Run in the main checkout instead of the lane's worktree and `origin/develop...HEAD` is
+    # empty, so the only files left are the checkout's untracked scratch — and the gate then
+    # reports THAT as the PR's diff and prints THE PLAN FAILED. A confident verdict about a
+    # tree nobody asked about. Measured on this seat 2026-08-12.
+    if not touched and not a.allow_empty:
+        rc2, br, _ = run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=repo)
+        die(f"the diff range {a.base}...HEAD is EMPTY in {repo} (on '{br}').\n"
+            f"         That is almost always the WRONG TREE, not an absence of changes.\n"
+            f"         Point --repo at the lane's worktree, at the head being reviewed.\n"
+            f"         If you really mean to check uncommitted work in place, pass --allow-empty-range.")
+
+    rc, out, _ = run(["git", "diff", "--name-only", "HEAD"], cwd=repo)
+    uncommitted = [f for f in out.splitlines() if f]
+
+    untracked = []
+    if a.untracked:
+        rc, out, _ = run(["git", "ls-files", "--others", "--exclude-standard"], cwd=repo)
+        untracked = [f for f in out.splitlines() if f]
+
+    every = sorted(set(touched) | set(uncommitted) | set(untracked))
+
+    # The plan file itself is not blast radius. It is common for it to live in the repo
+    # as an untracked scratch file, and flagging it trains the reader to skim the list.
+    if a.plan and a.plan != "-":
+        try:
+            rel = os.path.relpath(os.path.abspath(a.plan), repo)
+            if not rel.startswith(".."):
+                every = [f for f in every if f != rel]
+        except ValueError:
+            pass
+
+    # --- the ruling
+    undeclared = [f for f in every if not declared_covers(declared, f)]
+    matched = {}
+    for f in every:
+        d = declared_covers(declared, f)
+        if d:
+            matched.setdefault(d, []).append(f)
+    unused = [d for d in declared if d not in matched]
+
+    print(f"repo      {repo}")
+    print(f"base      {a.base}...HEAD"
+          + ("  + uncommitted" if uncommitted else "")
+          + ("  + untracked" if untracked else ""))
+    print(f"parse     {mode}")
+    print(f"declared  {len(declared)} · touched {len(every)}")
+    print()
+    print(bold("DECLARED (as parsed — verify this is what the plan meant)"))
+    for d in declared:
+        n = len(matched.get(d, []))
+        print(f"    {'·' if n else '×'} {d}" + (f"   ({n} file{'s' if n != 1 else ''})" if n else "   NOT TOUCHED"))
+
+    # Prohibitions are checked in the OPPOSITE direction: touching one is the breach.
+    violated = []
+    if prohibited:
+        print()
+        print(bold("PROHIBITED (NOT TOUCHING — these must be ABSENT from the diff)"))
+        for p_ in prohibited:
+            hits = [f for f in every if declared_covers([p_], f)]
+            violated += hits
+            print(f"    {'!' if hits else '·'} {p_}" + (f"   🔴 TOUCHED ({len(hits)})" if hits else "   clean"))
+
+    # Two different animals. A MODIFIED file nobody declared is a scope breach. An
+    # untracked file is as often scratch the lane forgot to ignore. Both fail, but a
+    # reader who cannot tell them apart at a glance starts skimming, and a gate that
+    # gets skimmed is not a gate.
+    un_set = set(untracked)
+    breach = [f for f in undeclared if f not in un_set]
+    newfiles = [f for f in undeclared if f in un_set]
+
+    if breach:
+        print()
+        print(bold(f"UNDECLARED — {len(breach)} tracked file(s) changed that the plan did not name"))
+        for f in breach:
+            print(f"    ! {f}")
+    if newfiles:
+        print()
+        print(bold(f"UNTRACKED — {len(newfiles)} new file(s) present, none declared"))
+        for f in newfiles:
+            print(f"    ? {f}")
+        print("    new source is real blast radius; scratch is not. Tell them apart before")
+        print("    ruling, and gitignore the scratch so this stays readable. --no-untracked skips.")
+
+    print()
+    if violated:
+        print(bold(f"🔴 PROHIBITION BREACHED — {len(set(violated))} file(s) the plan said it would NOT touch"))
+        for f in sorted(set(violated)):
+            print(f"    ! {f}")
+        print("\nThis is the harder failure. An undeclared file may be an unamended list; a file the")
+        print("plan promised to stay out of was named as out of bounds BY THE LANE ITSELF, and the")
+        print("usual reason it is out of bounds is that another lane holds it.")
+        return 1
+
+    if undeclared:
+        print(bold("THE PLAN FAILED, NOT THE DIFF."))
+        print("Do not patch the diff and do not re-review it. Send it back to planning and say")
+        print("the file list was wrong. A lane that could not say up front which files it would")
+        print("touch did not have a plan specific enough to implement, and no amount of reading")
+        print("the output recovers that.")
+        return 1
+
+    if unused and a.strict:
+        print(bold(f"DECLARED BUT UNTOUCHED — {len(unused)} (--strict)"))
+        for d in unused:
+            print(f"    × {d}")
+        print("\nNot a scope breach. It means the plan predicted work that did not happen —")
+        print("worth a question about whether the change is complete, not a rejection.")
+        return 1
+
+    print(bold("CLEAN — every file touched was declared."))
+    if unused:
+        print(f"({len(unused)} declared path(s) untouched; --strict makes that fail.)")
+    print()
+    print("⚠️  This gate is about BLAST RADIUS ONLY. It says nothing about whether the change")
+    print("    is correct, whether the DONE-WHEN is met, or whether the tests actually run.")
+    return 0
+
+
+# ---------------------------------------------------------------- pr
+
+def cmd_pr(a):
+    repo = os.path.abspath(a.repo)
+    if not run(["git", "rev-parse", "--git-dir"], cwd=repo)[0] == 0:
+        die(f"{repo} is not a git repository")
+
+    fields = "state,mergedAt,isDraft,title,headRefName,url,statusCheckRollup"
+    rc, out, err = run(["gh", "pr", "view", str(a.number), "--json", fields], cwd=repo)
+    if rc != 0:
+        die(f"gh pr view {a.number} failed: {err or out}")
+
+    try:
+        d = json.loads(out)
+    except json.JSONDecodeError:
+        die("could not parse gh output")
+
+    state = d.get("state", "?")
+    merged_at = d.get("mergedAt")
+    draft = d.get("isDraft", False)
+
+    rollup = d.get("statusCheckRollup") or []
+    concl = [c.get("conclusion") or c.get("state") or "" for c in rollup if isinstance(c, dict)]
+    failing = [c for c in concl if c in ("FAILURE", "ERROR", "CANCELLED", "TIMED_OUT")]
+    pending = [c for c in concl if c in ("", "PENDING", "IN_PROGRESS", "QUEUED", "EXPECTED")]
+    if not concl:
+        ci = "no checks reported"
+    elif failing:
+        ci = f"FAILING ({len(failing)}/{len(concl)})"
+    elif pending:
+        ci = f"PENDING ({len(pending)}/{len(concl)} not finished)"
+    else:
+        ci = f"green ({len(concl)} checks)"
+
+    print(f"PR #{a.number}  {d.get('title','')[:70]}")
+    print(f"    {d.get('url','')}")
+    print(f"    branch    {d.get('headRefName','?')}")
+    print(f"    state     {state}{'  (DRAFT)' if draft else ''}")
+    print(f"    mergedAt  {merged_at if merged_at else 'NULL'}")
+    print(f"    checks    {ci}")
+    print()
+
+    merged = (state == "MERGED") and bool(merged_at)
+    if a.green:
+        if merged and not failing and not pending and concl:
+            print(bold("LANDED AND GREEN."))
+            return 0
+        print(bold("NOT (landed and green)."))
+        print("Whatever you were told, this is what the repository says.")
+        return 1
+
+    if merged:
+        print(bold("LANDED."))
+        print("⚠️  LANDED IS NOT 'THE FILE IS FREE'. A merged PR whose author still holds unpushed")
+        print("    follow-up work reads exactly like this. No repository query can see work that")
+        print("    has not been pushed — ask the lane, or read its TITLE.")
+        return 0
+
+    print(bold("NOT LANDED."))
+    print("If someone reported this as merged, that report was wrong — and a relayed claim")
+    print("inherits the credibility of the measured claims sitting around it. Re-check what")
+    print("else travelled in the same message.")
+    return 1
+
+
+# ---------------------------------------------------------------- cli
+
+
+
+def _norm_artifact(a):
+    """`#527`, `# 527` and `PR 527` are ONE artifact. Without this a re-rule written a
+    different way reads as a different question — the silent direction, and the one that
+    lets a genuine re-roll pass unnoticed."""
+    a = a.strip()
+    return a.upper() if a.upper().startswith("TOR-") else "#" + a.lstrip("#").strip()
+
+
+def _adjudication_spawns(path):
+    """
+    Every /adjudicate subagent the dispatcher spawned, from ITS OWN transcript.
+
+    ⚠️ MATCH ON THE PROMPT *AND* THE DESCRIPTION. Measured 2026-08-12 on a real
+    dispatcher: a spawn whose description read "Adjudicate UNKNOWN verdict honesty"
+    did not mention adjudicate.md in its prompt at all, so a prompt-only test missed
+    a real adjudication. A detector for a rule people can bypass must not have a
+    bypass of its own.
+    """
+    import re as _re
+    out = []
+    try:
+        fh = io.open(path, encoding="utf-8", errors="replace")
+    except OSError:
+        return None                       # cannot read -> the CALLER must exit 2
+    with fh:
+        for line in fh:
+            if '"Agent"' not in line and '"Task"' not in line:
+                continue
+            try:
+                d = json.loads(line)
+            except ValueError:
+                continue
+            c = (d.get("message") or {}).get("content")
+            if not isinstance(c, list):
+                continue
+            for b in c:
+                if b.get("type") != "tool_use" or b.get("name") not in ("Agent", "Task"):
+                    continue
+                inp = b.get("input") or {}
+                blob = str(inp.get("prompt", "")) + " " + str(inp.get("description", ""))
+                if "adjudicat" not in blob.lower():
+                    continue
+                # 🔑 THE SUBJECT, NOT EVERY MENTION. The first version of this collected
+                # every ticket appearing anywhere in the prompt and reported 3 repeats on a
+                # real dispatcher, of which 2 WERE FALSE: a criteria ticket merely CITED by
+                # two unrelated rulings, and a plan -> PR -> delta chain that is three
+                # DIFFERENT questions about one feature. A checker that cries wolf gets
+                # ignored, and the one true finding (#527, ruled twice) gets ignored with it.
+                #
+                # The description names what is being ruled ON — "Adjudicate PR #527
+                # TOR-567" is a ruling on #527 that happens to cite its ticket. Take the
+                # FIRST artifact there; fall back to the prompt only when it names none.
+                desc = str(inp.get("description") or "")
+                pat = r"TOR-\d+|#\s?\d{3,}|(?<=PR )\d{3,}"
+                found = _re.findall(pat, desc) or _re.findall(pat, str(inp.get("prompt", "")))
+                out.append({
+                    "ts": (d.get("timestamp") or "")[11:19],
+                    "desc": desc[:60],
+                    "subject": _norm_artifact(found[0]) if found else None,
+                })
+    return out
+
+
+def cmd_rulings(a):
+    """
+    ONE QUESTION, ONE RULING — the only honour-system rule in the split, made countable.
+
+    dispatch.md says "if you spawn twice on one question, SAY SO in the ticket". Nothing
+    enforced it, and that is the subagent form's single weakness: a ruling you dislike can
+    be re-spawned and the discarded attempt leaves no trace. This counts the spawns.
+
+    ⚠️ A SECOND SPAWN IS NOT MISCONDUCT. Re-ruling a CHANGED artifact is correct and
+    expected -- approval is a pair (diff, base) and expires when either moves. This
+    reports the count so a human can see it; it does not judge intent, and it must not
+    be read as an accusation.
+
+    exit 1 = an artifact was adjudicated more than once
+    exit 2 = COULD NOT CHECK (no transcript). NOT a pass.
+    """
+    path = a.transcript
+    if not path:
+        if not a.session:
+            die("need --session <id> or --transcript <path>: with neither there is "
+                "nothing to read, and an empty result would look like a clean run")
+        hits = glob.glob(os.path.expanduser(
+            "~/.claude/projects/*/" + a.session + "*.jsonl"))
+        if not hits:
+            die("no transcript for session %s — exit 2 is NOT a pass, it means the "
+                "check never ran" % a.session)
+        path = hits[0]
+    spawns = _adjudication_spawns(path)
+    if spawns is None:
+        die("could not read %s — exit 2 is NOT a pass" % path)
+
+    print(bold("adjudication spawns found: %d" % len(spawns)))
+    for s in spawns:
+        print("  %s  %-60s %s" % (s["ts"], s["desc"], s["subject"] or "(none named)"))
+
+    by_art = {}
+    for s in spawns:
+        if s["subject"]:
+            by_art.setdefault(s["subject"], []).append(s)
+    repeats = {k: v for k, v in by_art.items() if len(v) > 1}
+
+    if not spawns:
+        print()
+        print("No adjudications in this transcript. If you expected some, you are "
+              "probably reading the wrong session — check with ccpeers.")
+        return 0
+    if not repeats:
+        print()
+        print(bold("OK — every artifact was adjudicated exactly once."))
+        return 0
+
+    print()
+    print(bold("%d artifact(s) adjudicated MORE THAN ONCE:" % len(repeats)))
+    for art, ss in sorted(repeats.items()):
+        print("  %s  x%d" % (art, len(ss)))
+        for s in ss:
+            print("      %s  %s" % (s["ts"], s["desc"]))
+    print()
+    print("Each of these must be DECLARED in the ticket, with the reason. A re-rule on a")
+    print("CHANGED artifact is correct; a re-spawn because the answer was unwelcome is the")
+    print("failure this counts. The count cannot tell them apart — the ticket must.")
+    return 1
+
+
+def main():
+    p = argparse.ArgumentParser(
+        prog="ccverify",
+        description="Check a claim against ground truth. exit 1 = the claim does not hold.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""examples:
+  ccverify files --plan plan.md
+  pbpaste | ccverify files --plan - --base origin/develop
+  ccverify files -d src/charts/ -d src/axis.ts --repo ~/Projects/torque
+  ccverify pr 523 --repo ~/Projects/torque
+  ccverify pr 523 --green
+  ccverify rulings --session 2c88dc86
+""")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    f = sub.add_parser("files", help="declared file list vs what git says was touched")
+    f.add_argument("--plan", help="file containing the plan, or - for stdin")
+    f.add_argument("-d", "--declared", action="append", help="declare a path inline (repeatable)")
+    f.add_argument("--base", default="origin/develop", help="base ref (default: origin/develop)")
+    f.add_argument("--repo", default=".", help="repository (default: cwd)")
+    f.add_argument("--strict", action="store_true", help="also fail on declared-but-untouched")
+    f.add_argument("--allow-empty-range", dest="allow_empty", action="store_true",
+                   help="permit an empty base...HEAD range (checking uncommitted work in "
+                        "place). Without this an empty range is exit 2 — it usually means "
+                        "you are pointed at the wrong tree.")
+    f.add_argument("--no-untracked", dest="untracked", action="store_false",
+                   help="ignore untracked files (they are INCLUDED by default — a new file "
+                        "nobody committed is still blast radius)")
+    f.set_defaults(untracked=True, func=cmd_files)
+
+    r = sub.add_parser("pr", help="is that PR actually merged")
+    r.add_argument("number", type=int)
+    r.add_argument("--repo", default=".", help="repository (default: cwd)")
+    r.add_argument("--green", action="store_true", help="require merged AND all checks passed")
+    r.set_defaults(func=cmd_pr)
+
+    j = sub.add_parser("rulings", help="one question, one ruling — count adjudication spawns")
+    j.add_argument("--session", help="dispatcher session id (prefix is enough)")
+    j.add_argument("--transcript", help="path to a transcript .jsonl instead")
+    j.set_defaults(func=cmd_rulings)
+
+    a = p.parse_args()
+    sys.exit(a.func(a))
+
+
+if __name__ == "__main__":
+    main()
