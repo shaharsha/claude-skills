@@ -25,6 +25,12 @@ in the two command files below; do not re-derive it here.
 dislike can be re-prompted and the discarded attempt leaves no trace. So the subagent **writes to
 Linear itself before returning**, and a second spawn on one question is declared in the ticket.
 
+**That declaration is no longer honour-system:** `ccverify rulings --session <your id>` reads your own
+transcript, which you cannot edit, and names any artifact ruled on more than once. ⚠️ **A second spawn is
+not misconduct** — re-ruling a *changed* artifact is correct, since approval is a pair and expires when
+either half moves. The count cannot tell a re-rule from a re-roll; only the ticket can. That is why the
+rule is to declare it, not to avoid it.
+
 ⚠️ **The split is the point, not bookkeeping.** On 2026-08-06 all twelve lanes that had reported a
 context limit withdrew it, and the cause was that the seat which assigned work also returned approval for
 every decline — *"each decline was returned with approval, and my estimates drifted in the direction that
@@ -39,7 +45,7 @@ the halves.** Queue it and invoke `/adjudicate` fresh.
 
 ## ⚠️ What changed on 2026-08-12 — read this before the takeover steps
 
-**Four things changed under you.** This is tooling, not sprint state — sprint state you measure, per the
+**Six things changed under you.** This is tooling, not sprint state — sprint state you measure, per the
 census rule below.
 
 **1 · The seat split in two.** `/dispatch` (standing, cheap, rules on nothing) and `/adjudicate` (one
@@ -53,7 +59,7 @@ the next tool boundary rather than after a long run.
 **3 · Addressing is now a join, and there is a tool for it.**
 
 ```bash
-~/.claude/skills/working-with-other-sessions/scripts/ccpeers          # name <-> session <-> title
+ccpeers          # name <-> session <-> title, + the DESKTOP-side id, which is a different id space
 ```
 
 `ListAgents` gives an address with no identity. The Desktop list gives an identity with no address.
@@ -71,6 +77,28 @@ could ever reach it** and nothing said so. Only a restart fixes it. `ccpeers` fl
 first** — if `ccpeers` says you are unreachable, stop and restart before doing anything else, because
 every lane you contact will be replying into a void.
 
+**5 · 🔴 A LANE VANISHING FROM `ListAgents` IS ALMOST ALWAYS A 900-SECOND IDLE PAUSE, NOT A DEATH.** You
+will hit this within your first hour, and the wrong reading is expensive.
+
+```
+[WarmLifecycle:session] Starting idle timeout for local_<id>: 900s   <- logged after EVERY turn
+[CCD] Pausing session local_<id> (idle_timeout)                      <- exactly 15m later
+```
+
+⚠️ **ACTIVITY IS WHAT SAVES A SESSION, not what kills it.** Each turn resets the clock, so you and the
+focused session never pause — and **a lane pauses BECAUSE IT FINISHED AND IS WAITING FOR YOU.** The
+pause is therefore a fact about *your queue*, not about the lane's health.
+
+**Paused is not dead**: the transcript is intact and it resumes. `ccpeers` lists paused sessions under
+a `PAUSED` footer, read from the app's own log. **Do not stop resuming lanes, and do not run forensics
+on this** — on 2026-08-12 three sessions spent hours on memory-pressure, OOM, sleep/wake and
+deep-link-resumption hypotheses, and two healthy lanes were held down the whole time. Every hypothesis
+was backwards in the same direction, and resuming four lanes together had merely *synchronised their
+idle clocks* so they paused together fifteen minutes later.
+
+**6 · Two gates exist now that did not before:** `ccdoccheck` and `ccverify rulings`. Step 5 of the
+takeover runs them.
+
 ## Takeover, in order
 
 **Do not accept work, rule on anything, or approve a merge until step 4 is done** — an orchestrator that
@@ -85,28 +113,57 @@ id, your title, and the current UTC timestamp. Keep every comment in the file. *
 that makes `/lane` route to you.** Do it before you contact anyone, or the lanes you are about to reach
 will reply to a dead inbox.
 
-**3 · Run `/dispatch`.** It arms your inbox, runs the census, reads lane state from transcripts, and
-sweeps. Everything about how to do that correctly is in that file, including the instrument warnings.
+**3 · Run `/dispatch`.** It runs the census, reads lane state from transcripts, and sweeps. Everything
+about how to do that correctly is in that file, including the instrument warnings. **There is nothing to
+arm** — see change 2 above; if you find an instruction anywhere telling you to arm an inbox, it is stale
+and the correct action is to fix it, not to look for the missing step.
 
-**4 · Announce yourself.** Tell every armed lane, in one message: your session id, that you have taken
-over, and that **any approval issued by your predecessor is void if the base has moved since** — which
-after any merge it has. Then tell Shahar you are up, with the census numbers.
+**4 · Announce yourself.** Tell every lane, in one message: your session id, that you have taken over,
+and that **any approval issued by your predecessor is void if the base has moved since** — which after
+any merge it has. Then tell Shahar you are up, with the census numbers.
+
+**5 · Run the two gates once, before you trust anything you just read.** Both were built because this
+seat was burned, and both are cheap:
+
+```bash
+ccdoccheck                            # do the instructions you just read name tools that EXIST?
+ccverify rulings --session <your id>  # one question, one ruling — counts /adjudicate spawns
+```
+
+⚠️ **`ccdoccheck` checks EXISTENCE ONLY, and says so in its own output.** A tool that exists and does
+the wrong thing passes it. It exists because three `ccsend` references survived that tool's retirement
+inside the preamble — one of them naming it as the only permitted channel in plan mode, so a lane
+following it would either conclude messaging was unavailable or use it and **believe it had spoken**.
+
+**`ccverify files` and `ccverify pr N`** are the other two: a lane's declared file list against git, and
+*"it landed"* against `gh`. **A report is not evidence** — an orchestrator released a merge window on one
+lane's sentence that a third lane's PR had landed, when `gh` said OPEN and the PR's own author had
+already written *"PUSHED, NOT YET GREEN"* in a message that had been read.
 
 ---
 
-## The authority boundary, unchanged
+## The authority boundary — the OUTER edge is unchanged, the INNER one moved
+
+⚠️ **This box used to read "THE SEAT: assignment · sequencing · design rulings · code review · merge",
+and that is now a contradiction with the top of this very file.** The seat split on 2026-08-12: those
+last three belong to `/adjudicate`, never to the session dispatching. **A rule stated in two places is a
+disagreement waiting to be found by whoever is caught between them** — and this one was inside a single
+file, under a heading that said *"unchanged"*.
 
 ```
-THE SEAT     assignment · sequencing · design rulings · code review · merge into develop
+DISPATCH     assignment · sequencing · stall detection · unblocking · escalation
+             -> rules on NOTHING. If you are about to approve a plan, you have re-merged the halves.
+
+ADJUDICATE   design rulings · plan approval · code review · merge into develop
              DEV Terraform applies, after a plan you have read — this is the ONE live-account
-             exception, it is the seat's alone, and a worker never has it
+             exception, it is the ADJUDICATOR's alone, and a worker never has it
 
 SHAHAR       PROD, every time · every OTHER live-account apply · credential operations
              product and data-provenance calls · spend · external comms
 ```
 
 ⚠️ **A dev account IS a live AWS account**, so "live-account applies are Shahar's" and "dev applies are
-the seat's" read as a contradiction unless the exception is named in both places. It is named in both.
+the adjudicator's" read as a contradiction unless the exception is named in both places. It is named in both.
 **If you find a third statement of this rule that does not carve dev out explicitly, that statement is
 stale — fix it, do not reason around it.**
 
@@ -138,6 +195,20 @@ what you concluded.
 
 ---
 
-*The pre-split version of this file, which held both roles in one seat, is kept at
-`lead.md.presplit.20260812T163412` for reference. Everything operational in it now lives in `/dispatch`,
-`/adjudicate`, or `~/.claude/torque-orchestration/APPROVAL-CRITERIA.md`.*
+*The pre-split version of this file, which held both roles in one seat, is in git history — this
+directory is versioned in `claude-skills`, so `git log --follow commands/lead.md` reaches it. Everything
+operational in it now lives in `/dispatch`, `/adjudicate`, or
+`~/.claude/torque-orchestration/APPROVAL-CRITERIA.md`.*
+
+⚠️ **That sentence used to cite `lead.md.presplit.20260812T163412`, a file that does not exist**, and it
+sat here unread for as long as the citation looked plausible.
+
+🔑 **`ccdoccheck` DOES check paths — and correctly did not catch this one.** Its path rule is scoped to
+*tool-invocation* paths: anchored at `~`/`$HOME`/`/Users/…` and passing through `scripts/`, `bin/` or
+`torque-orchestration/`. **A bare filename with no directory is outside that scope on purpose**, because
+widening it to every backticked token would flag example names, files a command is about to create, and
+generic words — and a gate that cries wolf is one people learn to read past.
+
+**So the limit is real and it is not a defect: a citation like this is UNCHECKED, and you are the check.**
+If you cite a path in this file, confirm it resolves. Prefer citing git — this directory is versioned, so
+history is a reference that cannot dangle.
