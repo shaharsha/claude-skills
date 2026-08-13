@@ -118,6 +118,156 @@ Never sync from `aiTitle` — for the reason in *How transcripts are stored* (4)
 `/arm-inbox` first all summarise to `Review ARM inbox`, so an aiTitle sweep renames a whole sprint's
 lanes to the same useless string and destroys the names their human uses out loud.
 
+#### ⚠️ The CCD id is a DIFFERENT ID SPACE from the one `ccsend`/`ccread` use — never bridge it by title
+
+`list_sessions` returns ids like `local_<uuid>`. **Some of those uuids are the session's real id with
+a prefix; some are entries for sessions that have no transcript at all.** Measured 2026-08-10:
+
+```
+set_session_title  <bare uuid>              -> "Session … not found"
+set_session_title  local_<the real uuid>    -> "Session … not found"
+set_session_title  local_<a uuid from list_sessions, matched by TITLE>
+                                            -> "Renamed session …"   and the lane's title NEVER CHANGED
+find ~/.claude/projects -name '<that uuid>*.jsonl'   -> 0 files, for three such entries
+                                            CONTROL: the real lane's uuid -> 1 file
+```
+
+🔑 **So a rename can report success and silently retitle a different session.** Three lanes asked
+twice each for a rename that had been "done" three times.
+
+⚠️ **The cause is the recovery, not the tool.** When the bare uuid failed, the natural move is to
+look up the session in `list_sessions` and match on the **title you can see** — which is the same
+name-matching this file warns about everywhere else, one layer down. **A title is not an identifier.**
+If the prefixed real uuid is not found, the session is not in that index and no id will reach it.
+
+#### ✅ RUN THIS CONTROL BEFORE ANY RENAME — it costs one command and it is the whole defence
+
+**The warning above was in this file, and its author walked into it anyway on 2026-08-12** — four
+renames, four `Renamed session …` returns, four sessions that do not exist. **Reading the warning did
+not prevent it; a control would have.** So:
+
+```bash
+find ~/.claude/projects -name '<uuid-from-list_sessions>*.jsonl' | wc -l
+#   0  -> this id is NOT a Claude Code session id. A rename against it will "succeed"
+#         and change nothing you can see from ccsend/ccread.
+#   1  -> it IS one, and the rename will land.
+# CONTROL: run it on a uuid you KNOW is real and require 1.
+```
+
+Measured 2026-08-12: **four CCD entries → 0 transcripts each; the four real lane uuids → 1 each.**
+
+🔴 **DO NOT read a 0 as "this session does not exist," and NEVER archive on it.** Corrected the same
+hour, after the check was run over the whole listing: **12 of 12 CCD entries returned 0**, including
+one reporting `isRunning: true`. **CCD ids are a different id space** (see the section above) — so a
+0 is the *expected* answer for a Desktop-native row, not evidence of a dead one.
+
+⚠️ **The check answers *"is this a Claude Code session id?"* and it is tempting to read it as *"does
+this session exist?"*.** Those differ on every Desktop-native entry. **The author of this section made
+that substitution and was one message from telling their human to archive rows that were plausibly
+their live lanes** — `archive_session` stops the process and cleans the worktree.
+
+**So the check is a rename PRE-FLIGHT and nothing else. For cleanup: leave duplicate rows alone, or
+let the human remove them from the UI where they can see what they are removing.** A stale row costs
+nothing; a wrong archive costs a worktree.
+
+#### 🔑 THE ORDER THAT WORKS — `list_sessions` FIRST. Corrected 2026-08-12.
+
+```
+1  list_sessions                                    <- ALWAYS start here
+2  find it by cwd + title + isRunning, and use the local_… id EXACTLY AS LISTED
+3  ONLY if it is genuinely absent from that listing:
+     open "claude://resume?session=<BARE uuid>" ; sleep ~5 ; then rename
+4  VERIFY in list_sessions, never from the return value
+```
+
+🔴 **THE PREVIOUS VERSION OF THIS RECIPE SAID THE OPPOSITE — "try the real id first, never look one
+up by title" — AND FOLLOWING IT CORRECTLY CREATES A DUPLICATE SIDEBAR ENTRY.** Measured 2026-08-12:
+a rename attempt on the messaging-side uuid returned *not found*, the recipe sent the reader straight
+to adoption, and the session **had been in `list_sessions` all along**. The human saw two rows for one
+session.
+
+⚠️ **THE CAUSE: THERE ARE TWO ID REGISTRIES AND THEY DO NOT ALWAYS AGREE.**
+
+```
+~/.claude/sessions/*.json    ccpeers · ListAgents · SendMessage        one uuid
+Desktop session registry     list_sessions · set_session_title ·
+                             ccd_session_mgmt__send_message            SOMETIMES a different uuid
+```
+
+**Observed on four sessions the same evening, and the version nibble predicted it every time:**
+
+```
+local_74f9f379-36df-4b81…   v4   matches the messaging uuid
+local_0b3c1d9a-9447-5562…   v5   messaging side is f3dd9167 — DIFFERENT
+local_1c640b3e-2656-5798…   v5   messaging side is 2c88dc86 — DIFFERENT
+```
+
+A **v5** id is derived rather than random, so Desktop minted its own for a session it did not create.
+*(Pattern held 4/4; the mechanism is inferred, the divergence is measured.)*
+
+🔑 **So `"Session not found"` HAS TWO CAUSES and the old text named one:**
+
+```
+1  Desktop genuinely never indexed it            -> adoption is the fix
+2  you passed the MESSAGING-side uuid where the
+   tool wants the DESKTOP one                    -> the session is already there; just list it
+```
+
+**Treating cause 2 as impossible is what sends you to adopt an already-indexed session, and that is
+what writes the second row.** A wrong-registry error wearing a missing-session error's clothes.
+
+#### ⚠️ ADOPTION LEAVES A DUPLICATE, and the stale row can look MORE alive than the real one
+
+After `claude://resume`, the sidebar shows **two entries per lane**: the newly-adopted real session
+(correctly titled) and the original phantom (old title, still there). Measured 2026-08-12 — and in
+that listing the **phantoms rendered with the filled/active marker while the real sessions rendered
+hollow**, so the stale rows read as the live ones.
+
+**Say this to the human before adopting**, and leave the cleanup to them: `archive_session` *stops the
+session's process and by default cleans up its worktree*, so it is not a safe way to tidy a row you
+believe is empty. **A wrong archive costs a worktree; a duplicate row costs nothing.**
+
+#### 🔑 Adoption — ONLY after `list_sessions` has shown the session is genuinely absent
+
+⚠️ **Do not reach for this on a bare *"not found"*.** That error has two causes (above), and adopting
+a session that was already indexed is what produces the duplicate row. **Run `list_sessions` first,
+every time.** If it is there, use the `local_…` id exactly as listed and you are done.
+
+**When it is genuinely absent** — Desktop only lists sessions it created, so a lane started from the
+CLI can be invisible to `set_session_title` — adoption writes the index entry the rename needs:
+
+```bash
+open "claude://resume?session=<BARE uuid>"     # Desktop adopts it, writes its own index entry
+sleep 3                                        # the entry appears titleless
+# then set_session_title with local_<the SAME bare uuid>  -> now it lands
+```
+
+**Measured 2026-08-10 on three lanes**: `set_session_title` returned *not found* for every id form;
+after `claude://resume` each appeared in `list_sessions` (with no `title` key), and the rename then
+succeeded and showed in both Desktop and `ccsend --list`.
+
+⚠️ **This fronts the session in Desktop** — it is a visible UI action, not a silent index write. Fine
+for a rename you were asked for; do not do it in bulk without saying so.
+
+#### The fallback when you must not touch the UI: write the record yourself
+
+`ccsend` and `ccread` read `customTitle` **out of the transcript JSONL** (`ccsend:66,91,97`) — there
+is no separate title store, and the rename tool's own durable half is exactly this record. So append
+one line to the session's newest transcript:
+
+```python
+rec = json.dumps({"type": "custom-title", "sessionId": sid, "customTitle": title})
+assert json.loads(rec)                        # never append a line you have not parsed
+open(transcript, "a").write(rec + "\n")
+```
+
+`sid` is the **bare** uuid, no prefix. Copy the shape from a real record rather than inventing it —
+it is three fields and nothing else. **Then verify from `ccsend --list`, which is what the lanes
+read** — never from the rename tool's return value, which is what produced the false success above.
+
+⚠️ This does not update any CCD index entry, so the Desktop sidebar may still show the old name. It
+fixes what every lane and every `ccread`/`ccsend` sweep sees, which is the half that affects work.
+
 ## How transcripts are stored
 
 Three facts explain nearly every surprise:
@@ -190,7 +340,7 @@ That refusal is correct behaviour. If you need a peer to *act*, `SendMessage` in
 only channel where the origin claim is enforced rather than asserted.
 
 ```bash
-ccsend --list                        # who is ARMED — not who will receive
+ccsend --list                        # who can receive RIGHT NOW
 ccsend "TOR-55" "PR #14 is merged, you're unblocked"
 ccsend "TOR-55" --file notes.md      # longer body from a file
 
@@ -199,11 +349,11 @@ The `page_snapshot()` contract: one `with` block per page, $vars intact.
 EOF
 ```
 
-**Use the quoted heredoc for anything containing code.** A message passed as a shell argument is parsed by the shell first, so a backticked `identifier` is **command substitution** — the shell runs it and splices in the output, which is empty. The recipient gets a sentence with holes where every identifier was, and `ccsend` still prints its acceptance line, because by the time it sees `argv` the words are already gone and nothing downstream can detect it. Measured 2026-07-30 on a real handover: `` `with` `` arrived as nothing, leaving "must run inside ONE  block". The `<<'EOF'` quoting (note the quotes) disables every expansion, so backticks, `$vars`, and both quote styles survive byte-for-byte.
+**Use the quoted heredoc for anything containing code.** A message passed as a shell argument is parsed by the shell first, so a backticked `identifier` is **command substitution** — the shell runs it and splices in the output, which is empty. The recipient gets a sentence with holes where every identifier was, and `ccsend` still prints `✓ delivered`, because by the time it sees `argv` the words are already gone and nothing downstream can detect it. Measured 2026-07-30 on a real handover: `` `with` `` arrived as nothing, leaving "must run inside ONE  block". The `<<'EOF'` quoting (note the quotes) disables every expansion, so backticks, `$vars`, and both quote styles survive byte-for-byte.
 
 **This is not a `ccsend` problem — it is a shell problem, so it applies to every command that takes a body as an argument.** `gh pr comment --body`, `gh pr create --body`, `gh issue comment --body`: same trap, same silence. Measured 2026-07-30: a code review posted through `gh pr comment --body "…"` arrived with **three empty code blocks** where its fenced examples had been, and `gh` reported success — the shell had already run the backticked contents as commands and spliced in their (empty) output. Reviews are the worst case, because a garbled review still reads as authoritative. Use `--body-file` / `--file` for anything containing backticks, `$`, or code, and if you catch it late, **delete and repost** rather than leaving a review with holes in it.
 
-**To hold a lease yourself, run `/arm-inbox`** (a lease, not a guarantee of receipt) — or call Monitor directly with `command: ccarm`, `persistent: true`. `ccarm` needs no argument: the harness exports `CLAUDE_CODE_SESSION_ID`, so a session can arm itself without being told who it is.
+**To become reachable yourself, run `/arm-inbox`** — or call Monitor directly with `command: ccarm`, `persistent: true`. `ccarm` needs no argument: the harness exports `CLAUDE_CODE_SESSION_ID`, so a session can arm itself without being told who it is.
 
 **A session receives only while it holds an open Monitor on its inbox.** That watch is the entire mechanism, and it is what reaches a session sitting *idle* waiting for its human — which hooks, MCP channels and process wrappers all fail to do (a hook fires on tool calls; an idle session makes none). Monitor is explicit that events arrive "even if one lands while you're waiting for the user to answer a question."
 
@@ -231,7 +381,7 @@ When you **send** through `ccsend`, say nothing: the header is already there and
 - **`touch` the inbox before reading it.** `tail -f`/read on a missing file exits instantly, so the session looks armed and receives nothing.
 - **Drain, don't follow.** Starting at end-of-file skips anything queued *before* arming — losing messages that were already accepted. `ccarm` moves the file aside and decodes it, so a message arriving mid-drain lands in the fresh inbox and is caught next pass.
 - **One message is one base64 line.** Monitor emits per line, so a raw multi-line body arrives as several disconnected notifications. Encoded, the decoded lines re-batch into one.
-- **A notification is capped, twice, and both caps cut silently.** Measured 2026-07-30 against a live armed session, by sending position-marked text and reading where it stopped: **~500 chars per line** and **~3000 chars per event**. The sender still prints its acceptance line. `ccsend` therefore spools every body to `~/.claude/mailbox/msgs/<sid>/` and wraps lines under the line cap; anything over the event budget arrives as a **preview with the spool path** instead of a body that ends mid-sentence.
+- **A notification is capped, twice, and both caps cut silently.** Measured 2026-07-30 against a live armed session, by sending position-marked text and reading where it stopped: **~500 chars per line** and **~3000 chars per event**. The sender still prints "delivered". `ccsend` therefore spools every body to `~/.claude/mailbox/msgs/<sid>/` and wraps lines under the line cap; anything over the event budget arrives as a **preview with the spool path** instead of a body that ends mid-sentence.
 
 `ccarm` handles the first four; `ccsend` handles the fifth. Prefer them to a hand-rolled loop.
 
@@ -245,9 +395,9 @@ The corollary for senders: a constraint buried mid-message in a long body is a c
 
 ### Verify, never assume, that a target is reachable
 
-`ccsend` **refuses by default when no watcher is live**, because writing to an unwatched file looks exactly like success. `--force` queues anyway, which only helps if you know the target will arm later — arming lets the backlog be picked up, but does not prove it was seen (see TOR-425, detached-watcher drain).
+`ccsend` **refuses by default when no watcher is live**, because writing to an unwatched file looks exactly like success. `--force` queues anyway, which only helps if you know the target will arm later — the backlog *is* delivered on arm.
 
-A watcher can also die without the session noticing: UI stop, teardown, timeout, session end. **`ccsend --list` is the best available evidence about who holds a lease** — not about who will receive, since a detached watcher holds a fresh lease and drains to nobody. An earlier successful send is not evidence that the next one will land.
+A watcher can also die without the session noticing: UI stop, teardown, timeout, session end. **`ccsend --list` is the only current truth about who can receive**; an earlier successful send is not evidence that the next one will land.
 
 ### Checking your OWN inbox — you cannot notice this from inside
 

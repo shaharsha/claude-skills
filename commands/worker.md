@@ -62,10 +62,10 @@ that"*; mtimes are the instrument, and a confident answer from you actively misl
 **Close each ticket as it merges, not in a batch at the end.** A session holding three Done-but-not-moved
 tickets is how the next assignment lands on already-merged work.
 
-⚠️ **RENAME YOUR SESSION when you take a second ticket.** Your title is the only handle a human has on
-you — `ccsend --list` shows titles, not tickets. On 2026-08-05 Shahar went looking for the TOR-331 and
-TOR-278 sessions and found neither: they were second tickets on sessions still titled
-`Sprint1 TOR-219: …` and `Sprint1 TOR-237: …`. **Both were live and working; both were unfindable.**
+⚠️ **RETITLE YOURSELF when you take a second ticket.** Your title is the only handle a human has on
+you. On 2026-08-05 Shahar went looking for the TOR-331 and TOR-278 sessions and found neither: they
+were second tickets on sessions still titled `Sprint1 TOR-219: …` and `Sprint1 TOR-237: …`. **Both were
+live and working; both were unfindable.**
 
 ```
 one ticket     Sprint1 TOR-331: WL Typical D90 column
@@ -73,27 +73,76 @@ two at once    Sprint1 TOR-227+228: silver tooling
 sequential     Sprint1 TOR-331 (was TOR-219)     <- keep the trail
 ```
 
-You cannot rename yourself — **ask, in the same message where you report picking the ticket up.** A
-title naming finished work is worse than a vague one: it reads as a session that can be ignored.
+**Say your new title in the same message where you report picking the ticket up** — the coordinator can
+set it for you programmatically and does not need to ask a human. **A title naming finished work is
+worse than a vague one:** it reads as a session that can be ignored.
 
 ---
 
-## 1 · Arm your inbox
+## 1 · Make yourself ADDRESSABLE — there is nothing to arm
 
-Call the **Monitor** tool exactly like this — the tool, not Bash:
+**As of 2026-08-12 this sprint uses Claude Code's native cross-session messaging. There is no inbox to
+arm, no watcher to keep alive, and no lease to check.** Messaging is on for every qualifying session
+with nothing to enable. `ccarm`, `ccsend --self`, and the `FRESH LEASE` check are **retired** — every
+failure they existed to catch was a property of the spool they are built on.
 
-- `command`: `~/.claude/skills/reading-session-transcripts/scripts/ccarm`
-- `persistent`: `true`
-- `description`: `inbox for this session`
+**What replaces the arming ritual is one thing: keep your TITLE true. Your NAME is not yours to manage.**
 
-`persistent: true` matters: a default Monitor times out after minutes and stops listening **silently**,
-leaving an inbox that looks armed and receives nothing. That happened to the orchestrator twice on
-2026-08-05 and cost a QA answer that arrived after a prod merge.
+```
+TITLE   "Sprint1 TOR-544 — third verdict"   yours · stable · survives restart · how humans and
+                                             the coordinator RECOGNISE you
+NAME    torque-a5                            not yours · derived from the working directory ·
+                                             REGENERATED on every restart · how SendMessage
+                                             ADDRESSES you
+```
 
-Then read `/Users/shaharshavit/.claude/commands/arm-inbox.md` for how to send, reply and read
-previews. **The quoted-heredoc rule there is not style** — a backtick or `$(…)` in a double-quoted
-argument is command substitution, and if it happens to be a real command it succeeds and silently
-rewrites your message.
+⚠️ **Measured 2026-08-12: a lane restarted and came back as `torque-88` having been `torque-a5`, same
+session id.** So a name is worth nothing once written down, and renaming yourself buys nothing — the
+next restart undoes it. **Do not try to manage your own address.** Keep the title accurate and let the
+coordinator resolve the rest.
+
+**The two are joined by the session registry**, and the coordinator has a tool for it:
+
+```bash
+~/.claude/skills/working-with-other-sessions/scripts/ccpeers        # name <-> session <-> title
+```
+
+**So: your obligation is the title, and it is the same obligation you already had.** Update it when your
+work changes. It is now the only durable handle anyone has on you.
+
+### ⚠️ PUT INVISIBLE STATE IN YOUR TITLE. This is the cheapest thing in this file.
+
+`census.sh` opens by listing what it cannot see, and the first line is *"unpushed work in a lane's
+worktree — invisible to every git question that exists."*
+
+**A lane solved this on its own, 2026-08-12**, by titling itself:
+
+```
+Sprint1 v2-docs migration-bar addenda — de4f9c1 unpushed
+```
+
+Nobody instructed it. The title is the one channel the coordinator reads on every sweep, so it put the
+invisible thing there. **Do the same.**
+
+```
+PUT IN THE TITLE   an unpushed sha · a plan awaiting a ruling · a measurement taken but not filed
+                   a ticket you have stopped on · "holds no ticket" if you hold none
+NOT IN THE TITLE   anything already visible in a PR, a branch or a ticket comment
+```
+
+**This is not a substitute for reporting.** It is what survives when your report was never read, your
+session died, or the coordinator changed hands — which happened three times today.
+
+**To send**, ask in plain language; Claude uses `ListAgents` and `SendMessage` itself. If a bare name is
+refused, re-send with the ref exactly as the error prints it. **Resolve the name at the moment you send
+it** — never from something you noted earlier.
+
+**If `/list-agents` is not recognised, say so outward immediately.** That session cannot be reached at
+all, and nothing about it looks wrong from the inside. The usual cause is a version below 2.1.224 —
+`ccpeers` prints it.
+
+**One thing carries over unchanged from the old channel, and it is the important one:** put your ask in
+line 1 (§7 of the preamble). The truncation that buried 39% of asks was never about the transport.
 
 ## 2 · Read the standing preamble
 
@@ -161,6 +210,52 @@ git show origin/develop:<path>
 
 Then **enter plan mode and write the plan.** Do not write code.
 
+### ⚠️ Every plan states the FILES IT WILL TOUCH, in backticks, as a list.
+
+```
+FILES: `src/charts/ChartView.tsx`  `src/charts/axis.ts`  `src/manifest/controls.ts`
+NOT TOUCHING: `api/services/chart_compiler.py`  `tests/baseline/`   (TOR-557 holds these)
+```
+
+⚠️ **Backtick the paths in BOTH lines.** `ccverify` reads backticked tokens; an unbackticked path under
+`NOT TOUCHING:` is silently dropped rather than checked, so the prohibition you meant to declare simply
+does not exist. Prose there ("the manifest schema") is fine as commentary and is ignored.
+
+**`NOT TOUCHING:` is checked in the opposite direction** — those files must be ABSENT from your diff,
+and touching one is a harder failure than an undeclared file, because you named it out of bounds
+yourself and the usual reason is that another lane holds it.
+
+**A plan without this is rejected without a reading** — not as pedantry, but because it is the one
+claim in your plan that can be falsified mechanically, by `ccverify files --plan`, against a list
+written before the work started. No file list means there is nothing to check your diff against and
+no DONE that can be shown false.
+
+Declare a directory (`src/charts/`) when the blast radius genuinely is one — that is an honest
+declaration, not a loophole. **Guessing wide to stay safe is the loophole**, and it is visible: a
+list that covers everything predicts nothing.
+
+### The amendment rule is PART of the gate, not an exception to it
+
+```
+Need a file you did not declare?
+  STOP · say "I need X too, because Y turned out to be Z" · update the list · continue
+
+Not a failure. Not a re-plan. Your final diff is checked against your FINAL list.
+```
+
+🔑 **The gate exists to make scope change VISIBLE, never to prevent it.** Discovering mid-
+implementation that the shape is different is the common case, and a rule that punished it would
+teach you to stop looking, or to declare wide up front — either of which drains the list of the
+information it exists to carry.
+
+**A list amended three times is itself a signal**, and a valuable one: the change was less understood
+going in than anyone thought, which is worth knowing while there is still time to act on it. That
+signal does not exist if nobody dares amend.
+
+⚠️ **What fails is the SILENT widening** — a file touched without a word. Not because the extra file
+is wrong, but because one undeclared file costs the reviewer their ability to trust any file list,
+including every honest one.
+
 ### The review cycle — TWICE, once on the plan and once on the implementation
 
 **Neither gate substitutes for the other, and the Codex round always comes first.**
@@ -223,7 +318,7 @@ draft.
 the preamble with its measured footprint.** ⚠️ **Not because the script is harmless — because the
 person the restriction protects has said so, for this one named script.** It does write
 (`.codex-review/**` plus a line in `.git/info/exclude`), so it needed an exception rather than an
-argument. **Everything else in plan mode is still reads and `ccsend` only.**
+argument. **Everything else in plan mode is still reads and `SendMessage` only.**
 
 *"I'll run it once I'm out of plan mode"* is a delay with no cause behind it — and it is a
 convincing-sounding excuse, which is why it is written here rather than left to be re-derived.
@@ -384,11 +479,11 @@ grep '^SESSION_ID=' ~/.claude/torque-orchestration/CURRENT-ORCHESTRATOR
 Message that id to say you are armed, naming your ticket. Keep it short. This is how it learns you
 exist without matching session titles by hand.
 
-⚠️ **If `ccsend --list` does not show that id as armed, RE-READ A MINUTE LATER before concluding
-anything.** The registry has measured transient dropouts — a worker read all 27 lines unfiltered, with
-a working grep and a control, and the orchestrator's row was genuinely absent, then present again a
-minute later. **One read is not enough to declare a session dead**, and a false positive sends a lane
-to Shahar with a fabricated emergency.
+⚠️ **If `ccpeers` does not show that session, RE-READ A MINUTE LATER before concluding anything.** The
+registry has measured transient dropouts — a worker read all 27 lines unfiltered, with a working grep
+and a control, and the orchestrator's row was genuinely absent, then present again a minute later.
+**One read is not enough to declare a session dead**, and a false positive sends a lane to Shahar with
+a fabricated emergency.
 
 **If it is still absent on the second read, the orchestrator is DEAD.** Say so to Shahar
 rather than queueing behind it — and do not merge on an approval it issued earlier: an approval covers
