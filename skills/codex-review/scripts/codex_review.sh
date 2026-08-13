@@ -178,7 +178,11 @@ _reserve_base() {
     # artifacts. So: probe for any output already at this base, then take the lock.
     # The probe is check-then-act and cannot stand alone -- the lock is what closes
     # the race -- but the completed-run case has no race to lose.
-    if [[ -e "$candidate.md" || -e "$candidate.json" || -e "$candidate.log" || -e "$candidate.provenance" ]]; then
+    # `.prompt.md` is in this list because the durable-prompt copy below writes it. A base
+    # whose ONLY surviving output is a prompt copy is still a taken base, and omitting it
+    # would let a later run overwrite the one artifact that proves what was reviewed.
+    if [[ -e "$candidate.md" || -e "$candidate.json" || -e "$candidate.log" \
+       || -e "$candidate.provenance" || -e "$candidate.prompt.md" ]]; then
       :
     elif (set -o noclobber; : > "$candidate.lock") 2>/dev/null; then
       BASE="$candidate"
@@ -225,6 +229,38 @@ LOG="$BASE.log"
 # notes -- incidental on two rounds, absent on the third.
 PROMPT_SHA="$(shasum -a 256 "$PROMPT_FILE" 2>/dev/null | awk '{print $1}')"
 PROMPT_SHA="${PROMPT_SHA:-unknown}"
+
+# OWN THE BYTES YOU CITE. Until 2026-08-07 the header pointed at the CALLER's path, whose
+# lifetime this script does not control -- and lanes keep their prompts under /private/tmp
+# scratchpads that clear, or inside worktrees that get removed. Measured that day, two lanes
+# independently: 4 of one lane's 7 rounds already cited prompts destroyed by a /private/tmp
+# clear (one round died mid-flight with CODEX_SCRIPT_EXIT=66 for exactly that reason), and
+# another lost ALL artifacts of six rounds -- reviews included, not just prompts -- when its
+# worktree was removed.
+#
+# A DANGLING citation is worse than an absent one: the sha256 makes it read as VERIFIABLE, so
+# a reader believes they could check bytes that are gone, and nothing in the artifact says
+# otherwise. The record looks complete. That is the same shape this header exists to prevent.
+#
+# Copied BEFORE the codex run, deliberately. A round that dies mid-flight is precisely the case
+# where the prompt is most needed -- to relaunch it unchanged -- and most likely to be lost.
+#
+# ⚠️ THIS DEPENDS ON $BASE BEING RESERVED ALREADY (see _reserve_base above). Two same-second
+# rounds sharing a base would otherwise have one overwrite the other's prompt copy, which is
+# the collision that block exists to close -- and it would corrupt the record in the one
+# direction this comment says is worst: a citation that still resolves, to the wrong bytes.
+PROMPT_COPY="$BASE.prompt.md"
+PROMPT_ORIGIN="$PROMPT_FILE"
+if cp "$PROMPT_FILE" "$PROMPT_COPY" 2>/dev/null; then
+  PROMPT_CITE="$PROMPT_COPY"
+else
+  # Never fail the round over provenance, but never silently downgrade the claim either:
+  # cite the caller's path and say plainly that it may not outlive this round.
+  PROMPT_COPY=""
+  PROMPT_CITE="$PROMPT_FILE"
+  echo "codex_review: WARNING could not copy the prompt next to the artifact." >&2
+  echo "codex_review: citing $PROMPT_FILE, which this script does not control and may not outlive the round." >&2
+fi
 REVIEW_SHA="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || echo unknown)"
 REVIEW_BRANCH="$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
 if [[ -n "$(git -C "$REPO" status --porcelain 2>/dev/null)" ]]; then
@@ -310,8 +346,8 @@ fi
 # the rendered-markdown path -- without --schema the .md is a copy of the raw
 # JSON, and prepending prose would corrupt it, so that case gets the sidecar only.
 if [[ -n "$SCHEMA" && -f "$MD" ]]; then
-  PROV="$(printf '> **Reviewed:** `%s` on `%s` — working tree %s\n> **Prompt artifact:** `%s`  sha256 `%s`\n> **Label:** `%s` · **Session:** `%s`\n>\n> *A verdict covers the bytes it read — the repo sha AND the prompt hash. For a PLAN\n> round the repo sha is nearly meaningless and the prompt hash is the whole claim.\n> Cite them, or the citation is about a revision nobody has.*\n\n' \
-      "$REVIEW_SHA" "$REVIEW_BRANCH" "$REVIEW_DIRTY" "$PROMPT_FILE" "$PROMPT_SHA" "$LABEL" "${SESSION_ID:-unknown}")"
+  PROV="$(printf '> **Reviewed:** `%s` on `%s` — working tree %s\n> **Prompt artifact:** `%s`  sha256 `%s`\n> **Prompt origin:** `%s`\n> **Label:** `%s` · **Session:** `%s`\n>\n> *A verdict covers the bytes it read — the repo sha AND the prompt hash. For a PLAN\n> round the repo sha is nearly meaningless and the prompt hash is the whole claim.\n> Cite them, or the citation is about a revision nobody has.*\n\n' \
+      "$REVIEW_SHA" "$REVIEW_BRANCH" "$REVIEW_DIRTY" "$PROMPT_CITE" "$PROMPT_SHA" "$PROMPT_ORIGIN" "$LABEL" "${SESSION_ID:-unknown}")"
   printf '%s' "$PROV" | cat - "$MD" > "$MD.tmp" && mv "$MD.tmp" "$MD"
 fi
 # Hash of the artifact AS IT FINALLY STANDS. Two things about this are load-bearing.
@@ -346,8 +382,20 @@ ARTIFACT_SHA="$(shasum -a 256 "$MD" 2>/dev/null | awk '{print $1}')" || ARTIFACT
 # JSON and prepending prose would corrupt it), so a checker keyed on the header would
 # silently pass every --no-schema round: a check that cannot fail, on the artifact that
 # decides whether a merge was reviewed.
-printf 'sha=%s\nbranch=%s\ntree=%s\nprompt=%s\nprompt_sha256=%s\nlabel=%s\nsession=%s\nstamp=%s\nartifact_sha256=%s\n' \
-  "$REVIEW_SHA" "$REVIEW_BRANCH" "$REVIEW_DIRTY" "$PROMPT_FILE" "$PROMPT_SHA" \
+# `prompt=` deliberately names the DURABLE copy beside this artifact, not the caller's path --
+# that is the whole point of the copy above. `prompt_origin=` keeps the caller's path so the
+# trail back to the author's working copy is not lost, and `prompt_durable=` lets a checker
+# tell the two apart without string-matching a directory.
+#
+# ⚠️ `prompt_sha256` HASHES THE ORIGINAL, AND THE COPY IS BYTE-IDENTICAL TO IT BY
+# CONSTRUCTION (plain cp, no rewriting). Both facts are needed together: the hash is what
+# makes the durable copy checkable rather than merely present. If anything is ever
+# interposed between the read and the copy, this claim breaks silently -- the citation
+# would still resolve, to bytes whose hash no longer matches, which is the one failure
+# mode worse than a dangling path.
+printf 'sha=%s\nbranch=%s\ntree=%s\nprompt=%s\nprompt_sha256=%s\nprompt_origin=%s\nprompt_durable=%s\nlabel=%s\nsession=%s\nstamp=%s\nartifact_sha256=%s\n' \
+  "$REVIEW_SHA" "$REVIEW_BRANCH" "$REVIEW_DIRTY" "$PROMPT_CITE" "$PROMPT_SHA" \
+  "$PROMPT_ORIGIN" "$([[ -n "$PROMPT_COPY" ]] && echo yes || echo no)" \
   "$LABEL" "${SESSION_ID:-unknown}" "$STAMP" "$ARTIFACT_SHA" > "$BASE.provenance"
 
 echo "RAW_JSON=$RAW"
