@@ -71,7 +71,22 @@ def git(args, cwd=None):
 
 
 def slug(path):
-    return path.replace("/", "-")
+    """
+    🔴 BOTH SEPARATORS. The project dir replaces `/` AND `.` with `-`:
+
+        /Users/…/torque/.claude/worktrees/docs-refresh
+        -Users-…-torque--claude-worktrees-docs-refresh      <- note `--claude`, not `-.claude`
+
+    The first version of this replaced only `/`, so the transcript check NEVER
+    MATCHED for anything under `.claude/worktrees/` -- 136 of 216 worktrees, i.e.
+    the majority, and precisely the ones lanes work in. It reported "0 transcripts
+    at risk" and that zero was a broken probe, not a clean result.
+
+    ⚠️ Running --delete on that output would have stranded 3 sessions -- the exact
+    failure this tool exists to prevent, committed by the tool, and reported as
+    safe. Validated now against every worktree on disk rather than one example.
+    """
+    return path.replace("/", "-").replace(".", "-")
 
 
 def live_cwds():
