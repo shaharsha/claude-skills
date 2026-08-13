@@ -152,7 +152,55 @@ PY
 fi
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
-BASE="$OUT_DIR/$STAMP-$LABEL"
+
+# --- reserve a unique $BASE ----------------------------------------------------
+# $STAMP is second-resolution, so two runs started in the same second with the same
+# label would otherwise share every output path. That is not merely untidy. Run A
+# renders its .md; run B overwrites it, hashes it and writes B's sidecar; A then
+# hashes the file B left behind and writes A's sidecar last. The recorded hash
+# MATCHES the bytes on disk, so a verifier reports UNCHANGED for a pair whose sha,
+# prompt hash and session belong to a different round -- a confident wrong answer,
+# and one that is undetectable from the two files alone.
+#
+# `set -o noclobber` with `: >` is an O_EXCL create: the create IS the mutual
+# exclusion, so there is no window between testing and taking, which a
+# `[[ -e ]]` check followed by a write would have.
+_reserve_base() {
+  local n=1 candidate="$OUT_DIR/$STAMP-$LABEL"
+  # Probe once. Without this an unwritable directory looks like 99 collisions and
+  # reports the wrong cause.
+  [[ -w "$OUT_DIR" ]] || { echo "artifact directory is not writable: $OUT_DIR" >&2; exit 73; }
+  while :; do
+    # Two different collisions, and the lock only covers one of them. The O_EXCL
+    # create excludes a CONCURRENT peer; it says nothing about a run that already
+    # finished this second and released its lock at exit. Without the second test a
+    # later same-second, same-label run silently overwrites a completed round's
+    # artifacts. So: probe for any output already at this base, then take the lock.
+    # The probe is check-then-act and cannot stand alone -- the lock is what closes
+    # the race -- but the completed-run case has no race to lose.
+    if [[ -e "$candidate.md" || -e "$candidate.json" || -e "$candidate.log" || -e "$candidate.provenance" ]]; then
+      :
+    elif (set -o noclobber; : > "$candidate.lock") 2>/dev/null; then
+      BASE="$candidate"
+      return 0
+    fi
+    n=$((n + 1))
+    if (( n > 99 )); then
+      echo "could not reserve a unique artifact base: $OUT_DIR/$STAMP-$LABEL (99 taken)" >&2
+      exit 70
+    fi
+    candidate="$OUT_DIR/$STAMP-$LABEL-$n"
+  done
+}
+_reserve_base
+
+# ⚠️ THE LOCK IS HELD FOR THE WHOLE RUN, AND ITS LIFETIME IS THE PROTECTION -- not
+# the reservation above. Release it any earlier than process exit and a same-second
+# peer acquires $BASE while this run is still writing, which reopens the collision
+# the block above exists to close, with a lock in front of it. This line looks
+# tidy-uppable and is not: do NOT move it earlier or scope it to the reservation.
+trap 'rm -f "$BASE.lock"' EXIT
+
 RAW="$BASE.json"
 MD="$BASE.md"
 LOG="$BASE.log"
@@ -266,14 +314,41 @@ if [[ -n "$SCHEMA" && -f "$MD" ]]; then
       "$REVIEW_SHA" "$REVIEW_BRANCH" "$REVIEW_DIRTY" "$PROMPT_FILE" "$PROMPT_SHA" "$LABEL" "${SESSION_ID:-unknown}")"
   printf '%s' "$PROV" | cat - "$MD" > "$MD.tmp" && mv "$MD.tmp" "$MD"
 fi
+# Hash of the artifact AS IT FINALLY STANDS. Two things about this are load-bearing.
+#
+# WHY HERE, after the banner rewrite above: that rewrite is part of PRODUCING the
+# artifact -- the banner IS the artifact -- so the bytes a later reader must be able
+# to check include it. Hashing before the prepend would record a digest that can
+# never match its own file on any --schema round, and the defect would ship green
+# and surface only the first time somebody tried to verify something.
+#
+# WHY GUARDED: `set -euo pipefail` is in force (top of file), and an unguarded
+# VAR="$(cmd)" carries the command's status, so a failure here would abort the
+# script AFTER a paid review has already run -- losing the sidecar entirely. A hash
+# that cannot be computed must degrade to an honest `unavailable`, never to a lost
+# artifact. `|| true` on the substitution and a `:-` default are both required: the
+# first stops the abort, the second covers a success that produced no output.
+# `|| ARTIFACT_SHA=unavailable` sits OUTSIDE the substitution, deliberately. Written
+# as "$(pipeline || true)" the failure is swallowed INSIDE, so a hasher that exits
+# non-zero while emitting a valid-looking digest passes the shape check below and
+# gets recorded as fact -- and every later verification then reports CHANGED for an
+# untouched artifact. The `||` form keeps the pipeline's status (pipefail is on) and
+# still cannot abort under `set -e`, because a compound with `||` is tested.
+ARTIFACT_SHA="$(shasum -a 256 "$MD" 2>/dev/null | awk '{print $1}')" || ARTIFACT_SHA="unavailable"
+# Then shape-check, because SUCCESS is not the same as a digest: a hasher exiting 0
+# with malformed output would otherwise be recorded verbatim, putting a value in the
+# sidecar that looks like data and is not. `unavailable` is the single honest answer
+# for every way of not having a digest, so a reader never interprets a novel one.
+[[ "$ARTIFACT_SHA" =~ ^[0-9a-f]{64}$ ]] || ARTIFACT_SHA="unavailable"
+
 # Machine-readable sidecar, written UNCONDITIONALLY -- this is what a checker must read.
 # The markdown header above exists only on the --schema path (without it the .md IS the raw
 # JSON and prepending prose would corrupt it), so a checker keyed on the header would
 # silently pass every --no-schema round: a check that cannot fail, on the artifact that
 # decides whether a merge was reviewed.
-printf 'sha=%s\nbranch=%s\ntree=%s\nprompt=%s\nprompt_sha256=%s\nlabel=%s\nsession=%s\nstamp=%s\n' \
+printf 'sha=%s\nbranch=%s\ntree=%s\nprompt=%s\nprompt_sha256=%s\nlabel=%s\nsession=%s\nstamp=%s\nartifact_sha256=%s\n' \
   "$REVIEW_SHA" "$REVIEW_BRANCH" "$REVIEW_DIRTY" "$PROMPT_FILE" "$PROMPT_SHA" \
-  "$LABEL" "${SESSION_ID:-unknown}" "$STAMP" > "$BASE.provenance"
+  "$LABEL" "${SESSION_ID:-unknown}" "$STAMP" "$ARTIFACT_SHA" > "$BASE.provenance"
 
 echo "RAW_JSON=$RAW"
 echo "CODEX_LOG=$LOG"

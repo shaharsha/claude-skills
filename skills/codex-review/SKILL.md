@@ -194,6 +194,49 @@ artifact outlives the session; point it at a scratch directory and it does not.
 If the round is the evidence that a merge was gated, put it somewhere durable and
 quote the absolute path when you report the verdict.
 
+### Has the artifact changed since it was written?
+
+`.provenance` carries `artifact_sha256`, the digest of the `.md` as it finally
+stands. `verify_artifact.sh` compares it (TOR-482, artifact-integrity check):
+
+```bash
+scripts/verify_artifact.sh .codex-review/<stamp>-<label>.md   # one artifact
+scripts/verify_artifact.sh --dir .codex-review                # every .md there
+scripts/verify_artifact.sh --self-test                        # prove its verdicts fire
+```
+
+```
+UNCHANGED    (0)   a valid recorded digest, and it matches
+CHANGED      (1)   a valid recorded digest, and it differs
+CANNOT-TELL  (2)   there is nothing to check against
+```
+
+⚠️ **CANNOT-TELL is a real verdict, not a soft pass.** Every round generated before
+this existed is in that class permanently, and that is a fact about the evidence
+rather than a defect in the file. Reported as UNCHANGED it would certify an
+artifact nobody examined; as CHANGED it would accuse one nobody examined.
+
+⚠️ **CHANGED is not an accusation.** It means *differs from what was recorded at
+generation*. Bytes cannot separate tampering from an honest regeneration — re-running
+`render_review.py` over the same `.json` rewrites the `.md` legitimately and the
+digest moves. Anything claiming to tell those apart is asserting a discrimination
+the method does not have.
+
+**Directory mode prints a coverage fraction — `N of M verified` — and never a bare
+"clean".** It classifies *every* `.md` present, with no round/non-round predicate:
+a file it cannot verify is reported as CANNOT-TELL rather than dropped, so nothing
+can leave the denominator silently. Saying *"I cannot verify `PR-BODY-x.md`"* is
+true and costs one line.
+
+**A missing hash is written as `artifact_sha256=unavailable`**, never omitted and
+never as a partial value — one honest answer for every way of not having a digest.
+
+**Two runs starting in the same second with the same label no longer collide.** The
+script reserves `$BASE` with an O_EXCL create and holds the lock for the whole run;
+a same-second peer takes `-2`. Before that, both runs shared every output path, and
+the survivor's sidecar could match the *other* run's artifact — a confident
+UNCHANGED across two different rounds.
+
 ## Adjudicating
 
 For each finding, open the cited file at the cited lines and establish whether
