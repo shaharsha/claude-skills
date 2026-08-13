@@ -49,6 +49,7 @@ USAGE
     ccreap --repo ~/Projects/torque --base origin/main
 """
 import argparse
+import io
 import json
 import glob
 import os
@@ -97,6 +98,106 @@ def live_cwds():
         except (ValueError, OSError):
             continue
     return out
+
+
+
+def paths_in_recent_use(candidates, hours=24):
+    """
+    Worktree paths that a RECENTLY ACTIVE SESSION HAS TOUCHED.
+
+    🔴 THE FIFTH PREDICATE, AND ITS ABSENCE SWEPT TWO WORKING LANES. The first version
+    held a worktree only if it was some session's REGISTERED CWD. Measured: every live
+    session's cwd is a REPO ROOT -- /Users/shaharshavit/Projects/torque -- because lanes
+    operate on worktrees via `git -C <path>`. So that check could never see a lane using
+    a worktree, BY CONSTRUCTION.
+
+    On 2026-08-13 it swept `tor-572-rendered-oracle` (32 MB) while its lane was reading
+    files out of it mid-turn -- four `git -C` calls in one turn returned "No such file
+    or directory" between commands -- and `tor-565-bound` (38 MB) from another live lane.
+    Both were clean and transcript-free, so BY THE TOOL'S DEFINITION they were free; by
+    the lane's, one was its working directory.
+
+    ⚠️ THIS IS THE SAME BLIND SPOT stale_tree.py PRINTS ON EVERY CALL: "a `cd` inside the
+    command is not followed." It was documented in one tool while a DESTRUCTIVE tool's
+    safety predicate was built on exactly the thing documented as unknowable.
+
+    THE SIGNAL EXISTED AND WAS NEVER READ. Measured afterwards: tor-572 appears in SIX
+    transcripts modified in the last 24 hours, tor-565 in five. A single grep pass finds
+    them in ~2.5s for the whole fleet, because all patterns go in one -f file rather than
+    one scan per path.
+
+    Returns the subset of `candidates` that appear in any recent transcript.
+    """
+    import tempfile
+    proj = os.path.join(HOME, ".claude", "projects")
+    if not os.path.isdir(proj) or not candidates:
+        return set()
+    try:
+        files = subprocess.run(
+            ["find", proj, "-name", "*.jsonl", "-mtime", "-%d" % max(1, hours // 24)],
+            capture_output=True, text=True, timeout=60).stdout.split()
+    except Exception:
+        # ⚠️ Cannot enumerate -> hold EVERYTHING as possibly-in-use. The safe direction
+        # for a destructive tool is to refuse, never to proceed on an empty result.
+        return set(candidates)
+    if not files:
+        return set(candidates)
+    with tempfile.NamedTemporaryFile("w", suffix=".pat", delete=False) as fh:
+        fh.write("\n".join(candidates) + "\n")
+        pat = fh.name
+    try:
+        # Two-stage, and the second stage is the whole point. grep finds candidate
+        # FILES cheaply; then each matching line is parsed so a path counts only when
+        # it appears in a tool_use INPUT -- a command someone RAN -- and not in output
+        # a session merely printed.
+        #
+        # ⚠️ WITHOUT THIS THE PREDICATE IS CONFOUNDED BY ITS OWN REPORTING. This tool
+        # prints every candidate path; that output lands in the operator's transcript;
+        # the next run then reads its own previous report as evidence of use and holds
+        # everything. Measured: with a raw grep, SAFE dropped from 180 to 1, and the
+        # session doing the holding was the one that had printed the list.
+        #
+        # This is the execution-versus-mention distinction, needed by a sixth tool this
+        # week, each author rediscovering it alone.
+        hits = subprocess.run(["grep", "-lF", "-f", pat] + files,
+                              capture_output=True, text=True, timeout=180).stdout.split()
+        cand = set(candidates)
+        found = set()
+        me = os.environ.get("CLAUDE_SESSION_ID", "")
+        for f in hits:
+            # A tool never holds a path because IT looked at one.
+            if me and me[:8] in os.path.basename(f):
+                continue
+            try:
+                fh = io.open(f, encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            with fh:
+                for line in fh:
+                    if not any(c in line for c in cand):
+                        continue
+                    try:
+                        d = json.loads(line)
+                    except ValueError:
+                        continue
+                    c = (d.get("message") or {}).get("content")
+                    if not isinstance(c, list):
+                        continue
+                    for b in c:
+                        if b.get("type") != "tool_use":
+                            continue
+                        blob = str(b.get("input"))
+                        for path in cand:
+                            if path in blob:
+                                found.add(path)
+        return found
+    except Exception:
+        return set(candidates)
+    finally:
+        try:
+            os.unlink(pat)
+        except OSError:
+            pass
 
 
 def worktrees(repo):
@@ -208,6 +309,16 @@ def main():
                 hold.append((p, "detached HEAD not contained in " + a.base))
                 continue
         reap.append(p)
+
+    # ⚠️ LAST GATE, and it is the one whose absence swept two working lanes. Applied
+    # after all per-worktree checks because it needs the whole candidate set at once:
+    # one grep pass over recent transcripts, not one scan per path.
+    inuse = paths_in_recent_use(reap)
+    if inuse:
+        reap = [p for p in reap if p not in inuse]
+        for p in sorted(inuse):
+            hold.append((p, "IN ACTIVE USE — a session touched this path in the last 24h "
+                            "(a lane works via `git -C`, so its registered cwd is the repo root)"))
 
     print(f"ccreap · {repo}")
     print(f"base {a.base} · last fetched {age} ago · "
