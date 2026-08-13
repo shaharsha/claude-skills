@@ -159,6 +159,48 @@ and it fails **silently, as absence**, which is the direction that gets acted on
 consequence: a lane was told `SendMessage` would not reach it, from a lookup structurally incapable of
 finding it.
 
+
+**1i · SIX FINDINGS REPORTED BY LANES THAT REACHED NO FILE UNTIL 2026-08-13.** Recorded late, and the
+lateness is the point: I told a lane I was *"carrying #3 into the worklist now"* and then did not, for
+four hours, while writing tools whose purpose is that findings not die in messages.
+
+**a · A MONITOR VERDICT IS NOT ATOMIC, and the failure DIRECTION is the finding.** Monitor batches
+stdout within ~200ms, so a composed verdict splits across events: a header arrived with `JOBS:` empty
+and the eight job rows came in the NEXT event, producing a false alarm about a zero-job run — the one
+condition that check exists to detect.
+
+🔑 *"Mine split ALARMINGLY, so I went and measured. Split the other way — rows present, conclusion lost
+— it reads clean and nobody looks."* **Every batching boundary has a safe direction and a silent one,
+and only one of them gets investigated.**
+
+**b · THE DOCUMENTED "NOTHING RAN" SIGNAL HAS A FALSE POSITIVE.** The rule is that an EMPTY JOB LIST
+proves a CI run did nothing. Measured: it returned empty as a *batching artifact* while both jobs had
+succeeded. Re-queried as one read: 2 jobs, both success. ⚠️ **The authoritative NEGATIVE signal can lie
+in the alarming direction** — which is the half nobody re-checks, because doubting an alarm about your
+own work looks like self-exculpation.
+
+**c · `gh pr checks` IS HEAD-AGNOSTIC.** It reports whatever the PR's CURRENT head has, so a monitor
+armed before a push emits `pass` events indistinguishable from the live one's. **Remedy: read head and
+checks in ONE call** — `gh pr view --json headRefOid,statusCheckRollup` — because two reads can straddle
+a push. Same shape as the stale tree: a status true about a different revision than the one asked about.
+
+**d · A SESSION CANNOT RENAME ITSELF.** `set_session_title` refuses the current session BY DESIGN, so a
+lane advertising state in its title depends on a third party to keep it true. **Titles are therefore
+STRUCTURALLY guaranteed to go stale, not incidentally** — which is why a dispatcher resolving a lane by
+title got `TOR-467 / #523` for a lane holding `TOR-567 / #527`, from a registry, reading as more
+authoritative than a guess.
+
+**e · A SKILL'S ADDRESS EMBEDS A PLUGIN VERSION THAT ROTS WHILE THE SKILL DOES NOT.**
+`b29e7cf65e5c:pptx` and `f17010c9bb48:pptx` are the same capability; both version directories sit on
+disk with identical skill sets. **A dead prefix therefore looks PRESENT to a filesystem check while
+being unaddressable** — worse than a clean absence. Measured clean across four instruction populations,
+so the trap is armed and unstepped-on. ⚠️ `ccdoccheck` does not cover skills; deliberately not built,
+because a gate for zero current exposure is how gates become noise.
+
+**f · `CLAUDE.md` IS RE-INJECTED IN FULL, REPEATEDLY, ON FILE-TOUCH.** A lane observed the same large
+payload arriving many times in one session. **Not measured from inside and not verified by me** — stated
+as an observation with its provenance, not a finding.
+
 **2 · WHEN TWO PROBES DISAGREE, ASK WHAT EACH IS A FACT ABOUT — not which is right.**
 `17`, `8` and `5` were **all three correct**. Nothing was broken; three different questions were being
 answered and only one had been asked. This is stronger than *"treat any gap as the instrument"*,
