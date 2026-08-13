@@ -69,6 +69,13 @@ TRIGGERS = ("git ", "grep", "rg ", "cat ", "sed ", "awk ", "head ", "tail ",
 BASES = ("origin/develop", "origin/main", "origin/master")
 
 
+# How old the cached ref may get before this hook asks for a refresh, and how long
+# it waits before asking again for the same repo.
+REF_MAX_AGE = 900.0        # 15 min
+REFETCH_COOLDOWN = 600.0   # 10 min between attempts per repo, success or failure
+STAMPS = os.path.join(os.path.expanduser("~/.claude"), ".stale_tree_fetch")
+
+
 def git(args, cwd):
     try:
         p = subprocess.run(["git"] + args, cwd=cwd, capture_output=True,
@@ -78,14 +85,89 @@ def git(args, cwd):
         return (127, "", "git unavailable or timed out")
 
 
-def ref_age(gitdir, base):
-    """Age of the cached remote ref, in seconds. None if it cannot be read.
-
-    Checked in BOTH loose and packed form: a repo that has been `git gc`'d keeps
-    refs only in packed-refs, and reading just the loose path would report the
-    ref as unreadable on exactly the repos that are best maintained.
+def maybe_refresh(top, base, age):
     """
-    loose = os.path.join(gitdir, "refs", "remotes", base.replace("origin/", "origin/"))
+    Fire-and-forget `git fetch` when the cached ref has gone stale.
+
+    THIS IS THE OTHER HALF OF THE PAIR. The count is measured against a CACHED ref,
+    so the hook can only ever be as current as the last fetch. Left alone, that ref
+    decays without limit: measured on this machine, ~/Projects/Playground's ref was
+    ELEVEN MONTHS old and every `behind 0` from it was meaningless. Nobody would
+    have noticed, because nothing was wrong with the answer's SHAPE.
+
+    ⚠️ THE HOOK STILL REPORTS THE PRE-FETCH AGE, ALWAYS. This never improves the
+    number it is currently printing -- it improves the NEXT call's. Reporting a
+    freshness this call did not have would be the exact substitution the hook
+    exists to prevent, committed by the hook itself.
+
+    THREE THINGS KEEP IT FROM BECOMING A PROBLEM OF ITS OWN:
+      · detached and never waited on. A hook that blocks a Bash call on the
+        network is worse than any staleness.
+      · rate-limited per repo by a stamp file, written BEFORE the spawn and on
+        every attempt including failures -- so an unreachable remote costs one
+        attempt per cooldown, not one per Bash call.
+      · silent by design HERE, uniquely in this file: the fetch is an optimisation,
+        and its failure is already visible as the age that keeps growing in the
+        line above. That is the loud channel; a second one would just be noise.
+    """
+    if age is not None and age < REF_MAX_AGE:
+        return
+    try:
+        os.makedirs(STAMPS, exist_ok=True)
+        key = str(abs(hash(top)))
+        stamp = os.path.join(STAMPS, key)
+        try:
+            if time.time() - os.path.getmtime(stamp) < REFETCH_COOLDOWN:
+                return
+        except OSError:
+            pass
+        with open(stamp, "w") as fh:      # written BEFORE the spawn, so a fetch that
+            fh.write(top)                 # hangs still consumes its cooldown slot
+        remote, _, ref = base.partition("/")
+        subprocess.Popen(
+            ["git", "fetch", "--quiet", remote, ref],
+            cwd=top, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, start_new_session=True)
+    except Exception:
+        return
+
+
+def ref_age(gitdir, base):
+    """
+    Seconds since this repo last FETCHED. None if it cannot be determined.
+
+    🔴 FETCH_HEAD, NOT THE REF FILE. Git only rewrites `refs/remotes/<base>` when
+    the branch MOVES, so the ref's mtime answers "when did the remote branch last
+    change" -- a different question from "when did we last check", and the wrong
+    one. FETCH_HEAD is rewritten by every fetch, including a no-op.
+
+    Measured 2026-08-13, and the numbers are the whole argument:
+
+        ~/Projects/Playground   fetch succeeds, exit 0
+                                FETCH_HEAD           10:23:40 -> 10:23:44   moved
+                                refs/…/origin/develop 2025-09-16 19:41:04   UNCHANGED
+
+    That repo has been dormant since September, so the first version of this
+    function reported `ref 7934h old` -- ELEVEN MONTHS -- immediately after a
+    successful fetch, and would have done so forever while re-fetching every
+    cooldown.
+
+    ⚠️ AND IT WAS INVISIBLE ON EVERY REPO I BUILT AGAINST. On an active repo the
+    two timestamps coincide (both 10:20:56 on claude-skills), because a branch
+    that moves often makes "last moved" and "last checked" nearly the same number.
+    **It works on the population I tested and fails on the population it exists
+    for** -- the second bug in this file with exactly that shape, after
+    --absolute-git-dir reported "age unknown" for worktrees.
+    """
+    for p in (os.path.join(gitdir, "FETCH_HEAD"),):
+        try:
+            return time.time() - os.path.getmtime(p)
+        except OSError:
+            pass
+    # Never fetched in this clone: fall back to the ref, and accept that the
+    # number then means "last moved". Better than None, and a fresh clone's ref
+    # was written at clone time, which IS when it was last checked.
+    loose = os.path.join(gitdir, "refs", "remotes", base)
     for p in (loose, os.path.join(gitdir, "packed-refs")):
         try:
             return time.time() - os.path.getmtime(p)
@@ -166,7 +248,12 @@ def main():
                 emit(f"⚠️ STALENESS: CANNOT DETERMINE against {base} in {top} — "
                      "rev-list failed. Not a pass.")
                 return 0
-            age = human(ref_age(gitdir, base) if rcg == 0 else None)
+            raw_age = ref_age(gitdir, base) if rcg == 0 else None
+            # Report the PRE-fetch age, then ask for a refresh for next time. Order
+            # matters: computing the line first guarantees this call can never
+            # report a freshness it did not have.
+            age = human(raw_age)
+            maybe_refresh(top, base, raw_age)
             n = int(count)
             # The word BEHIND carries the number; the parenthetical carries the
             # expiry. Both, always -- the count alone is the trap, not the fix.
@@ -176,7 +263,7 @@ def main():
                 note = (f"  <- evidence from this tree describes a revision {n} "
                         f"commit(s) older than {base}")
             emit(f"{lead}: {top}  HEAD {head} ({branch})  BEHIND {n} vs {base}  "
-                 f"[ref {age}, no fetch]{note}\n"
+                 f"[last fetched {age}]{note}\n"
                  f"cwd at command START; a `cd` inside the command is not followed.")
             return 0
 
