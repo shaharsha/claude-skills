@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""run_checked — run a command so its EXIT STATUS cannot be lost or buried.
+
+THE TWO FAILURES THIS EXISTS FOR, both measured 2026-08-12/13 by different sessions
+
+    1  STATUS REPLACED BY A PIPE
+       cd <worktree> && .venv/bin/python -m pytest … | tail
+       Worktrees share the MAIN checkout's venv, so the interpreter is absent and
+       the command dies -- but a pipeline reports its LAST stage, so this exits 0
+       HAVING RUN NOTHING. Two sessions hit this shape independently. A third hit
+       it inside a command written to VERIFY a zero, where `| head -5 || echo "no
+       matches"` made the `||` branch unreachable: head always exits 0, so a blank
+       result was consistent with both "no matches" and "the query errored".
+
+    2  STATUS BURIED BY THE INNER COMMAND'S SUCCESS
+       git push → PUSH_RC=141 (SIGPIPE, transport died)
+       last line on screen: "4100 passed · GATE=FULL"
+       Both statements are TRUE. The suite ran and passed; the bytes never landed.
+       ⚠️ The reassuring line is LAST and the contradicting status is one line
+       above, so the inner command's success reads as the outer command's verdict.
+
+WHAT THIS DOES ABOUT IT
+
+    · the command's own rc is printed LAST, so no inner success can be the visual
+      conclusion. This is the whole point; do not "tidy" it earlier.
+    · the rc also goes to STDERR, which `| head` and `| tail` do not consume --
+      so truncating the output cannot truncate away the verdict.
+    · full output goes to a log; the path is printed. Truncation is THIS tool's
+      job, so the caller never needs a pipe that would eat the status.
+    · the process exits with the COMMAND's rc, never a pipeline's.
+
+⚠️ IT IS NOT A CONVENTION. Three sessions had all of the relevant rules written
+down and broke them anyway, one of them minutes after writing the rule. This is a
+different program to invoke, not a thing to remember while invoking the old one.
+
+USAGE
+    run_checked -- pytest -n auto
+    run_checked --tail 40 -- git push origin HEAD
+    run_checked --label push -- git push origin HEAD
+"""
+import os
+import subprocess
+import sys
+import time
+
+RESET, BOLD, RED, GREEN = "\033[0m", "\033[1m", "\033[31m", "\033[32m"
+
+
+def colour(s, c):
+    return f"{c}{s}{RESET}" if sys.stderr.isatty() else s
+
+
+def main(argv):
+    tail_n, label = 25, None
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--tail" and i + 1 < len(argv):
+            try:
+                tail_n = int(argv[i + 1])
+            except ValueError:
+                print("run_checked: --tail needs an integer", file=sys.stderr)
+                return 64
+            i += 2
+        elif argv[i] == "--label" and i + 1 < len(argv):
+            label = argv[i + 1]
+            i += 2
+        elif argv[i] == "--":
+            i += 1
+            break
+        else:
+            break
+    cmd = argv[i:]
+    if not cmd:
+        print(__doc__.strip().split("USAGE")[-1].strip(), file=sys.stderr)
+        return 64
+
+    logdir = os.path.expanduser("~/.claude/run_checked")
+    os.makedirs(logdir, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    slug = label or os.path.basename(cmd[0])
+    log = os.path.join(logdir, f"{stamp}-{slug}.log")
+
+    # Merge stderr into stdout for the LOG so the record is what a human saw, but
+    # keep the verdict on a channel a pipe cannot eat (see below).
+    with open(log, "wb") as fh:
+        try:
+            p = subprocess.Popen(cmd, stdout=fh, stderr=subprocess.STDOUT)
+            rc = p.wait()
+        except FileNotFoundError:
+            # ⚠️ THE CASE THAT STARTED THIS. `.venv/bin/python` missing inside a
+            # worktree is a FileNotFoundError, and under a pipe it became exit 0.
+            # Here it is a loud non-zero with the reason named.
+            msg = f"run_checked: COMMAND NOT FOUND: {cmd[0]}"
+            print(msg, file=sys.stderr)
+            print(colour("RC=127  (command not found — NOTHING RAN)", RED), file=sys.stderr)
+            print(msg)
+            print("RC=127")
+            return 127
+        except OSError as e:
+            print(f"run_checked: could not execute {cmd[0]}: {e}", file=sys.stderr)
+            print(colour("RC=126  (could not execute — NOTHING RAN)", RED), file=sys.stderr)
+            print("RC=126")
+            return 126
+
+    try:
+        with open(log, "r", encoding="utf-8", errors="replace") as fh:
+            lines = fh.read().splitlines()
+    except OSError:
+        lines = []
+
+    if len(lines) > tail_n:
+        print(f"… {len(lines) - tail_n} earlier lines in {log}")
+    for l in lines[-tail_n:]:
+        print(l)
+
+    verdict = f"RC={rc}  ({' '.join(cmd)[:70]})"
+    if rc != 0:
+        verdict += "  <- FAILED. Any success message above is about an INNER step."
+
+    # LAST on stdout, and ALSO on stderr. `| head`/`| tail` consume stdout only,
+    # so the verdict survives the truncation that hid it in both original cases.
+    print(colour(verdict, GREEN if rc == 0 else RED))
+    print(colour(verdict, GREEN if rc == 0 else RED), file=sys.stderr)
+    print(f"log: {log}", file=sys.stderr)
+    return rc
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
