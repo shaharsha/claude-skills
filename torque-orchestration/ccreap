@@ -1,0 +1,233 @@
+#!/usr/bin/env python3
+"""ccreap — remove worktrees that are provably finished, and REFUSE the rest loudly.
+
+Measured on the torque repo 2026-08-13: 216 present worktrees, 69.8 GB.
+
+    182  branch already merged into origin/develop     the safe population
+     20  unmerged
+     12  dirty
+      1  a session transcript is keyed to its cwd
+
+⚠️ DELETING A WORKTREE STRANDS THE SESSION FILED UNDER ITS CWD. Transcripts live at
+~/.claude/projects/<cwd-with-slashes-as-dashes>/, so removing the directory makes the
+session vanish from the project's list. This fleet has lost sessions that way twice.
+It is also the fear that stopped anyone reaping anything -- and it turns out to apply
+to ONE worktree out of 216. Both halves matter: the danger is real AND it is rare.
+
+WHAT THIS WILL AND WILL NOT DO
+
+A worktree is reaped only if EVERY condition holds. This is an intersection, not a
+heuristic, because each condition covers a different way of being wrong:
+
+    branch merged into the base   its commits survive the removal
+    working tree clean            no uncommitted work is destroyed
+    no transcript keyed to it     no session is stranded
+    not in the live registry      no running session loses its home
+    not the main worktree         never
+
+⚠️ IT NEVER RELOCATES A TRANSCRIPT. Rewriting a transcript's cwd means parsing every
+line and rewriting one field -- never `sed`, which would also rewrite paths inside the
+session's own recorded commands. That is a delicate operation on an irreplaceable file,
+it applies to one worktree here, and it does not belong in an automated sweep. The tool
+REFUSES those and prints the recipe.
+
+⚠️ AND IT IS DRY-RUN BY DEFAULT. `--delete` is required to remove anything.
+
+WHY IT PRINTS EVERY SKIP WITH A REASON
+A reaper that quietly skips and reports success is the vacuous shape: the skipped set
+is exactly where the danger lives, so it is the part that must be loud. "Reaped 170"
+with no other output is indistinguishable from a tool that silently declined to check.
+
+⚠️ THE MERGED TEST DEPENDS ON A CACHED REF. `--is-ancestor` against a stale
+origin/develop can call a branch unmerged that landed hours ago -- the safe direction --
+but it is still an answer about a revision you may not have. The base's fetch age is
+printed with the header, always, for the same reason stale_tree.py prints it.
+
+USAGE
+    ccreap --repo ~/Projects/torque                 # dry run, the default
+    ccreap --repo ~/Projects/torque --delete        # actually remove
+    ccreap --repo ~/Projects/torque --base origin/main
+"""
+import argparse
+import json
+import glob
+import os
+import subprocess
+import sys
+import time
+
+HOME = os.path.expanduser("~")
+PROJECTS = os.path.join(HOME, ".claude", "projects")
+SESSIONS = os.path.join(HOME, ".claude", "sessions", "*.json")
+
+
+def git(args, cwd=None):
+    try:
+        p = subprocess.run(["git"] + args, cwd=cwd, capture_output=True,
+                           text=True, timeout=30)
+        return p.returncode, p.stdout.strip(), p.stderr.strip()
+    except (OSError, subprocess.SubprocessError) as e:
+        return 127, "", str(e)
+
+
+def slug(path):
+    return path.replace("/", "-")
+
+
+def live_cwds():
+    out = set()
+    for f in glob.glob(SESSIONS):
+        try:
+            out.add(json.load(open(f)).get("cwd", ""))
+        except (ValueError, OSError):
+            continue
+    return out
+
+
+def worktrees(repo):
+    rc, out, _ = git(["worktree", "list", "--porcelain"], repo)
+    if rc != 0:
+        return None
+    items, cur = [], {}
+    for line in out.splitlines():
+        if line.startswith("worktree "):
+            if cur:
+                items.append(cur)
+            cur = {"path": line.split(" ", 1)[1]}
+        elif line.startswith("branch "):
+            cur["branch"] = line.split(" ", 1)[1].replace("refs/heads/", "")
+        elif line.startswith("HEAD "):
+            cur["head"] = line.split(" ", 1)[1]
+        elif line.strip() == "bare" or line.startswith("prunable"):
+            cur["skip"] = True
+    if cur:
+        items.append(cur)
+    return items
+
+
+def du_mb(path):
+    rc, out, _ = subprocess.run(["du", "-sm", path], capture_output=True,
+                                text=True).returncode, "", ""
+    try:
+        p = subprocess.run(["du", "-sm", path], capture_output=True, text=True, timeout=30)
+        return int(p.stdout.split()[0])
+    except Exception:
+        return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="ccreap", description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--repo", required=True)
+    ap.add_argument("--base", default="origin/develop")
+    ap.add_argument("--delete", action="store_true",
+                    help="actually remove. Without this NOTHING is deleted.")
+    a = ap.parse_args()
+
+    repo = os.path.abspath(os.path.expanduser(a.repo))
+    rc, _, _ = git(["rev-parse", "--git-dir"], repo)
+    if rc != 0:
+        print(f"CANNOT CHECK — {repo} is not a git repository", file=sys.stderr)
+        return 2
+    rc, _, _ = git(["rev-parse", "--verify", "--quiet", a.base], repo)
+    if rc != 0:
+        print(f"CANNOT CHECK — no ref {a.base} in {repo}. Every merged-test would "
+              f"fail closed, so this would report 'nothing safe' for the wrong "
+              f"reason.\nexit 2 is not a pass.", file=sys.stderr)
+        return 2
+
+    # The base's freshness, for the same reason stale_tree.py prints it: the whole
+    # safety decision is measured against this ref.
+    rcg, common, _ = git(["rev-parse", "--path-format=absolute", "--git-common-dir"], repo)
+    age = "unknown"
+    if rcg == 0:
+        try:
+            s = time.time() - os.path.getmtime(os.path.join(common, "FETCH_HEAD"))
+            age = f"{int(s//60)}m" if s < 5400 else f"{int(s//3600)}h"
+        except OSError:
+            pass
+
+    wts = worktrees(repo)
+    if wts is None:
+        print("CANNOT CHECK — `git worktree list` failed", file=sys.stderr)
+        return 2
+
+    main_wt = wts[0]["path"] if wts else None
+    live = live_cwds()
+    reap, hold = [], []
+
+    for w in wts:
+        p = w.get("path", "")
+        if w.get("skip") or not p:
+            continue
+        if p == main_wt:
+            hold.append((p, "MAIN worktree — never"))
+            continue
+        if not os.path.isdir(p):
+            hold.append((p, "directory already gone (run `git worktree prune`)"))
+            continue
+        if p in live:
+            hold.append((p, "a LIVE session is registered with this cwd"))
+            continue
+        if os.path.isdir(os.path.join(PROJECTS, slug(p))):
+            hold.append((p, "SESSION TRANSCRIPT keyed to this cwd — relocate it first, "
+                            "by hand (parse per line, rewrite the top-level cwd; never sed)"))
+            continue
+        rcs, st, _ = git(["status", "--porcelain"], p)
+        if rcs != 0:
+            hold.append((p, "could not read status — refusing rather than guessing"))
+            continue
+        if st:
+            hold.append((p, f"DIRTY — {len(st.splitlines())} uncommitted file(s)"))
+            continue
+        br = w.get("branch")
+        if br:
+            rcm, _, _ = git(["merge-base", "--is-ancestor", f"refs/heads/{br}", a.base], repo)
+            if rcm != 0:
+                hold.append((p, f"branch {br} NOT merged into {a.base}"))
+                continue
+        else:
+            head = w.get("head", "")
+            rcm, _, _ = git(["merge-base", "--is-ancestor", head, a.base], repo)
+            if rcm != 0:
+                hold.append((p, "detached HEAD not contained in " + a.base))
+                continue
+        reap.append(p)
+
+    print(f"ccreap · {repo}")
+    print(f"base {a.base} · last fetched {age} ago · "
+          f"{'DELETING' if a.delete else 'DRY RUN — nothing will be removed'}")
+    print()
+    print(f"HELD BACK — {len(hold)}   (this list is the point; skipping quietly is the defect)")
+    for p, why in sorted(hold, key=lambda x: x[1]):
+        print(f"  · {os.path.basename(p):46} {why}")
+    print()
+    print(f"SAFE TO REAP — {len(reap)}   merged AND clean AND no transcript AND not live")
+    freed = 0
+    for p in reap:
+        mb = du_mb(p)
+        freed += mb
+        print(f"  · {os.path.basename(p):46} {mb:6} MB")
+    print()
+    print(f"{freed/1024:.1f} GB would be reclaimed" if not a.delete
+          else f"{freed/1024:.1f} GB being reclaimed")
+
+    if not a.delete:
+        print("\nDRY RUN. Re-run with --delete to remove the SAFE list above.")
+        return 0
+
+    ok = fail = 0
+    for p in reap:
+        rcr, _, err = git(["worktree", "remove", "--force", p], repo)
+        if rcr == 0:
+            ok += 1
+        else:
+            fail += 1
+            print(f"  FAILED {os.path.basename(p)}: {err[:90]}")
+    git(["worktree", "prune"], repo)
+    print(f"\nremoved {ok}, failed {fail}, held {len(hold)}")
+    return 1 if fail else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
