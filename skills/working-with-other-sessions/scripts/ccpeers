@@ -159,6 +159,39 @@ def desktop_title(uuid):
     return None
 
 
+
+def title_disagreement(sid):
+    """
+    Every Desktop entry for this session, and whether they AGREE on the title.
+
+    🔴 A SESSION HAS UP TO THREE ENTRIES AND set_session_title UPDATES ONLY SOME.
+    Measured 2026-08-13 across five live sessions, all with the same shape:
+
+        local_<sid>            acct A   "TOR-426 CLOSED -> TOR-545"   <- current
+        local_<uuid5(sid+B)>   acct B   "TOR-426 CLOSED -> TOR-545"   <- current
+        local_<uuid5(sid+A)>   acct A   "TOR-277: subplot-grid ..."   <- TWO TICKETS STALE
+
+    The rename lands on some entries and not the other, returns success, and the
+    orphan keeps a title from two tickets ago FOREVER.
+
+    ⚠️ THE COST IS A MISROUTE, NOT UNTIDINESS. A dispatcher read `local_9c89dad2` in
+    a listing as a DIFFERENT LANE -- a TOR-426 session -- when it was the TOR-572
+    lane wearing an old title. **A stale alias is indistinguishable from another
+    session, because the only field that would distinguish them is the one that
+    rotted.** Ids are stable; a TRANSCRIBED id is not, and a stale uuid is worse
+    than a stale name because it carries the authority of looking canonical.
+    """
+    seen = {}
+    for u in [sid] + [str(uuid.uuid5(_NS, sid + a)) for a in _ACCOUNTS]:
+        for f in glob.glob(os.path.join(_DESKTOP_BASE, "*", "*", "local_" + u + ".json")):
+            try:
+                seen[u] = (json.load(open(f)) or {}).get("title")
+            except Exception:
+                seen[u] = None
+    titles = {t for t in seen.values() if t}
+    return (len(seen), sorted(titles)) if len(titles) > 1 else (len(seen), [])
+
+
 def desktop_id(sid: str) -> str:
     """
     The DESKTOP-side id for a session, derived rather than looked up.
@@ -286,6 +319,10 @@ def main() -> int:
                 too_old = False
             mark = f"  [v{r['version']} < 2.1.224 — RESTART to get messaging]" if too_old \
                    else "  [no socket: UNREACHABLE]"
+        n_ent, disagree = title_disagreement(r["sessionId"])
+        if disagree:
+            mark += (f"  [!ALIAS {n_ent} Desktop entries DISAGREE on title — a stale one "
+                     f"reads as a different lane: {disagree[0][:38]!r} vs {disagree[-1][:38]!r}]")
         if r.get("shared"):
             mark += f"  [!SHARED sessionId with {', '.join(r['shared'])} — a name-addressed send picks ONE]"
         t = r["title"] or "<NO TITLE>"
