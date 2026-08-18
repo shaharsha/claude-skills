@@ -35,6 +35,24 @@ wrong is expensive.
 | Change written, ready to commit or merge | `code` | the intent and constraints you give it |
 | Change written from a plan | `code-vs-plan` | the plan, requirement by requirement |
 
+**It is not only for code.** The three modes name code because that is the common
+case, but nothing in the mechanism cares: any artifact you can render as text can
+be reviewed this way. Measured 2026-08-18 on a spreadsheet and a 40-document
+evidence set, where it found a hardcoded summary row that had silently drifted
+away from the live formulas feeding it.
+
+Two things make that work, and both generalise:
+
+- **Hand it the outputs as well as the source.** The reviewer cannot execute
+  anything, so a formula, a template or a query is opaque to it. Give it both
+  representations — the formulas *and* the evaluated values, the template *and*
+  the rendered result — and it can compare them. That comparison is what catches
+  drift; neither representation alone would have.
+- **Pre-extract anything binary.** Read-only blocks the reviewer from running
+  `pdftotext` or an OCR pass itself, so do it first and stage the text beside the
+  originals. Say in the prompt which files are extracted text and how reliable
+  the extraction is, or it will treat OCR noise as evidence.
+
 If both a plan and a diff exist, `code-vs-plan` is usually the one you want —
 "does this do what we said" catches a class of defect that neither of the
 others sees.
@@ -111,6 +129,7 @@ Read-only restricts writes, not thinking. Measured on codex-cli 0.145.0:
 | Write anywhere — repo, `/tmp`, `mkdir` | ❌ no writable location exists |
 | Raw network — `curl`, `urllib`, `ping` | ❌ DNS resolution fails |
 | Web search | ✅ with `--search` |
+| **Look at images** — scans, screenshots, diagrams | ✅ `codex exec -i FILE` — see below |
 | **Run the test suite or a build** | ❌ **see below** |
 
 `--search` is worth adding when correctness depends on something outside the
@@ -119,6 +138,29 @@ known advisory, whether a protocol or format is being implemented correctly.
 Leave it off for reviews of internal logic — it costs latency and adds another
 untrusted-input channel for no gain. It works despite the network being blocked
 because the search executes at OpenAI, not locally.
+
+**The reviewer can see images.** `codex exec` takes `-i/--image FILE` (repeatable),
+and the model reads them properly — measured 2026-08-18 on eight scans: a
+photographed Hungarian invoice, two banking screenshots and several contract
+pages. It transcribed printed figures accurately and independently matched a
+second vision model on the one number a whole calculation depended on. That makes
+this worth reaching for on anything the text layer cannot carry: scanned
+paperwork, screenshots, rendered UI, diagrams, a photo of a whiteboard.
+
+Two mechanics, because the wrapper does not cover this path. The script has no
+image flag, so hand-roll `codex exec` — and then `--search` is rejected
+(`unexpected argument '--search' found`); the config key is the only route there
+too, exactly as inside the script:
+
+```bash
+cat /abs/path/prompt.md | codex exec -s read-only \
+  -c 'tools.web_search=true' -m gpt-5.6-sol -c model_reasoning_effort=high \
+  -i shot1.png -i shot2.png > review.md 2>review.log
+```
+
+**Pipe the prompt — do not pass it as a trailing argument.** `--image` is a
+greedy multi-value flag: it swallows the trailing positional prompt as if it were
+another filename, leaving codex with no prompt at all. See the hang below.
 
 **The reviewer cannot execute your code.** Anything needing a temp directory
 dies under read-only — pytest fails outright with `No usable temporary directory
@@ -131,6 +173,14 @@ be induced to write by anything it reads in the repo, and you would be running
 an agent with a stated goal of finding fault and the ability to act on it. If a
 finding genuinely hinges on runtime behaviour, run the test yourself — you have
 the tools and the context to do it properly.
+
+One narrow exception, and it turns on *what* the reviewer is pointed at. When the
+target is a **disposable copy** rather than your working tree — evidence staged
+into a scratch directory for this review — `-s workspace-write` gives the
+reviewer a temp dir its own tooling needs while confining it to a directory you
+can regenerate. That is a different bet from granting write access to real work,
+and it is worth taking when the read-only sandbox is the thing blocking the
+review. It is never `danger-full-access`, which reaches the whole filesystem.
 
 ## Confirm the round actually ran
 
@@ -167,6 +217,16 @@ died — commonly on a usage limit, which the CLI reports as ordinary output. Th
 script handles this correctly (`exit 70` when the JSON is empty, otherwise
 codex's own status), so **the exit code is a real signal**.
 
+⚠️ **A round can also never start, and that one does not exit at all.** If codex
+receives no prompt it prints `Reading prompt from stdin...` and waits forever —
+no error, no exit code, no `.md`, and a `.log` holding that single line. Measured
+2026-08-18, twice in a row from two different causes: `-i/--image` greedily
+consuming the trailing positional prompt as another filename, and zsh's
+`read -r -d '' PROMPT <<'EOF'` leaving `PROMPT` empty. Both look exactly like a
+reviewer thinking hard for twenty minutes. **A long-running round with a `.log`
+whose last line is `Reading prompt from stdin...` is hung, not busy** — kill it
+and pipe the prompt in on stdin.
+
 **The wrapper was measured in both directions on 2026-08-04 and is correct:** a
 successful round exits 0 with the `.md` and `.json` both present; a failed round
 leaves no `.json`, takes the empty-output branch, and exits non-zero. So when a
@@ -180,8 +240,13 @@ never in the script.** Three lanes each destroyed it a different way that day:
   is a fact about *the task*, not about the script. Read the script's own status.
 - **A trailing command.** A compound invocation ending in `echo` reports the
   `echo`'s status — which is 0 whether or not the script died.
+- **`status=$?` under zsh** (measured 2026-08-18, a fourth way found later).
+  `status` is a read-only builtin in zsh, so the assignment silently fails *and*
+  aborts the rest of that command line — every check written after it never runs,
+  while the transcript looks like it did. The skill's examples read naturally as
+  bash; on a zsh box that one variable name is a trap. Use `rc=$?`.
 
-All three have one fix: **capture the status INSIDE the invocation**, before any
+All of these have one fix: **capture the status INSIDE the invocation**, before any
 pipe or trailing command, so the number is a measurement of the script rather
 than of your shell.
 
@@ -427,6 +492,16 @@ Extract the findings and discard the rest.
   global config. The script therefore passes `-c sandbox_mode="read-only"` on
   every invocation, resume included. If you ever hand-roll a
   `codex exec resume`, pass it yourself and check the header line the run prints.
+- **`--prompt-file` must be an ABSOLUTE path.** The script `cd`s into `--repo`, so a relative path is
+  resolved against the repo directory, not your shell's cwd. Measured on 2026-08-18: passing
+  `--prompt-file review2/README.md` from the parent directory died with
+  `codex_review.sh: line 306: review2/README.md: No such file or directory` and **exit 1**, leaving a
+  `.log` with no sibling `.md`. That is the same signature as a round killed by a usage limit, so the
+  cause is not obvious from the artifacts — and it is easy to misread a path typo as a dead reviewer.
+  The `.md`-exists check above catches it either way; this note just saves you the diagnosis. Passing
+  a path *inside* the repo is fine and even useful (the reviewer can then read it as a repo file) —
+  but write it absolute.
+
 - **Artifacts land in `.codex-review/`**, which the script adds to
   `.git/info/exclude` — local to the clone, so it never shows up as a repo
   change.
