@@ -113,6 +113,14 @@ ccverify pr <N>                          # "it landed" -> gh. exit 1 means it di
 `exit 1` is the gate; **`exit 2` means it could not check and is NOT a pass.** It prints the file list
 it parsed — read that, because a wrong parse fails the same way a clean diff passes.
 
+⚠️ **A plan with no `FILES:` / `NOT TOUCHING:` block is exit 2, and that is the correct outcome.**
+Only those blocks declare; a path the plan mentions in prose is not declared. Until 2026-08-24 the
+parser read the whole document, which failed PERMISSIVE — this gate's product is the UNDECLARED list,
+so an over-broad DECLARED set shrinks it by construction. Measured on a real 661-line plan:
+`declared 131`, including a slash command, a git range, `$52.80` from a rounding example and five CSS
+class names. **Every plan written before that date lands on exit 2. Send it back for a file list; do
+not read the old PASS as evidence** — it was read off prose.
+
 ⚠️ **Point `--repo` at the lane's WORKTREE, at the head under review.** Run bare in the main checkout,
 `origin/develop...HEAD` is empty and the tool reports that checkout's untracked scratch as the PR's
 diff. It now refuses this with exit 2 rather than ruling — but the habit of pointing it correctly is
