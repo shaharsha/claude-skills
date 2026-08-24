@@ -203,6 +203,18 @@ They were not — one belonged to a lane reviewing a different ticket entirely.
 grep -l "$(basename "$PROMPT_FILE")" .codex-review/*.md   # confirm BY CONTENT
 ```
 
+⚠️ **A GLOB FOR THE ROUND MATCHES THE PROMPT YOU WROTE FOR IT.** Measured 2026-08-24: a lane polled
+`ls "$D"/*r2*.md` for its second round, matched its own `…-r2.prompt.md`, printed `R2 MD LANDED` and
+reported the round complete. **It had not started** — no `.json`, no `.md`, and `verify_artifact.sh`
+correctly said `CANNOT-TELL — artifact missing`. The prompt file is written *before* the round and
+sits in the same directory, so **every substring glob naming the round matches it first**.
+
+Match the **full artifact shape** — `.codex-review/<stamp>-<label>.md`, with `<label>` anchored at
+the end — or better, key on the `.json`, which no prompt file can impersonate. And note what this
+is: *the needle was never in the haystack*, the same defect a review round exists to find. The lane
+that hit it had confirmed exactly that flaw in its own test code two hours earlier, fixed it, and
+written the commit message about it — **then rebuilt it in the wait condition.**
+
 **A unique label proves the file is yours only if you also wrote the label.
 Content proves it either way.** One lane identified theirs by grepping each
 candidate for their own plan's filename: **1 of 43 matched**, so the test had 42
@@ -226,6 +238,38 @@ consuming the trailing positional prompt as another filename, and zsh's
 reviewer thinking hard for twenty minutes. **A long-running round with a `.log`
 whose last line is `Reading prompt from stdin...` is hung, not busy** — kill it
 and pipe the prompt in on stdin.
+
+⚠️ **A third cause, and it bites specifically when hand-rolling from Claude Code:
+passing the prompt as an argument does NOT stop codex reading stdin.** `codex
+exec [PROMPT]` appends stdin as a `<stdin>` block whenever stdin is not a TTY, so
+a prompt argument plus an open, never-closing stdin — which is what a Claude Code
+`Bash` call gives it — waits forever with the prompt already in hand. Measured
+2026-08-21 on codex-cli 0.145.0: a 10-minute timeout whose entire log was
+`Reading additional input from stdin...`. **Always redirect: `< /dev/null`.** The
+wrapper pipes the prompt and is unaffected; this is a hand-rolling trap only.
+
+### A round can run, exit 0, and have read nothing
+
+⚠️ **Codex's own sandbox cannot always start inside another agent's sandbox, and
+the round completes anyway.** Measured 2026-08-21, launching `codex exec` from a
+Claude Code `Bash` call: every command the reviewer tried — `cat AGENTS.md`,
+`pwd`, `git diff` — died with *"the shell host failed during handshake"*. Codex
+was honest about it in its final message and **still exited 0 and still wrote a
+findings artifact**. So this passes every check above: the `.md` exists, the
+content grep matches, the exit code is 0. The only thing that catches it is
+reading the artifact's own text.
+
+**So the artifact check has two halves, not one.** *Does a `.md` exist* and *does
+it show the reviewer actually reaching the source* — a cited `file:line`, a
+quoted snippet, something it could only have obtained by reading. A findings file
+whose content is an apology for not being able to look is a failed round wearing
+a successful round's clothes.
+
+The fix is to stop nesting the sandboxes. Run the review with the host sandbox
+off (`dangerouslyDisableSandbox: true` on the Bash call) and let **codex** hold
+the read-only boundary via `-s read-only`, which is the boundary that matters:
+the reviewer still cannot write, and the review is still adversarial-safe. Do not
+respond by loosening `-s` — that trades the wrong one away.
 
 **The wrapper was measured in both directions on 2026-08-04 and is correct:** a
 successful round exits 0 with the `.md` and `.json` both present; a failed round
@@ -466,7 +510,15 @@ Extract the findings and discard the rest.
   with prompt text fails with `error: the argument '--uncommitted' cannot be
   used with '[PROMPT]'`. Since the reviewer needs your intent to be useful, this
   skill uses plain `codex exec` and describes the scope in the prompt. Don't
-  "simplify" it back to the `review` subcommand.
+  "simplify" it back to the `review` subcommand. **`--base <BRANCH>` is the same
+  trap** and is the tempting one, because reviewing a branch against `main` is
+  exactly the common case: `codex exec review --base main "<instructions>"` fails
+  with `the argument '--base <BRANCH>' cannot be used with '[PROMPT]'`. You get
+  the branch scope or your intent, never both — so state the scope in the prompt
+  (`get the diff with: git diff main...HEAD`) and keep the intent.
+- **`-C/--cd` is a parent-level flag and the `review` subcommand rejects it**
+  (`error: unexpected argument '-C' found`), which reads like a bad path rather
+  than a misplaced flag. `codex exec -C <dir> …` is fine.
 - **`--output-schema` is silently ignored by `codex exec review`.** It is
   accepted, exits 0, and returns prose anyway. Structured findings only work via
   `codex exec`.
