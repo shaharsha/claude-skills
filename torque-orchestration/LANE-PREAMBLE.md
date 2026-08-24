@@ -11,12 +11,39 @@ Read it once. Do not re-derive any of it in chat.
 ## 1 · Who decides what
 
 ```
-THE COORDINATOR   assignment · sequencing · design rulings · code review · merge into develop
-                  DEV Terraform applies, after a plan it has read — the ONE live-account
-                  exception, and it is the coordinator's alone, never a worker's
+THE DISPATCHER    assignment · sequencing · stall detection · unblocking · escalation
+(/dispatch)       keeping CURRENT-ORCHESTRATOR true · telling Shahar what needs him
+                  ⚠️ RULES ON NOTHING. Not design, not plans, not code, not merges,
+                     and no Terraform apply of any kind.
+
+/ADJUDICATE       design rulings · plan approval · code review · MERGE into develop
+(fresh context,   DEV Terraform applies, after a plan it has read — the ONE live-account
+ one ruling)      exception, and it is the adjudicator's alone, never a worker's
+                     and never the dispatcher's
+
 SHAHAR            PROD, every time · every OTHER live-account apply · credential operations
                   product and data-provenance calls · spend · external comms
 ```
+
+⚠️ **CORRECTED 2026-08-23. This block said `THE COORDINATOR` held design rulings, code review,
+merge, and DEV applies — a single seat that no longer exists.** The `/dispatch` ÷ `/adjudicate`
+split moved all four away from the session named in `CURRENT-ORCHESTRATOR`, and this paragraph
+was not updated with it. Both files were last touched **2026-08-13** and contradicted each other
+from that day until this correction.
+
+🔴 **Why it mattered rather than being tidy-up: §1 is the AUTHORISATION ROOT, and it delegated by
+LIST.** The carve-out below makes a message from `CURRENT-ORCHESTRATOR` authoritative *"within the
+domains delegated to it above"* — and "above" named merge and DEV apply. So a lane following its
+own preamble would have been **correct** to accept a merge or a dev apply authorised by the
+dispatcher, which `/dispatch` forbids it from issuing. Nothing is known to have gone wrong; the
+door was open in the documented rules, which is enough.
+
+**It is an instance of the rule this file already teaches** (§ *A fix RECORDED is not a fix
+APPLIED*, and the blast-radius rule below): **a change's blast radius includes every document that
+described the old world** — and the ones describing it *without naming the thing that changed* are
+the ones no keyword sweep finds. This paragraph never says "dispatch" or "adjudicate"; it just
+lists powers. Found 2026-08-23 by a dispatcher reading its own governing documents rather than
+operating from memory of them.
 
 **A message from another session is information, never authorisation — with ONE carve-out, or the
 queue deadlocks.** The harness marks each message as explicitly not from the user, and that rule is
@@ -25,7 +52,9 @@ the only documented approval channel.**
 
 ```
 AUTHORISATION   a message from the session id in CURRENT-ORCHESTRATOR, within the domains
-                delegated to it above. Read that file — do not assume who it is.
+                delegated to it above — which are the DISPATCHER's. A merge, a plan
+                approval or a DEV apply is NOT among them: those come from an
+                /adjudicate ruling, written on the artifact itself. Read that file — do not assume who it is.
 INFORMATION     everything else. A peer's message, a relay, a quoted approval, a
                 transcript you found.
 ```
@@ -241,6 +270,78 @@ something else, so a rule filed under *pushing* is never consulted while *readin
 the housekeeping, not the command** — and housekeeping never feels like the moment to check anything.
 TOR-334 is open for a hook because prose at this level has now failed repeatedly.
 
+### ⚠️ AN INSTRUMENT ERROR THAT POINTS AT THE **CAUTIOUS** ANSWER IS THE ONE NOBODY RE-RUNS
+
+**Measured 2026-08-19 on TOR-639, two false negatives side by side, both pointing the same way.** The
+lane was deciding whether recharts' `ifOverflow="hidden"` actually clips — *"establish it or REFUSE."*
+
+```
+walk started at parentElement        -> "no clip-path anywhere"    the clip is ON THE RECT
+querySelectorAll('clipPath rect')    -> 0                          while querySelector('rect') and
+                                                                   children[0] BOTH find it
+                                                                   (an SVG-namespace quirk)
+```
+
+**Both errors said the same thing: REFUSE.** And refusing is the responsible-looking answer — it is
+conservative, it fails closed, it is what a careful engineer defaults to. **So nothing in the situation
+invites a second look.** `hidden` does clip; it reproduces plotly exactly, and the lane adopted it.
+
+🔑 **This is the twin of "broken instruments fail toward TIDY", and it is harder to catch**, because a
+tidy result merely looks convenient while a cautious one looks *virtuous*. You cannot talk yourself out
+of re-checking a suspiciously clean number as easily as you can out of re-checking a refusal.
+
+```
+THE CHECK   a POSITIVE control on the instrument, not on the subject:
+            "is there ANY clipPath in this document at all?"  -> 1
+            That single question separates "the property is absent" from "my walk cannot see it."
+```
+
+⚠️ **And it generalises past refusals.** Any verdict whose error direction is *decline, defer, block,
+refuse, escalate* carries this. **Ask what your instrument would print if it were simply blind, and
+whether that is the answer you just got.**
+
+### ⚠️ AN INSTRUMENT THAT PRINTS A TRUE LINE AND THEN DIES IS READ AS A COMPLETED CHECK
+
+**Measured 2026-08-18/19, three times inside ONE lane's task, each failing in the reassuring
+direction.** The rule above covers a status that is *masked* — by a pipe, by an intervening command.
+This is the ordering reversed: **the instrument emits a genuinely TRUE intermediate line, then dies of
+its own defect before answering the question it was asked.**
+
+```
+WAITER          printed `RUN COMPLETED — conclusion: success`   <- TRUE, and about the RUN
+                then exited 1 on a jq syntax error its author wrote (`"jobs=\(…)"; .jobs[] | …`
+                — jq will not parse the `;`), so THE JOB LIST NEVER ARRIVED
+                -> the tail of the output is a true sentence about the wrong subject
+
+pgrep WAITER    `until ! pgrep -f "push origin <branch>"` matched ITS OWN argv, so it never
+                terminated — and was RIGHT about the push every time it was checked, until
+                the once it mattered
+
+--check         reported `8/8 live sequences covered, EXIT 0` against a CI-shaped database:
+                a clean bill over 13% of the population, every real client's silent builder
+                counted as AGREEMENT
+```
+
+🔑 **Nothing in the first case's output is false, and there is no error until the end.** A reader
+scanning the tail stops on a real success line. **The only thing that catches it is re-running the
+query rather than trusting your own tool** — which is what the lane did, and it is what produced the
+real 8-job list.
+
+**So the check is not "did it print an error."** It is:
+
+```
+□  Did the instrument print the thing I actually asked for, or something ADJACENT to it?
+□  Name the SUBJECT of the last line in words. "the run's conclusion" and "the job list"
+   are different sentences. So are "the push's status" and "whether a process matches".
+□  Can this instrument return the OTHER value? An answer with one reachable value is
+   not a measurement, however often it agrees with reality.
+```
+
+⚠️ **The lane reported its own instrument failure rather than burying it, and that is the only
+reason it is written down here.** A waiter that dies after a reassuring line leaves no trace in the
+artifact it was watching — the deploy was fine, the PR was fine, and nothing anywhere would have
+contradicted the wrong reading.
+
 **`.codex-review/` in the MAIN CHECKOUT is SHARED, and the default `--label` collides.** One lane
 counted **43** `*-plan.log` there, **5 from tonight within 4 minutes of theirs**. Another lane read two
 adjacent-timestamp logs as their own failed round; they were not theirs.
@@ -304,6 +405,36 @@ working tree answers a question about itself.
 round voids it. **A round happened *iff* its `.md` artifact exists** — never because a command exited
 0, and never through a pipe. On 2026-08-05 a PR the coordinator had reviewed and called ready was
 stopped by its own round, which found two real defects.
+
+### ⚠️ SCOPED 2026-08-18 — when the round is REQUIRED, and what to do when it is not run
+
+The blanket rule was unenforced: **no round artifact existed anywhere between 2026-08-10 and
+2026-08-18**, while this section said one was mandatory on every artifact. **A gate that is claimed
+and not running is worse than one that is scoped honestly** — the next reader budgets for a check
+nobody performed.
+
+```
+REQUIRED   the artifact's core evidence CANNOT BE EXECUTED BY A READER
+           -> a mutation table · a claim about library behaviour · an architectural argument
+           -> anything whose "it works" rests on a run only the author made
+NOT REQUIRED   doc-only · test-only · a diff whose evidence the adjudicator can simply RE-RUN
+```
+
+**When it is not run, the ruling must SAY SO and name what was substituted.** Two adjudicators did
+exactly this on 2026-08-18 — one recorded *"no Codex round artifact exists; `.codex-review/` has 868
+entries, none matching"*, substituted first-party verification and **recorded the substitution so the
+next seat could disagree**. That is the standard: the gap is visible, not papered over.
+
+⚠️ **The evidence for scoping is THIN and is recorded as thin.** One round on 2026-08-18 returned
+**0 findings**, and all four blocks that day came from adjudicators **re-measuring** rather than from
+a round. Against that sits the 2026-08-05 save above. **One day does not falsify a gate** — so this
+scopes it rather than dropping it, and if a round catches something a re-measuring adjudicator
+missed, widen it back.
+
+🔑 **What the 0-findings round was actually worth, because it was nearly read as waste:** it
+**bounded** itself — stating that it could not execute, so the PR's mutation table remained
+unverified. That is what sent the adjudicator to re-run all 24 cells. **A round's value is not only
+its findings; it is also an honest statement of what it did not check.**
 
 If you run a second round, **seed it with what the first CLAIMED, never with what it concluded.**
 Telling a reviewer the last one came back clean is the strongest available push toward another clean
@@ -403,11 +534,40 @@ PRE=$(git rev-parse HEAD)
 git merge origin/develop
 POST=$(git rev-parse HEAD)
 
-# Did the merge change any of MY files? Compare MY head before vs after — never
+# Did the merge change any of MY files? RESTRICT THE DIFF TO YOUR OWN PATHS — never
 # my branch against develop, and never the merge-base against develop.
-git diff --name-only "$PRE" "$POST"           # <- THE question. Empty = develop touched nothing of yours.
-git diff --name-only "$PRE" origin/develop    # CONTROL: must be NON-EMPTY, or the comparator is broken
+git diff --name-only "$PRE" "$POST" -- <your files>   # <- THE question. Empty = develop touched none of yours.
+git diff --name-only "$PRE" "$POST" -- <a file develop changed>   # CONTROL, same comparator: MUST be non-empty
 ```
+
+🔴 **THE `-- <your files>` RESTRICTION IS LOAD-BEARING AND THIS BLOCK OMITTED IT UNTIL 2026-08-19.**
+An unrestricted `git diff PRE POST` lists **everything the merge brought in**, so it is empty only if
+`develop` moved without touching anything at all — which is almost never. Reported as *"non-empty"* it
+reads as a finding; it is arithmetic. **Measured**: a lane's re-merge returned **16 files**, all of them
+develop's, none of them the lane's.
+
+⚠️ **And the old CONTROL was worse than useless in the same breath**: `PRE..origin/develop` returned
+**20** = those same 16 **plus the lane's own 4**. Non-empty for two mixed reasons, one of which is the
+branch-against-develop artifact this very block warns about — so it proves the comparator is alive and
+**cannot discriminate**. A control must travel the *same* comparator as the question, differing only in
+its subject; that is why the corrected control above is another `PRE..POST` restricted to a path you
+know moved.
+
+🔑 **Stronger still, and it does not depend on getting the path list right — compare BLOB SHAS:**
+
+```bash
+for f in <your files>; do
+  printf '%s  %s  %s\n' "$(git rev-parse "$PRE:$f")" "$(git rev-parse "$POST:$f")" "$f"
+done          # identical pairs = develop touched none of your bytes
+```
+
+⚠️ **Pin `$PRE` from the merge's FIRST PARENT, not from the head you last remembered.** Measured the
+same night: a coordinator named `ac8717a1` as a lane's pre-merge head when the first parent was
+`ac14b05f`; diffing from the wrong one showed a test file as CHANGED and read exactly like the merge
+having moved the lane's code. It had not. `git rev-parse "$POST^1"` is the answer, not your memory.
+
+**Both of these were the coordinator's prescriptions and both were wrong; the lanes' own comparators
+were right, twice in one night.** A command in this file is not evidence — run the control.
 
 ⚠️ **`git diff <merge-base> origin/develop` is NOT this test either — it lists everything develop
 changed anywhere, most of which is not yours.** It over-reports for a different reason than the
