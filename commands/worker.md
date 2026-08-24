@@ -210,16 +210,41 @@ git show origin/develop:<path>
 
 Then **enter plan mode and write the plan.** Do not write code.
 
-### ⚠️ Every plan states the FILES IT WILL TOUCH, in backticks, as a list.
+### ⚠️ Every plan states the FILES IT WILL TOUCH, in an explicit BLOCK.
 
 ```
 FILES: `src/charts/ChartView.tsx`  `src/charts/axis.ts`  `src/manifest/controls.ts`
 NOT TOUCHING: `api/services/chart_compiler.py`  `tests/baseline/`   (TOR-557 holds these)
 ```
 
-⚠️ **Backtick the paths in BOTH lines.** `ccverify` reads backticked tokens; an unbackticked path under
-`NOT TOUCHING:` is silently dropped rather than checked, so the prohibition you meant to declare simply
-does not exist. Prose there ("the manifest schema") is fine as commentary and is ignored.
+A bulleted list under the header works too, and is easier to amend:
+
+```
+FILES:
+  - `src/charts/ChartView.tsx`
+  - `src/charts/axis.ts`
+NOT TOUCHING:
+  - `tests/baseline/`     (TOR-557 holds these)
+```
+
+⚠️ **ONLY THE BLOCK COUNTS. A path your plan MENTIONS in prose is not declared** — and until
+2026-08-24 it was. `ccverify` read the whole document, so every backticked token was a declaration:
+measured on a real 661-line plan, `declared 131`, including a slash command, a git range, `$52.80`
+from a rounding example and five CSS class names. That direction is PERMISSIVE — this gate's product
+is the UNDECLARED list, so an over-broad DECLARED set shrinks it, and a plan that merely discussed
+`tests/conftest.py` licensed editing it on a day two lanes were colliding in that exact file.
+
+⚠️ **The block is CONTIGUOUS: the header plus the list under it.** A heading, a prose sentence, or a
+second blank line closes it, and paths further down the document are not read. Several `FILES:` blocks
+in one plan are fine — they are unioned.
+
+⚠️ **A plan with no such block is `CANNOT CHECK` (exit 2), not a pass.** There is nothing to check the
+diff against, and inferring the list from prose is the defect above.
+
+⚠️ **Backtick the paths, or leave the line bare — do not MIX on one line.** Inside a block a line with
+no backticks is read as bare paths, but a line that has *any* backticked token is read as backticked
+only, so `NOT TOUCHING: `a.py` api/x.py` silently drops `api/x.py`. Prose on a list item after the
+path ("— the entry point") is fine and is ignored.
 
 **`NOT TOUCHING:` is checked in the opposite direction** — those files must be ABSENT from your diff,
 and touching one is a harder failure than an undeclared file, because you named it out of bounds

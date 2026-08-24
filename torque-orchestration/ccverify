@@ -19,6 +19,10 @@ delivered successfully. Delivery was never the problem.
 
 The parse is always printed. A silently-wrong file list would recreate the exact
 failure this is meant to catch, so you are shown what it read, not just what it ruled.
+
+`files` reads its declaration from an EXPLICIT BLOCK — `FILES:` / `NOT TOUCHING:` and the
+contiguous list under it. Nothing outside a block is a declaration, and a plan with no block
+is exit 2. See parse_declared for what the alternative cost, measured.
 """
 
 import argparse
@@ -73,13 +77,29 @@ DECLARE_HEAD = re.compile(
     r"^[\s>#*_\-+]*(?:\*\*)?\s*(FILES?|DECLARED?|TOUCHING|SURFACE)\b\s*(?:\*\*)?\s*:",
     re.I)
 
+# Lines that may CONTINUE a block once a header has opened one. Anything else closes it.
+LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+\S")
+FENCE = re.compile(r"^\s*(```|~~~)")
+# A line that is nothing but backticked tokens and separators — `a.ts` `b.ts`
+TOKENS_ONLY = re.compile(r"^\s*(?:`[^`\n]+`[\s,;]*)+$")
 
-def _tokens(line, loose):
-    """Path-ish tokens on one line. Backticked first; loose regex only if asked."""
+
+def _tokens(line):
+    """Path-ish tokens on one line. Backticked if any are present, bare paths otherwise."""
     ticked = [t.strip() for t in re.findall(r"`([^`\n]+)`", line)]
     cands = [t for t in ticked if t and " " not in t]
-    if not cands and loose:
+    if not cands:
         cands = PATHISH.findall(line)
+    return _clean(cands)
+
+
+def _mention_tokens(line):
+    """Every path-ish token on a line, ticked or bare. Used OUTSIDE blocks, for reporting only."""
+    ticked = [t.strip() for t in re.findall(r"`([^`\n]+)`", line)]
+    return _clean([t for t in ticked if t and " " not in t] + PATHISH.findall(line))
+
+
+def _clean(cands):
     out = []
     for c in cands:
         c = c.strip().strip("(),;:\"'").lstrip("-*+ ").strip()
@@ -93,38 +113,109 @@ def _tokens(line, loose):
     return out
 
 
+def _consume_block(lines, i, bucket):
+    """
+    Collect tokens from the CONTIGUOUS block that follows a header line, and return the
+    index of the first line that is NOT part of it.
+
+    A block continues through list items (`- x`, `1. x`), lines that are nothing but
+    backticked tokens, and fenced blocks (one path per line). Up to one blank line is
+    tolerated inside it. ANY other line closes the block — including a heading, a prose
+    sentence, or the next header, which the caller then re-examines.
+
+    The bound is deliberately tight. Everything this refuses to read is a path the plan
+    did not put in its list, and the whole defect being fixed here is a parser that read
+    the document instead of the list.
+    """
+    blanks = 0
+    while i < len(lines):
+        line = lines[i]
+        s = line.strip()
+        if not s:
+            blanks += 1
+            if blanks >= 2:          # a section break, not a gap in a list
+                return i
+            i += 1
+            continue
+        if FENCE.match(line):
+            i += 1
+            while i < len(lines) and not FENCE.match(lines[i]):
+                bucket.extend(_tokens(lines[i]))
+                i += 1
+            i += 1                    # step over the closing fence
+            blanks = 0
+            continue
+        if PROHIBIT_HEAD.search(line) or DECLARE_HEAD.search(line):
+            return i                  # the caller opens the next block
+        if LIST_ITEM.match(line) or TOKENS_ONLY.match(line):
+            bucket.extend(_tokens(line))
+            blanks = 0
+            i += 1
+            continue
+        return i
+    return i
+
+
 def parse_declared(text):
     """
-    Lanes write plans in prose, with TWO kinds of file mention:
+    A plan declares its blast radius in an EXPLICIT BLOCK, and nothing outside that block
+    is a declaration:
 
-        FILES: `a.ts` `b.ts`          a DECLARATION — these may be touched
-        NOT TOUCHING: `c.ts`          a PROHIBITION — these must NOT be touched
+        FILES:                        a DECLARATION — these may be touched
+          - `a.ts`
+          - `b.ts`
 
-    ⚠️ These must never be conflated. Scanning the whole plan for backticked tokens reads a
-    prohibition as a declaration, which turns "you must not touch this" into "you failed to
-    touch this" — and it fails hardest against the most careful lanes, the ones who bother
-    to write the NOT TOUCHING line. It would punish the discipline the gate exists to create.
-    Found by the adjudicator on PR #526, 2026-08-12, mid-ruling.
+        NOT TOUCHING:                 a PROHIBITION — these must NOT be touched
+          - `c.ts`
 
-    Returns (declared, prohibited, mode).
+    ⚠️ These must never be conflated. Reading a prohibition as a declaration turns "you must
+    not touch this" into "you failed to touch this" — and it fails hardest against the most
+    careful lanes, the ones who bother to write the NOT TOUCHING line. It would punish the
+    discipline the gate exists to create. Found by the adjudicator on PR #526, 2026-08-12.
+
+    ⚠️ AND NOTHING OUTSIDE A BLOCK COUNTS. Until 2026-08-24 this scanned the WHOLE document
+    and every backticked token was a declaration. Measured on the TOR-750 plan
+    (docs/superpowers/plans/2026-08-24-tor750-page-kit-charts.md, 661 lines): `declared 131`,
+    including `/adjudicate` (a slash command), `9cf4a350..2ac44d42` (a git range), `$52.80`
+    (currency from a rounding example), `.recharts-line-chart` (a CSS class) and
+    `frontend/src/{charts,pagekit}` (a brace expansion). The failure direction is PERMISSIVE:
+    this gate's product is the UNDECLARED list, so an over-broad DECLARED set shrinks it by
+    construction — any file a plan merely MENTIONS in prose is licensed. Two lanes were
+    simultaneously editing `tests/conftest.py` that day; any plan discussing it in prose
+    would have reported CLEAN on precisely the file they were colliding in.
+
+    Do NOT "fix" this by teaching the parser which backticked tokens LOOK like paths. A
+    heuristic over prose is the same defect with better manners: it still decides for the
+    author, and it still fails permissive on the tokens it guesses right about for the
+    wrong reason.
+
+    Returns (declared, prohibited, blocks, mentions):
+        blocks    [(kind, line-number)] of every header found — printed, so a reader can
+                  check the parser read the list the author meant.
+        mentions  {token: first line number} for path-ish tokens OUTSIDE every block. NOT
+                  declarations. Reported against flagged files so the reader can see why a
+                  path that appears in the plan is still a breach.
     """
-    # Does the plan use backticks at all? Decide once, globally, so a plan that ticks its
-    # paths never falls back to the loose regex on one stray line.
-    loose = not [t for t in re.findall(r"`([^`\n]+)`", text) if t.strip() and " " not in t.strip()]
-    mode = "loose (no backticked paths anywhere — CHECK THIS LIST BY EYE)" if loose else "backticked"
+    lines = text.splitlines()
+    declared, prohibited, blocks, mentions = [], [], [], {}
 
-    declared, prohibited = [], []
-    section = "declare"
-    for line in text.splitlines():
-        if PROHIBIT_HEAD.search(line):
-            section = "prohibit"
-            prohibited += _tokens(line, loose)
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        prohibit = PROHIBIT_HEAD.search(line)
+        declare = DECLARE_HEAD.search(line)
+        if not (prohibit or declare):
+            for t in _mention_tokens(line):
+                mentions.setdefault(t, i + 1)
+            i += 1
             continue
-        if DECLARE_HEAD.search(line):
-            section = "declare"
-            declared += _tokens(line, loose)
-            continue
-        (prohibited if section == "prohibit" else declared).extend(_tokens(line, loose))
+        kind = "prohibit" if prohibit else "declare"
+        bucket = prohibited if prohibit else declared
+        blocks.append((kind, i + 1))
+        # the inline form — FILES: `a.ts` `b.ts` — puts the paths on the header line
+        head = line.split(":", 1)[1] if ":" in line else ""
+        bucket.extend(_tokens(head))
+        i = _consume_block(lines, i + 1, bucket)
 
     def dedupe(xs):
         seen, out = set(), []
@@ -138,9 +229,9 @@ def parse_declared(text):
     # A path named in both sections is a contradiction in the plan. Treat it as PROHIBITED —
     # the safe direction — and say so rather than silently picking one.
     declared = [d for d in dedupe(declared) if d not in set(prohibited)]
-    if section == "prohibit" and not prohibited:
-        mode += " · prohibition section found but no paths in it"
-    return declared, prohibited, mode
+    for d in declared + prohibited:
+        mentions.pop(d, None)
+    return declared, prohibited, blocks, mentions
 
 
 def declared_covers(declared, path):
@@ -163,6 +254,19 @@ def declared_covers(declared, path):
 
 # ---------------------------------------------------------------- files
 
+def _mentioned_note(mentions, path):
+    """
+    A file the plan TALKS ABOUT but never declared. Printed beside the breach because that
+    is the case a reader will otherwise call a false positive — "it IS in the plan, look".
+    It is in the prose. Prose is not a declaration; that conflation is the whole defect.
+    """
+    for tok, line in mentions.items():
+        if declared_covers([tok], path):
+            return f"   (mentioned at line {line} — a mention is not a declaration)"
+    return ""
+
+
+
 def cmd_files(a):
     repo = os.path.abspath(a.repo)
     rc, _, _ = run(["git", "rev-parse", "--git-dir"], cwd=repo)
@@ -177,22 +281,43 @@ def cmd_files(a):
             die(f"plan file not found: {a.plan}")
         text = open(a.plan, encoding="utf-8", errors="replace").read()
     elif a.declared:
-        text = "\n".join(f"`{d}`" for d in a.declared)
+        # Synthesised as a real FILES: block — the parser reads ONLY declaration blocks,
+        # so a bare list of backticked paths would now parse to nothing.
+        text = "FILES:\n" + "\n".join(f"- `{d}`" for d in a.declared)
     else:
         die("no declaration given. Use --plan FILE, --plan - (stdin), or -d PATH [-d PATH ...]\n"
             "         A plan with no file list fails the gate on its own — there is nothing\n"
             "         to check the diff against. Reject it at planning, not here.")
 
-    declared, prohibited, mode = parse_declared(text)
+    declared, prohibited, blocks, mentions = parse_declared(text)
+
+    # ⚠️ NO DECLARATION BLOCK IS exit 2, NOT A RULING. Inferring the list from prose is what
+    # this tool did until 2026-08-24, and it failed PERMISSIVE (see parse_declared). There is
+    # no honest verdict to give here: the plan did not say what it would touch, so nothing can
+    # be checked. Same shape as the empty-range refusal below — fail closed, name the repair.
+    if not blocks:
+        die("the plan contains no declaration block, so there is no file list to check.\n"
+            "         Add one — anything outside it is NOT a declaration:\n\n"
+            "             FILES:\n"
+            "               - `path/to/a.ts`\n"
+            "               - `path/to/b.ts`\n"
+            "             NOT TOUCHING:\n"
+            "               - `path/another/lane/holds.ts`\n\n"
+            "         Headers recognised: FILES / FILE / DECLARED / TOUCHING / SURFACE, and\n"
+            "         NOT TOUCHING / STAY OUT / DO NOT TOUCH / OUT OF SCOPE / HANDS OFF.\n"
+            "         Plans written before 2026-08-24 have no such block and land here. That is\n"
+            "         the correct outcome, not a regression: their old PASS was read off prose.")
+
     if not declared and prohibited:
-        print(bold("PLAN FAILED — the plan names files it will NOT touch, and none it WILL."))
-        print("A prohibition is not a declaration. There is still nothing to check the diff against.")
-        return 1
+        die("the plan names files it will NOT touch, and none it WILL.\n"
+            "         A prohibition is not a declaration. There is still nothing to check the\n"
+            "         diff against. Add a FILES: block.")
     if not declared:
-        print(bold("PLAN FAILED — no file list could be read from the declaration."))
-        print("A plan that does not name its files cannot be checked and cannot produce a")
-        print("falsifiable DONE. Send it back to planning; do not review the diff.")
-        return 1
+        die("a declaration header was found, but no paths under it.\n"
+            f"         Header(s) at line(s): {', '.join(str(n) for _k, n in blocks)}.\n"
+            "         A block is the header plus the CONTIGUOUS list under it — list items,\n"
+            "         backticked-token lines, or a fenced block. A heading or a prose sentence\n"
+            "         closes it, so paths further down the document are not read.")
 
     # --- ground truth
     rc, _, err = run(["git", "rev-parse", "--verify", "--quiet", a.base], cwd=repo)
@@ -249,8 +374,10 @@ def cmd_files(a):
     print(f"base      {a.base}...HEAD"
           + ("  + uncommitted" if uncommitted else "")
           + ("  + untracked" if untracked else ""))
-    print(f"parse     {mode}")
-    print(f"declared  {len(declared)} · touched {len(every)}")
+    print("parse     " + " · ".join(
+        f"{'NOT TOUCHING' if k == 'prohibit' else 'FILES'}: at line {n}" for k, n in blocks))
+    print(f"declared  {len(declared)} · touched {len(every)}"
+          + (f" · {len(mentions)} path(s) mentioned in prose (NOT declarations)" if mentions else ""))
     print()
     print(bold("DECLARED (as parsed — verify this is what the plan meant)"))
     for d in declared:
@@ -279,12 +406,12 @@ def cmd_files(a):
         print()
         print(bold(f"UNDECLARED — {len(breach)} tracked file(s) changed that the plan did not name"))
         for f in breach:
-            print(f"    ! {f}")
+            print(f"    ! {f}" + _mentioned_note(mentions, f))
     if newfiles:
         print()
         print(bold(f"UNTRACKED — {len(newfiles)} new file(s) present, none declared"))
         for f in newfiles:
-            print(f"    ? {f}")
+            print(f"    ? {f}" + _mentioned_note(mentions, f))
         print("    new source is real blast radius; scratch is not. Tell them apart before")
         print("    ruling, and gitignore the scratch so this stays readable. --no-untracked skips.")
 
