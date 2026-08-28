@@ -12,7 +12,7 @@ scripts.json: {"01": "text...", "02": "text...", ...}  (keys become outdir/slide
 Texts may include ElevenLabs v3 audio tags like [warm], [pause], [confident].
 Max 5,000 chars per text (eleven_v3 limit). Never print the API key.
 """
-import json, os, sys, time, urllib.request, urllib.error
+import argparse, json, os, sys, time, urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def tts(key, voice, slide_id, text, outdir):
@@ -46,13 +46,23 @@ STABILITY = 0.5   # overridden by --stability
 
 
 def main():
+    global STABILITY
+    ap = argparse.ArgumentParser(
+        description="Generate one ElevenLabs clip per slide from scripts.json.",
+        epilog="stability: 0.0 Creative (most expressive, strongest response to audio "
+               "tags, least predictable) / 0.5 Natural / 1.0 Robust. A/B one slide "
+               "before generating a deck, and keep one value across all clips.")
+    ap.add_argument("scripts", help="scripts.json: {\"01\": \"text\", ...}")
+    ap.add_argument("voice", help="ElevenLabs VOICE_ID")
+    ap.add_argument("outdir", help="directory to write slideNN.mp3 into")
+    ap.add_argument("--concurrency", type=int, default=4)
+    ap.add_argument("--stability", type=float, default=STABILITY)
+    args = ap.parse_args()
     key = os.environ.get("ELEVENLABS_API_KEY")
-    assert key, "set ELEVENLABS_API_KEY env var (never paste the key into commands/output)"
-    scripts_path, voice, outdir = sys.argv[1], sys.argv[2], sys.argv[3]
-    conc = int(sys.argv[sys.argv.index("--concurrency") + 1]) if "--concurrency" in sys.argv else 4
-    if "--stability" in sys.argv:
-        global STABILITY
-        STABILITY = float(sys.argv[sys.argv.index("--stability") + 1])
+    if not key:
+        ap.error("set ELEVENLABS_API_KEY env var (never paste the key into commands/output)")
+    scripts_path, voice, outdir = args.scripts, args.voice, args.outdir
+    conc, STABILITY = args.concurrency, args.stability
     print(f"stability={STABILITY}", flush=True)
     os.makedirs(outdir, exist_ok=True)
     scripts = json.load(open(scripts_path))
