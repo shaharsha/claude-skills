@@ -21,7 +21,7 @@ Turn any pptx into a self-presenting deck: write presenter-style narration scrip
 
 **Language: exactly what the user asks for.** Hebrew, English, or mixed. For Hebrew (or any non-English), write like a native presenter in that language who naturally keeps technical terms in English (e.g., Israeli hi-tech register: "ה-agent מנתח את הדאטה וכותב manifest"). Don't translate terms the audience uses in English.
 
-**Depth: the voice IS the presenter, not a caption reader.** Target ~600–900 chars per slide (≈45–75 s). Each script: open with context → walk the elements actually visible on the slide ("תסתכלו על המספרים מימין…" / "the green bar at the bottom…") → explain the *why* → bridge to the next slide. Short caption-style scripts (~200 chars) feel like labels, not a presentation — users reject them.
+**Depth: the voice IS the presenter, not a caption reader.** Target ~600–900 chars per slide (≈45–75 s). Each script: open with context → work through what the slide actually shows → explain the *why* → bridge to the next slide. **Describe position only when the viewer needs it to follow.** On a diagram, "the dashed box inside" is orientation they cannot get otherwise; over three cards of text, "on the left… in the middle… on the right" is audio-description rather than presenting (see **self-presenting-decks**). Short caption-style scripts (~200 chars) feel like labels, not a presentation — users reject them.
 
 **Audio tags = the "Enhance" feature.** ElevenLabs' UI "Enhance" button just uses an LLM to add tags — there is no Enhance API. You are that LLM: weave tags into the script. Tags stay in **English brackets even inside Hebrew/other-language text**, placed at the emotional beat they modify.
 
@@ -36,11 +36,25 @@ Turn any pptx into a self-presenting deck: write presenter-style narration scrip
 
 **Hard limit:** 5,000 chars per script (`eleven_v3` request cap).
 
-### 2. Generate speech (parallel, 429-safe)
+### 2. Choose stability, then generate speech (parallel, 429-safe)
+
+**Eleven v3 has three stability modes, and the default is the middle one.** This matters because step 1 tells you to write dense audio tags, and Natural is the conservative reading of them:
+
+| stability | mode | behaviour |
+|---|---|---|
+| `0.0` | **Creative** | most expressive, **responds most strongly to audio tags** — and least predictable |
+| `0.5` | Natural | the script default. Safe, but can under-perform the tags you wrote |
+| `1.0` | Robust | very stable, largely ignores directional prompts |
+
+If a deck sounds monotone despite heavy tagging, the tags are probably fine and the stability is wrong. **A/B one tag-rich slide at 0.0 and 0.5 and let the human pick before spending the batch** — you cannot ear-check this yourself. Then regenerate **all** clips at the chosen value: mixing stabilities across slides is audible.
+
+Creative also runs slightly *shorter* (more dynamic delivery moves faster through flat passages), so expect durations to shift and the video to need a re-render.
+
+**v3 has no `speed` parameter.** Pace is controlled by sentence structure and `…` pauses at write time, or `ffmpeg -filter:a atempo=` afterwards — never by a generation setting.
 
 ```bash
 export ELEVENLABS_API_KEY=...   # env var only — NEVER paste the key into output
-python3 scripts/generate_tts.py scripts.json VOICE_ID audio/ --concurrency 4
+python3 scripts/generate_tts.py scripts.json VOICE_ID audio/ --concurrency 4 --stability 0.5
 ```
 
 The script parallelizes (default 4 — typical plan concurrency is ~5; 16-at-once returns 429 on most), retries 429s with backoff, rejects suspiciously-small responses (a 429/error body saved as `.mp3` is ~600 bytes), and exits non-zero on any failure. Verify durations before embedding: `afinfo audio/slide01.mp3 | grep duration`.
@@ -80,10 +94,34 @@ Expect output `autoplay set on N media shapes` where **N == number of narrated s
 |---|---|
 | Endpoint | `POST https://api.elevenlabs.io/v1/text-to-speech/{voice_id}?output_format=mp3_44100_128` |
 | Auth | header `xi-api-key` (from env var; never echo) |
-| Body | `{"text", "model_id": "eleven_v3", "voice_settings": {"stability": 0.5, "similarity_boost": 0.75, "use_speaker_boost": true}}` |
+| Body | `{"text", "model_id": "eleven_v3", "voice_settings": {"stability": STABILITY, "similarity_boost": 0.75, "use_speaker_boost": true}}` |
 | Languages | 70+ incl. Hebrew; tags like `[pause]` inline |
 | Limits | 5,000 chars/request · ~5 concurrent requests (429 = concurrency, not quota) |
-| Stability | 0.5 = "natural" (use for narration); 0.0 creative / 1.0 robust |
+| Stability | 0.0 Creative / 0.5 Natural / 1.0 Robust — pick per deck, see step 2. No `speed` param on v3 |
+
+## Voices on hand
+
+The skill is voice-agnostic — pass any ElevenLabs `VOICE_ID` to `generate_tts.py`. **Default to Josh** unless the user asks for another voice. Both are Hebrew-capable and tested on `eleven_v3`:
+
+| Name | Voice ID | Notes |
+|---|---|---|
+| **Josh** ⭐ | `ZoiZ8fuDWInAcwPXaVeq` | **default** — warm, slightly faster; good for Hebrew narration |
+| Kevin | `1fz2mW1imKTf5Ryjk5su` | alternative, a little more measured |
+
+## Getting timings back out of finished audio
+
+`POST https://api.elevenlabs.io/v1/forced-alignment` — multipart `file` (audio) + `text` (transcript) → `characters[]` and `words[]` with `start`/`end`, plus a `loss` confidence. Priced at speech-to-text rates.
+
+```bash
+python3 scripts/align_narration.py narration/scripts.json narration/audio/ narration/alignment/
+```
+
+This turns finished clips into timed data **without regenerating anything**, which is what makes subtitles and narration-synced animation cheap (see deck-to-video). The script handles both traps below and exits non-zero on a length mismatch; the traps are spelled out because anything hand-rolling this will hit them:
+
+- **Strip audio tags from the transcript first.** `[confident]` is performed, not spoken; leave it in and the aligner searches for the word, drifting everything after it.
+- **Verify `len(characters) == len(text)`.** They map 1:1 when it works, which is what lets you go from a character offset in the script to a timestamp. A mismatch means the mapping is silently wrong.
+
+`/v1/text-to-speech/{voice}/with-timestamps` returns the same timing at generation time — use it only when you are generating anyway, since it costs a re-record.
 
 ## Progress bar during playback
 

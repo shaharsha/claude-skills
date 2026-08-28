@@ -72,9 +72,12 @@ def main():
     ap.add_argument("--no-counter", action="store_true")
     ap.add_argument("--bar-color", default="2E6BFF")
     ap.add_argument("--crf", type=int, default=20)
+    ap.add_argument("--highlights", default=None,
+                    help="JSON: {slide: [{card,box:[x,y,w,h],colour,start,end}]}")
+    ap.add_argument("--anim-fps", type=int, default=30)
     args = ap.parse_args()
 
-    from PIL import Image, ImageDraw
+    from PIL import Image, ImageDraw, ImageFilter
     W, H = (int(v) for v in args.size.lower().split("x"))
     if W % 2 or H % 2:
         sys.exit(f"--size {W}x{H}: both dimensions must be even (yuv420p requirement)")
@@ -115,6 +118,53 @@ def main():
     fill_rgb = tuple(int(args.bar_color[j:j+2], 16) for j in (0, 2, 4))
     font = load_font(max(12, int(H * 0.0213)))
 
+    HL = json.load(open(args.highlights)) if args.highlights else {}
+
+    def glow_key(wins, t):
+        """Identity of a frame's overlay: which card, and the fade step.
+        Frames sharing a key are pixel-identical, so we bake one and hardlink."""
+        act = next((w for w in wins if w["start"] <= t <= w["end"]), None)
+        if act is None:
+            return None
+        FADE = 0.5
+        a = max(0.0, min((t - act["start"]) / FADE, (act["end"] - t) / FADE, 1.0))
+        return (act["card"], round(a, 2)) if a > 0 else None
+
+    def draw_glow(fr, wins, t):
+        """Glow the card being spoken about; wash the others back slightly.
+        Windows come from forced alignment - the audio leads, this follows."""
+        act = next((w for w in wins if w["start"] <= t <= w["end"]), None)
+        if act is None:
+            return
+        FADE = 0.5
+        a = max(0.0, min((t - act["start"]) / FADE, (act["end"] - t) / FADE, 1.0))
+        if a <= 0:
+            return
+        ov = Image.new("RGBA", fr.size, (0, 0, 0, 0))
+        d = ImageDraw.Draw(ov)
+        for w in wins:
+            if w is act:
+                continue
+            x, y, ww, hh = w["box"]
+            base_rgb = (0, 0, 0) if w.get("dim") == "black" else (255, 255, 255)
+            d.rounded_rectangle([x, y, x + ww, y + hh], radius=10,
+                                fill=base_rgb + (int(58 * a),))
+        fr.paste(ov, (0, 0), ov)
+        x, y, ww, hh = act["box"]
+        c = act["colour"].lstrip("#")
+        rgb = tuple(int(c[j:j + 2], 16) for j in (0, 2, 4))
+        glow = Image.new("RGBA", fr.size, (0, 0, 0, 0))
+        ImageDraw.Draw(glow).rounded_rectangle(
+            [x - 11, y - 11, x + ww + 11, y + hh + 11], radius=18,
+            outline=rgb + (int(215 * a),), width=8)
+        glow = glow.filter(ImageFilter.GaussianBlur(8))
+        fr.paste(glow, (0, 0), glow)
+        edge = Image.new("RGBA", fr.size, (0, 0, 0, 0))
+        ImageDraw.Draw(edge).rounded_rectangle(
+            [x - 3, y - 3, x + ww + 3, y + hh + 3], radius=13,
+            outline=rgb + (int(255 * a),), width=3)
+        fr.paste(edge, (0, 0), edge)
+
     segs, total = [], 0.0
     for i, (img_path, aud_path) in enumerate(zip(images, audio), start=1):
         dur = audio_duration(ffprobe, aud_path)
@@ -129,25 +179,41 @@ def main():
             cd.text((W - int(W * 0.021) - tw, int(H * 0.022)), label, font=font,
                     fill=(138, 147, 166))
         seqdir = os.path.join(work, f"seq{i:02d}"); os.makedirs(seqdir)
-        for sec in range(math.ceil(seg_dur)):
+        wins = HL.get(f"{i:02d}", [])
+        fps = args.anim_fps if wins else 1
+        cache = {}
+        for fi in range(math.ceil(seg_dur * fps)):
+            sec = fi / fps
+            path = os.path.join(seqdir, f"f{fi:05d}.jpg")
+            if wins:
+                # the glow fades sub-second, the bar steps once a second:
+                # frames sharing both are pixel-identical, so bake one and hardlink
+                key = (glow_key(wins, sec), int(sec))
+                if key in cache:
+                    os.link(cache[key], path); continue
             fr = base.copy()
+            if wins:
+                draw_glow(fr, wins, sec)
             if not args.no_bar:
                 ov = Image.new("RGBA", (W, H), (0, 0, 0, 0))
                 d = ImageDraw.Draw(ov)
                 d.rectangle([BX, BY, BX + BW, BY + BH], fill=(138, 147, 166, 90))
-                fillw = int(BW * min((sec + 0.5) / dur, 1.0))
+                bsec = int(sec)
+                fillw = int(BW * min((bsec + 0.5) / dur, 1.0))
                 if fillw > 0:
                     d.rectangle([BX, BY, BX + fillw, BY + BH], fill=fill_rgb + (242,))
                 if font:
-                    label = f"{max(0, math.ceil(dur - sec))}s"
+                    label = f"{max(0, math.ceil(dur - bsec))}s"
                     tw = d.textbbox((0, 0), label, font=font)[2]
                     d.text((BX - 14 - tw, BY - int(H * 0.0111)), label, font=font,
                            fill=(138, 147, 166, 255))
                 fr.paste(ov, (0, 0), ov)
-            fr.save(os.path.join(seqdir, f"f{sec:03d}.jpg"), quality=90)
+            fr.save(path, quality=90)
+            if wins:
+                cache[(glow_key(wins, sec), int(sec))] = path
         seg = os.path.join(work, f"seg{i:02d}.mp4")
         cmd = [ff, "-y", "-loglevel", "error",
-            "-framerate", "1", "-i", os.path.join(seqdir, "f%03d.jpg"),
+            "-framerate", str(fps), "-i", os.path.join(seqdir, "f%05d.jpg"),
             "-i", aud_path, "-af", f"apad=pad_dur={args.pad}",
             "-c:v", "libx264", "-preset", "medium", "-crf", str(args.crf),
             "-tune", "stillimage", "-pix_fmt", "yuv420p", "-r", "30",
@@ -169,7 +235,7 @@ def main():
         else:
             sys.exit(f"slide {i}: ffmpeg hung twice — giving up")
         segs.append(seg)
-        print(f"slide {i:02d}: {seg_dur:.1f}s", flush=True)
+        print(f"slide {i:02d}: {seg_dur:.1f}s  {fps}fps  {len(wins)} hl  {len(cache) if wins else 0} unique frames", flush=True)
 
     concat = os.path.join(work, "concat.txt")
     with open(concat, "w") as f:

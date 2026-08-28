@@ -81,6 +81,10 @@ Full setup instructions: [reference/auth-setup.md](reference/auth-setup.md).
 
 ## Gotchas
 
+**A sync replaces the body, so any formatting you applied through the Docs API is gone.** Paragraph styling in particular — line spacing, space-above/below — reverts to the import defaults on every push. If a doc has a tightening/styling pass, it is part of the sync recipe, not a one-off: sync, then re-apply, every time. Verify by reading back a paragraph's `paragraphStyle`, not by assuming it held.
+
+**The Doc's title is not the H1.** Renaming what shows in Drive and the tab is a Drive API call (`PATCH /drive/v3/files/{id}` with `{"name": ...}`), separate from anything in the markdown. A doc can therefore show one name in Drive and a different heading on page one — check both when documents are meant to look like a matched set.
+
 The import is destructive, the anchor-link rewrite is regex-based, and RTL has quirks. Read [reference/gotchas.md](reference/gotchas.md) **before** running against a doc you care about — especially the first time.
 
 ## Non-goals
