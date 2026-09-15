@@ -132,7 +132,7 @@ ROUTE B   THE ADJUDICATOR PERFORMS THE PASS FIRST-PARTY
 engine/**          models/**          risk/**
 api/services/<product>/**   for any product in `_REAL_PRODUCTS` (api/routers/companies.py)
 db/schema.py · api/auth/** · api/services/{publishing,vault,silver,computation}/**
-authored_pages/**           ADDED 2026-09-15 — see the amendment directly below
+authored_pages/** EXCEPT **/README.md   ADDED 2026-09-15 — see the amendment directly below
 ```
 
 **Read the product membership THERE, never from a list written here** — that is this repo's own rule
@@ -166,6 +166,8 @@ abandoned a page's KPIs, a 5x7 grid and both loan bases).
 
 🔑 **So the human adversary is not a second opinion here — it is the ONLY opinion.** That is precisely the
 condition the mandate exists for, and it was the one place the list had exempted.
+
+⚠️ **`authored_pages/**/README.md` IS EXCLUDED, and the exclusion follows from the trigger rather than from convenience.** The trigger is *content that becomes immutable*. A page README is the opposite: CLAUDE.md designates it as **mutable and travelling with the page** — it is where the platform-state prose that may NOT go on the page is required to live instead. It is rendered to no client and published nowhere. Corrected the same night the amendment landed, after the glob as first written would have required a round on a three-README docs PR (`#943`).
 
 ⚠️ **This does NOT widen the class to every page-kit file.** `scripts/{build_page,lint_page,gen_page_kit_css}.py`
 and `.claude/skills/torque-page-kit/**` stay route B: they are tooling, and a defect there surfaces on the
