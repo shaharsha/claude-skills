@@ -170,8 +170,23 @@ condition the mandate exists for, and it was the one place the list had exempted
 ⚠️ **`authored_pages/**/README.md` IS EXCLUDED, and the exclusion follows from the trigger rather than from convenience.** The trigger is *content that becomes immutable*. A page README is the opposite: CLAUDE.md designates it as **mutable and travelling with the page** — it is where the platform-state prose that may NOT go on the page is required to live instead. It is rendered to no client and published nowhere. Corrected the same night the amendment landed, after the glob as first written would have required a round on a three-README docs PR (`#943`).
 
 ⚠️ **This does NOT widen the class to every page-kit file.** `scripts/{build_page,lint_page,gen_page_kit_css}.py`
-and `.claude/skills/torque-page-kit/**` stay route B: they are tooling, and a defect there surfaces on the
-next build rather than being frozen into a published artifact. The trigger is content that becomes immutable.
+and `.claude/skills/torque-page-kit/**` stay route B — **but NOT for the reason first written here.**
+
+🔴 **The original justification was *"a defect there surfaces on the next build rather than being frozen into
+a published artifact"*, and that is FALSE for one file in the exempted set.** `assets/vendor/torque-charts.js`
+is inlined **VERBATIM** by `build_page.py:61` into a page that is immutable once published, and CLAUDE.md's
+own TOR-785 entry records a stale bundle freezing **7 wrong numbers onto `LR/historical` v1**. The repo had
+already falsified that sentence before it was written here.
+
+**The exemption still stands, on the ground that actually holds: an EXECUTING guard covers it.**
+`frontend/src/pagekit/bundle_currency.test.ts` re-runs `build:page-kit` into a scratch directory and
+byte-compares the result against the committed bundle, inside `test-frontend` — so a stale bundle reddens CI
+rather than reaching a page. That is a check anyone can run, not a claim about blast radius.
+
+⚠️ **So the carve-out is contingent on that guard continuing to execute.** If `bundle_currency.test.ts` is
+ever weakened to a presence check, or the bundle stops being byte-compared, `assets/vendor/**` belongs in the
+mandatory class immediately. Corrected 2026-09-15, same night, after an adjudicator measured the original
+reason against TOR-785.
 
 **Cost:** unchanged from the measurement above — a round's median is 280s against a ~12 minute CI window it
 runs concurrently with. The section's own tripwire applies here too: if over the next two weeks route-A
