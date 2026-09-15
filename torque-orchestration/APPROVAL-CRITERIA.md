@@ -136,11 +136,14 @@ authored_pages/** EXCEPT **/README.md   ADDED 2026-09-15 — see the amendment d
 api/services/projector/**               ADDED 2026-09-16 — see §4A.2
 ```
 
+⚠️ **A sidecar naming an EARLIER sha can still discharge route A — §4A.4, bounded. And the SCOPE of a
+round on `authored_pages/<page>/` is that whole directory, its README included — §4A.1.**
+
 **Read the product membership THERE, never from a list written here** — that is this repo's own rule
 and this file has already watched two transcribed counts rot. Everywhere else, route B is sufficient.
 
 🔑 **THE PRINCIPLE THE CLASS EXPRESSES — one sentence, and it REPLACES *"content that becomes
-immutable"* (ruled 2026-09-16, §4A.1/§4A.2):**
+immutable"* (ruled 2026-09-16 — §4A.1, §4A.2, §4A.4):**
 
 > **Route A is mandatory where a wrong claim can reach a real client's decision, AND no EXECUTING
 > gate would go red first.**
@@ -302,6 +305,16 @@ Raised by PR #947's adjudicator after merge. **Verified first-party**: `#947` to
 `_REAL_PRODUCTS` nor `{publishing,vault,silver,computation}`, so the omission is real and route B was
 correct by the letter.
 
+🔑 **AND IT WAS ALREADY FILED — TOR-1123, 2026-09-14, the day BEFORE the amendment**, found by
+searching Linear rather than by filing blind. It names the *general* defect exactly: the class is
+**defined by blast radius and SELECTED by path globs**, the two sets are not the same, *"and where they
+disagree the selector silently wins, because nothing compares them."* Its instance is PR #918 —
+`manifest_controls.py` and `control_plane/pages.py`, both publish boundaries, both matching no glob —
+where the gate fired only because an adjudicator read the definition and overrode the list by hand.
+**So the amendment landed one day after this exact failure mode was written down, and reproduced it.**
+That is the argument for the PRINCIPLE above carrying more weight than any list, and it is why
+TOR-1123's option 2 is named as Shahar's in §4A.4 rather than quietly adopted here.
+
 **Why it is in, on the principle above rather than on "more review is safer":**
 
 The projector is the only code path that turns a builder's page into an immutable `page_versions` row.
@@ -419,7 +432,108 @@ move the refusal somewhere a commit can hold it.
   hit the **same zsh word-splitting dead probe twice**, each time returning a confident wrong number
   in the reassuring direction. **If it can silently mis-answer for me writing the rule, it can for an
   adjudicator applying it at 2am.** A committed script with a must-fire control would make the trigger
-  mechanical, which is the one property a gate keyed on globs ought to have.
+  mechanical, which is the one property a gate keyed on globs ought to have. **TOR-1160's third
+  done-when asks for exactly this script, and §4A.4 gives it a second job — the byte-identity
+  measurement is the same computation.** One tool answers both.
+
+### ⚠️ AMENDMENT 2026-09-16 · §4A.4 — WHEN THE HEAD MOVES ONLY OUTSIDE THE MANDATORY CLASS (TOR-1160)
+
+**The third defect, filed by PR #935's adjudicator. Route A requires the sidecar to read
+`sha=<the head>`; the class is scoped by PATH. Those two clauses do not compose when the head moves
+after the round but only in files outside the class. §4A did not say which reading governs, and
+`#935` and `#939` were decided differently on the same structural situation in one night.**
+
+**Verified first-party, 2026-09-16 (`git diff --name-only <sidecar sha> <head>`), not taken on the relay:**
+
+```
+#935  8ce6ad72 -> bf5fe56b   1 file: frontend/src/pagekit/authored_recompute_echo.test.ts
+                             mandatory rows 0                                    MERGED
+#939  580ba96b -> fbb28b85  21 files                                             HELD
+                             mandatory rows 0 — but see below, that zero is MANUFACTURED
+#941  (sidecar) -> ed306af6  1 file: api/services/tbr/forecast.py
+                             mandatory rows 1 (TBR ∈ _REAL_PRODUCTS)              HELD, correct either way
+```
+
+🔴 **`#939`'s zero is produced ENTIRELY by the two carve-outs stacking, and that is the finding —
+measured, not argued.** Its 21-file delta contains **5 `authored_pages/**` rows, every one a README**
+(0 non-README page bytes) and **6 renderer rows** including `torque-charts.js`, `ChartView.tsx`,
+`theme.ts`. The READMEs are excluded only by `cb118ec`; the renderer only by the page-kit carve-out.
+**Narrow either and the delta is non-empty and the allowance correctly refuses.** So tonight's three
+defects are not independent — **§4A.1 is a PRECONDITION for §4A.4 being safe**, not a separate item.
+
+**RULING — reading (ii) governs, bounded. Route A is discharged by a sidecar naming an EARLIER sha iff
+all three hold, and the ruling STATES the measurement:**
+
+1. **Every path in the mandatory class is byte-identical** between the covered sha and the head —
+   measured **blob-by-blob with a must-differ control**, counts stated. `#935`'s adjudicator did
+   exactly this (15 SAME / 1 DIFFERS) and that is the model.
+2. **The uncovered delta contains nothing EMBEDDED VERBATIM into a mandatory-class artifact.** This is
+   the `#935` ÷ `#939` discriminator TOR-1160 says nothing currently decides. `scripts/build_page.py:61`
+   —`_replace_block(html, BUNDLE_MARK, BUNDLE.read_text() …)` — inlines the page-kit bundle into a page
+   that is **immutable once published**, so a renderer change is INSIDE this bound even though it is
+   route B standing alone. **Not a contradiction of the page-kit carve-out:** a standalone renderer PR
+   makes no claim about any page, whereas a round here CLAIMED to have read a page whose rendering has
+   since moved. The round's claim is about the artifact *as it will be published*.
+3. **The class is the one as amended by §4A.1 and §4A.2** — otherwise this allowance inherits exactly
+   the two gaps ruled on above.
+
+⚠️ **NO SIZE TERM, deliberately.** TOR-1160 warns that keying the allowance on diff size re-introduces
+*"small"*, which §2 excludes from AUTO-APPROVE by name. The park-and-pile abuse it fears is answered by
+clause 1 — **any** mandatory-class byte moving voids the allowance, however small — never by a count.
+
+⚠️ **Reading (i) — *route A must name the head, full stop* — is REJECTED with a reason, not on
+convenience.** §5 of this file already records that the approval pair has **no fixed point on a busy
+develop**; at 381 PR merges in 30 days a re-merge is routine, so (i) costs a fresh round per re-merge
+and produces the livelock §5 describes. §4A's own lesson applies: *a rule whose first act is to condemn
+five correct rulings is a rule that gets deleted.*
+
+**Both prior rulings stand under this: `#935`'s release was correct, and `#939`'s hold was correct** —
+and now for a stated reason rather than by two seats' differing instincts.
+
+### 🔴 TESTED, NOT ASSUMED — does §4A.4 SUBSUME §4A.1 and §4A.2? NO, AND ONE ANSWER IS INVERTED
+
+The natural generalisation — *the rule keys on a sha when the property it wants is "did these bytes get
+an adversarial read"; define the class by a property and the rest follows* — was put to this seat
+explicitly, with an instruction to test rather than assume it. **It does not hold, and it fails in two
+different ways:**
+
+```
+§4A.4 subsume §4A.1 (README)?   NO — AND A NAIVE BYTE RULE MAKES IT WORSE.
+   TOR-1153's README never moved. Its claims were falsified by the PAGE moving around it.
+   A byte-identity rule inspects the diff and would positively CERTIFY that unchanged README
+   as covered. No selector over a diff can see a file that is not in the diff.
+   The fix for §4A.1 is SCOPE — what the round is pointed at — which is a different axis entirely.
+
+§4A.4 subsume §4A.2 (projector)?  ONLY IN A FORM NOBODY FILED.
+   As filed, TOR-1160 is about a MOVING HEAD; it says nothing about which paths are in the class.
+   Generalised to TOR-1123's option 2 — "a change is in the class if it touches a WRITER of an
+   immutable artifact" — it would subsume §4A.2 and the renderer half of §4A.4's own clause 2.
+   That is a real and better design. It is ALSO a structural redesign of the selector, it is
+   already filed, and it is not needed to close tonight's three.
+```
+
+🔑 **The durable half: a property-defined class would subsume the two defects that are about WHICH
+BYTES, and neither form touches the one that is about WHICH QUESTION.** §4A.1 is not a selector
+problem wearing a disguise.
+
+⚖️ **WHAT IS NOT RULED HERE, AND WHY — TOR-1123 / TOR-1160 are marked *Shahar's call*.**
+
+Applying the standing test — *amending a review rule is this seat's; changing what the fleet owes a
+real client's immutable page is his*:
+
+```
+MINE, and ruled above    which reading governs a moved head · the bound that stops it being gamed
+                         the #935 ÷ #939 discriminator (it only ever TIGHTENS — it adds no permission
+                         that did not already follow from the gate's stated function)
+                         the class's principle · the README scope · the projector
+
+SHAHAR'S, left UNRULED   replacing the PATH-GLOB selector with a PROPERTY-DEFINED one
+                         (TOR-1123 option 2). It is a redesign of his 2026-09-15 amendment, it has
+                         a real cost this seat has not measured — a lane must be able to evaluate
+                         the class BEFORE starting work, and a property is harder to apply at a
+                         glance than a glob — and tonight's three defects close without it.
+                         ⚠️ Recorded rather than decided to be tidy.
+```
 
 ### ⚠️ ROUTE A HAS A LOCATION PROBLEM — the LANE must cite the path, not the adjudicator hunt for it
 
