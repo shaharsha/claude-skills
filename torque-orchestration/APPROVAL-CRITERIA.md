@@ -371,7 +371,8 @@ this is too wide — narrow it to `{payload,publish,chart_compiler}.py` and reco
 ### 🔴 §4A.3 — THE BIGGEST PROBLEM WITH §4A, WHICH NEITHER NAMED DEFECT TOUCHES
 
 **Asked for deliberately, and it is not a third item on the list — it is the reason the first two
-exist. §4A protects immutability, and §4A has NO JURISDICTION AT THE MOMENT IMMUTABILITY IS CREATED.**
+exist. §4A protects immutability, and §4A has NO JURISDICTION AT THE MOMENT IMMUTABILITY IS CREATED.**  
+**Filed as TOR-1163.**
 
 ⚠️ **This is NOT the section further down also headed *"the biggest problem"* — do not merge them.**
 That one is about the gate's **compliance signal** (a recorded line is anti-correlated with the quality
