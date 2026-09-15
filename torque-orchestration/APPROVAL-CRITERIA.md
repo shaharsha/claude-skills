@@ -133,12 +133,26 @@ engine/**          models/**          risk/**
 api/services/<product>/**   for any product in `_REAL_PRODUCTS` (api/routers/companies.py)
 db/schema.py · api/auth/** · api/services/{publishing,vault,silver,computation}/**
 authored_pages/** EXCEPT **/README.md   ADDED 2026-09-15 — see the amendment directly below
+api/services/projector/**               ADDED 2026-09-16 — see §4A.2
 ```
 
 **Read the product membership THERE, never from a list written here** — that is this repo's own rule
-and this file has already watched two transcribed counts rot. The class is defined by *what a wrong
-number reaches*: a real client's decision page, or an immutable published version. Everywhere else,
-route B is sufficient.
+and this file has already watched two transcribed counts rot. Everywhere else, route B is sufficient.
+
+🔑 **THE PRINCIPLE THE CLASS EXPRESSES — one sentence, and it REPLACES *"content that becomes
+immutable"* (ruled 2026-09-16, §4A.1/§4A.2):**
+
+> **Route A is mandatory where a wrong claim can reach a real client's decision, AND no EXECUTING
+> gate would go red first.**
+
+Both clauses do work, and the old sentence had neither. **"Reach a real client's decision"** is wider
+than *content that becomes immutable*: it covers the artifact, **the machine that produces it**, and
+**the record a publish decision rests on** — the two things the old wording is silent about, and the
+two places §4A was measured wrong inside 24 hours. **"No executing gate would go red first"** is the
+axis this section had already used twice without naming: the 2026-09-15 amendment turned on *no gate
+renders anything*, and the `assets/vendor/**` carve-out was rescued by naming `bundle_currency.test.ts`
+as a guard that RUNS. Naming it makes membership **derivable** instead of enumerated, and makes every
+carve-out contingent on a **named, runnable** check rather than on a claim about blast radius.
 
 ### ⚠️ AMENDMENT 2026-09-15 — `authored_pages/**` JOINS THE MANDATORY CLASS (approved by Shahar)
 
@@ -168,6 +182,14 @@ abandoned a page's KPIs, a 5x7 grid and both loan bases).
 condition the mandate exists for, and it was the one place the list had exempted.
 
 ⚠️ **`authored_pages/**/README.md` IS EXCLUDED, and the exclusion follows from the trigger rather than from convenience.** The trigger is *content that becomes immutable*. A page README is the opposite: CLAUDE.md designates it as **mutable and travelling with the page** — it is where the platform-state prose that may NOT go on the page is required to live instead. It is rendered to no client and published nowhere. Corrected the same night the amendment landed, after the glob as first written would have required a round on a three-README docs PR (`#943`).
+
+🔵 **SUPERSEDED IN PART, 2026-09-16 — §4A.1.** The *trigger* this paragraph defends survives and is
+kept. Its stated GROUND does not: ~~*"the trigger is content that becomes immutable"*~~ is struck as
+the class's principle (see the principle block in §4A above), and *"rendered to no client and published
+nowhere"* is true of the file and **false of its effect** — CLAUDE.md/TOR-782 make a page README the
+artifact a publish decision is read from, and TOR-1059 is a README that told a reader there was nothing
+published to republish. Struck rather than rewritten, per this file's own rule: a replaced sentence is
+indistinguishable from a checked one.
 
 ⚠️ **This does NOT widen the class to every page-kit file.** `scripts/{build_page,lint_page,gen_page_kit_css}.py`
 and `.claude/skills/torque-page-kit/**` stay route B — **but NOT for the reason first written here.**
@@ -204,6 +226,200 @@ Backend CI on this repo is ~12 minutes (§5). **A round fits inside the CI windo
 waiting on, and can run concurrently with it.** For the narrow class above the marginal wall-clock
 cost is approximately zero. That is why the mandate is affordable, and it is also why the class is
 kept narrow rather than universal.
+
+### ⚠️ AMENDMENT 2026-09-16 · §4A.1 — the README carve-out is KEPT as a TRIGGER and OVERRULED as a SCOPE
+
+**Two defects in the 2026-09-15 amendment were measured within 24 hours of it landing, in opposite
+directions. This section and §4A.2 are one ruling, because they are one question.**
+
+**The framing this was commissioned on is FALSIFIED, and that changes the fix.** The commissioning
+account treats the README exclusion as the cause and proposes widening the trigger. Measured
+2026-09-16:
+
+```
+PR #942  files = authored_pages/alm_historical/body.html   — ONE file, NO README
+         merged 2026-09-15T20:33:13Z, i.e. 54 min AFTER the amendment (67adbbe, 19:39:19Z)
+         -> already IN the mandatory class
+         -> PR body carries "### Codex gate — ROUTE A, DISCHARGED", artifact
+            .../wt-almhist/.codex-review/20260915-225722-alm-yoy-stale-pr942.md
+         -> TOR-1153 happened ANYWAY
+```
+
+🔑 **So the class was applied, a route-A round ran, and the README still went stale.** No file-glob
+trigger could have helped: **the round's scope was the diff, and the README was not in the diff.** The
+PR's own body even *quotes* that README's four-clean-gates claim as evidence of the defect (`#942`
+body, the `scratch_almhist_build` paragraph) — the author read it and still did not update it. **This
+is not an attention failure and it is not a trigger failure. Nothing asked the question.**
+
+**Classify the four cited instances by whether a trigger can reach them at all** — the brief presents
+them as one class and they are three:
+
+| instance | README in the PR's files? | reachable by a TRIGGER? |
+| -- | -- | -- |
+| **#941** (the defect-1 instance) | **yes** | yes |
+| **TOR-1153 / #942** (called the sharpest) | **no** — `body.html` only | **no** |
+| **TOR-1059** (`frtc_historical` "NOT PUBLISHED") | **no PR exists** — a `page_pointers` write falsified it | **no, by anything in §4A** |
+
+**RULING — trigger unchanged, scope widened:**
+
+1. **The trigger stays exactly as `cb118ec` wrote it.** `authored_pages/**` EXCEPT `**/README.md`; a PR
+   touching **only** READMEs stays route B. The counter-argument is real and it holds: a gate that
+   fires on correct work gets deleted.
+2. **NEW — when route A fires because a PR touches `authored_pages/<page>/`, the round's SCOPE is that
+   whole `<page>/` directory, its README included**, and the ruling must state, in one line, whether
+   the change falsifies anything that README asserts. The codex-review skill already makes scope a
+   property of what you hand the reviewer (*"Hand it the outputs as well as the source"*), so this
+   needs no new machinery.
+
+**Cost, measured rather than asserted — 381 PR merges into `origin/develop`, 2026-08-17 → 2026-09-16,
+must-fire control passing:**
+
+```
+README-ONLY PRs (what the carve-out protects)        8    -> unchanged, still route B
+README + page bytes  (#941's shape)                 22    -> ALREADY route A; scope now covers it
+page bytes only, no README  (#942 / TOR-1153)       15    -> ALREADY route A; scope now covers it
+
+MARGINAL MANDATORY ROUNDS ADDED BY THIS RULING:      0
+```
+
+**Zero, because every PR it applies to is already in the class.** It buys #941's shape and reaches
+TOR-1153's — which widening the trigger does not, at any glob.
+
+⚠️ **THE COST I AM ACCEPTING, stated so it can be held against me:** a README-only PR gets no mandatory
+round. That leaves **`#943`'s own class uncovered** — and `#943` is not a neutral example, it is
+*"three READMEs claimed 3 of 4 parity halves do real work — only ONE does"*, i.e. **the PR cited to
+justify the exemption was itself a fix for false README claims.** Route B still applies there and
+still requires an originated hypothesis. If a README-only PR ships a false claim that reaches a
+publish decision, this ruling is wrong and the trigger must widen — record it with the PR number.
+
+⚠️ **NOT CLAIMED: this does not reach TOR-1059.** That README was falsified by an `artifact publish` —
+an act with no PR, no diff and no §4A route. See §4A.3, which is the larger problem.
+
+### ⚠️ AMENDMENT 2026-09-16 · §4A.2 — `api/services/projector/**` JOINS THE MANDATORY CLASS
+
+Raised by PR #947's adjudicator after merge. **Verified first-party**: `#947` touched
+`api/services/projector/{chart_compiler,chart_field_honouring}.py`; `projector` is in neither
+`_REAL_PRODUCTS` nor `{publishing,vault,silver,computation}`, so the omission is real and route B was
+correct by the letter.
+
+**Why it is in, on the principle above rather than on "more review is safer":**
+
+The projector is the only code path that turns a builder's page into an immutable `page_versions` row.
+Clause 1 of the principle is satisfied by its defining sentence. **Clause 2 is the measured half** —
+`git grep -n "diff_baseline" -- .github/` and the same for `project_manifests` **both return no
+matches**: the end-to-end equivalence gate runs in **zero** workflows.
+
+⚠️ **State that precisely, because the overclaim is available and I nearly made it.** The projector is
+NOT uncovered: **53 test files / ~961 test definitions import `api.services.projector`, and the bare
+`pytest -n 8 -q` at `ci.yml:105` collects every one of them** against a live Postgres. What is absent
+is the *semantic* comparison. `tests/baseline/test_acceptance_targets_are_gradable.py:27` says so in
+its own words — *"only `--acceptance-db --through-router`, which no workflow invokes, goes red."* The
+truth checks degrade to **shape checks over synthetic fixtures** in CI because the frozen extracts are
+gitignored. That is clause 2, and it is the same condition — *the thing that would catch this is not
+run* — that justified the `authored_pages` amendment one day earlier.
+
+🔴 **DIRECTION-SENSITIVITY IS REJECTED, and the second reason matters more than the first.** The
+proposal was to mandate route A only for a projector change that *admits* more.
+
+1. **A trigger must be decidable from the file list**, because the reviewer must know the route
+   *before* doing the work. "Does this admit more?" is answerable only by performing the review.
+2. **"Refuses more is safe" is FALSE as a general claim.** A wrong refusal freezes no number — it
+   silently removes a slot from the migration, and CLAUDE.md records both halves: TOR-939
+   (*"a projecting count is not a migratable count — never size the remaining migration off one"*) and
+   TOR-639, where a new refusal firing **earlier** than the declared one left `FRTC/financial`
+   mis-declared for a day. The asymmetry is real for *immutability* and does not hold for *roadmap
+   inputs*, so it cannot carry a review trigger.
+
+**Cost, MEASURED — same window and control as §4A.1:**
+
+```
+PRs touching api/services/projector/**            41 / 381
+mandatory class TODAY (union of every member)    138 / 381   (36.2%)
+mandatory class WITH the projector               171 / 381   (44.9%)
+MARGINAL — pulled in by the projector alone       33         (+24% on the class)
+```
+
+⚠️ **An earlier pass of this measurement read `37 → 73, "the class nearly doubles"`. That was a DEAD
+PROBE** — zsh does not word-split an unquoted parameter, so a `$CLASS` pathspec matched nothing and
+only the `authored_pages` branch was counting. Struck rather than overwritten, and stated because
+**the correction moved the number in the direction that flatters the widening I was already leaning
+toward** (+24%, not +97%) — the direction nobody re-checks. The corrected run carries a must-fire
+control. **Re-run it rather than citing these digits.**
+
+**This is the largest single addition the class has had — larger than `models/**` (23) or `engine/**`
+(21), second only to `authored_pages/**`.** It is affordable on §4A's own arithmetic (median round
+280s, concurrent with a ~12 min CI window) and it is **consistent with, not an escalation beyond, the
+amendment approved the previous night**, which admitted a *larger* member (45) on the identical
+clause-2 reasoning.
+
+**Falsifier:** if over the next two weeks route-A rounds on projector PRs return only restatements,
+this is too wide — narrow it to `{payload,publish,chart_compiler}.py` and record the PR number.
+
+### 🔴 §4A.3 — THE BIGGEST PROBLEM WITH §4A, WHICH NEITHER NAMED DEFECT TOUCHES
+
+**Asked for deliberately, and it is not a third item on the list — it is the reason the first two
+exist. §4A protects immutability, and §4A has NO JURISDICTION AT THE MOMENT IMMUTABILITY IS CREATED.**
+
+⚠️ **This is NOT the section further down also headed *"the biggest problem"* — do not merge them.**
+That one is about the gate's **compliance signal** (a recorded line is anti-correlated with the quality
+it measures, and route B fuses adversary and approver). This one is about its **jurisdiction**. Both
+stand; they have different subjects and different fixes.
+
+Every route, every gate, every carve-out in this section is keyed on **a PR merging into `develop`**.
+The thing the whole section says it protects — *an immutable published version* — is not created by a
+merge. It is created by `torque-admin artifact publish` / `POST /api/publishing/*`, run by an operator
+against a live database. **That act has no diff, no head sha, no CI run, no route A and no route B.
+§4A does not mention it.**
+
+It is not hypothetical, and both named defects are downstream of it:
+
+```
+TOR-1138  (High)  a RED publish gate cannot block a publish. text_parity.py returned rc=1
+                  naming the exact defect; build.sh's `set -euo pipefail` then DELETED parity.py;
+                  republish.sh never reads the build's exit status and its grep whitelist matches
+                  no failure vocabulary. Three wrong figures shipped into an IMMUTABLE page.
+                  -> "a red gate was indistinguishable from a green one"
+                  -> republish.sh lives OUTSIDE the repo (~/torque-page-review/): unversioned
+                     machine state, so no commit and no PR review can reach it at all.
+
+TOR-1059          a tracked README says "NOT PUBLISHED. No artifact publish, no serve_mode change,
+                  no page_pointers write." Measured: fortect|historical|legacy|v2|html.
+                  -> falsified by an act that produced NO COMMIT. §4A.1's scope rule cannot see it,
+                     because there is no PR to scope.
+```
+
+🔑 **So §4A reviews the RECIPE and never the SERVING.** A merge is the point at which a change becomes
+*available*; a publish is the point at which it becomes *irreversible*. This file spends all of its
+precision on the first and none on the second, and the gap is where a wrong number actually becomes
+permanent. **It cannot be closed by editing the class list — which is why it belongs here and not in
+§4A.1 or §4A.2.**
+
+⚠️ **And note where a publish sits in §3: `Anything that deletes data or history` and `Product and
+data-provenance calls` are SHAHAR's. An immutable publish is arguably both and is named as neither.**
+That is a gap in the three-way sort, not only in the Codex gate.
+
+**Not ruled here** — it needs its own adjudication and probably Shahar, because the fix is a gate on an
+operator action against a live environment rather than a rule for this seat. What this section records
+is that **the question exists and §4A currently answers it by silence.** The two candidate shapes, so
+whoever takes it does not start cold: (a) a publish-time route — the operator records a gate verdict
+the way a lane records a round, three-state per `silver_doctor.py` (pass / fail / **could not run**),
+never collapsing the third into a pass; (b) TOR-1138's own done-when — make the harness refuse, and
+move the refusal somewhere a commit can hold it.
+
+**Two smaller ones, recorded rather than ruled:**
+
+- **No carve-out in this section has an expiry check.** `776e1d2` made the `assets/vendor/**` exemption
+  *"contingent on `bundle_currency.test.ts` continuing to execute"* — and **nothing checks that it
+  does.** Weaken that test and §4A becomes silently wrong, with no red anywhere. Same class as this
+  repo's own *"red-by-design expires silently"* and *"a fix can drain its own control."* The principle
+  in §4A now at least makes the dependency **explicit** for every future carve-out; it does not make
+  it **checked**.
+- **Class membership is eyeballed, not computed.** Nothing derives the class from a PR's file list,
+  though `gh pr view N --json files` ∩ the globs is a few lines. Writing the cost measurements above I
+  hit the **same zsh word-splitting dead probe twice**, each time returning a confident wrong number
+  in the reassuring direction. **If it can silently mis-answer for me writing the rule, it can for an
+  adjudicator applying it at 2am.** A committed script with a must-fire control would make the trigger
+  mechanical, which is the one property a gate keyed on globs ought to have.
 
 ### ⚠️ ROUTE A HAS A LOCATION PROBLEM — the LANE must cite the path, not the adjudicator hunt for it
 
