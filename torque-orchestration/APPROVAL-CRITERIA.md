@@ -1266,3 +1266,51 @@ structurally silent about the guard's actual decision. Maximally reassuring, max
 - **No self-granted widening.** A seat that finds these conditions inconvenient escalates; it does not
   reinterpret them. ⚠️ Taking authority feels efficient the way standing down feels costless — both
   get less scrutiny than they deserve, and both are decisions.
+
+### ⚠️ AMENDMENT 2026-09-18 · §6A Part 1 — DECISION RECORDS ARE FULL TIER, and the reason is not blast radius
+
+`docs/decisions/**` and `docs/v2-architecture/**` join the FULL TIER. **Not because of what they
+can break — they ship no bytes — but because they are the one document class whose citations
+nothing checks.** Proved two ways on 2026-09-18, one by execution:
+
+```
+doc_citations.py:77-78   puts docs/decisions/ DELIBERATELY out of scope ("records of a past world")
+EXECUTED                 is_compass_doc('docs/decisions/sandbox_packages_and_upload.md') -> False
+test_cited_tests_exist   SCANNED = ("api", "contracts/torque_contracts", "scripts")  — no docs/
+                         and it resolves only test IDENTIFIERS, never arbitrary paths
+CONTROL                  tests/structure/ runs 2300 passed on the merged tree
+                         WITH ALL NINE CITATION DEFECTS INSIDE THAT GREEN
+```
+
+**Nine citation defects reached review in one memo**, including two blocking: a claim that
+`models/` + `risk/` ship as a versioned wheel (false — `packages = ["torque_engine"]`, and
+`tests/structure/test_engine_wheel.py:34` puts both in the forbidden-import `PLATFORM` set, so a
+running CI guard *prevents* it), and a claim that a guard's named tripwire is "the whole of" it, so
+adding a third identity column "stays green".
+
+🔴 **The second one is why this tier exists.** Measured on a disposable scratch DB: baseline
+**48 passed**; add a third identity column to `_RAN_IDENTITY_COLUMNS["vault_script"]` →
+**6 FAILED / 42 passed**, while the *named* tripwire isolated still **passes**. `pins.py` does
+`entry[c]` per required column, so the column produces a `KeyError` gap. **As written the memo tells
+an implementer that six real guards are not guards — which licenses deleting them.** A document
+that can cause a guard to be removed has blast radius; it just does not have a diff.
+
+⚠️ **And a FULL-TIER seat got this wrong first, which is the load-bearing part.** Its initial
+verdict endorsed the memo's claim on the strength of `git grep -n "_RAN_IDENTITY_COLUMNS"` returning
+4 references. **The three real tripwires never name that identifier** — they reach the tuple through
+`_computed_view`. Its own account:
+
+> *"My probe was built from the vocabulary of the answer I expected, so it could not return the thing
+> that refutes it. Because the result AGREED with the lane, nothing re-checked it — I called a grep
+> 'independent verification' and it wore the authority of an execution."*
+
+**So the rule for this tier is not "read more carefully". It is: a claim that a guard does NOT cover
+something must be discharged by EXECUTING a mutation, never by a grep.** An absence measured with
+the vocabulary of the thing you expect to find is not a measurement. Pair it with a baseline and
+revert the mutation; use a `scratch_<ticket>_<purpose>` database and never a protected restore.
+
+⚠️ **One further trap specific to this class: correcting a document makes you inherit its
+neighbours.** The same memo caught one genuinely stale claim and absorbed the false one sitting
+beside it in the same section, unmeasured — and the absorbed claim pointed the way its own
+conclusion needed. **Enumerate every factual claim in each section you touch and mark it measured /
+unmeasured / out-of-scope**, and say in the PR which neighbours you did not check.
