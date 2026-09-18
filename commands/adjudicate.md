@@ -79,8 +79,14 @@ These are pass/fail and require no judgment. **A plan that fails any of them is 
 reading** — say which gate, and stop.
 
 ```
-□  A Codex round artifact EXISTS for THIS artifact       a round happened iff its .md exists,
-                                                          never because a command exited 0
+□  The Codex gate is DISCHARGED, and RECORDED in your ruling   ⚠️ RULED 2026-08-28 — the
+   AUTHORITY is APPROVAL-CRITERIA.md §4A. Two routes: (A) a round artifact whose .provenance
+   sha= matches the head, or (B) you originate a hypothesis the lane did not have and say what
+   it returned. Re-running the lane's evidence is NOT route B. Route A is MANDATORY for
+   engine/**, models/**, risk/**, a real client's api/services/<product>/**, db/schema.py,
+   api/auth/**, api/services/{publishing,vault,silver,computation}/**.
+   A ruling that does not MENTION the gate has FAILED it — that is how the one silent skip
+   of 2026-08-28 happened, on the highest-blast-radius change of the night.
 □  The plan names the files it will touch                 no file list -> nothing to check against
 □  The ticket has a DONE-WHEN that is checkable           a goal is not a DONE-WHEN
 □  The plan states what it deliberately does NOT do       scope without a boundary is not scope
@@ -92,6 +98,11 @@ that filter was **already applied** — so implementing the ruling would have be
 reported as a fix.
 
 ## 3 · Adjudicate the Codex round — do not re-review from scratch
+
+⚠️ **This section governs the case where a round EXISTS (route A). It does not govern route B.** When
+no round exists and you are discharging the gate yourself, originating a new hypothesis is exactly
+what is required — §4A. Read literally across both cases these two would contradict; they do not,
+because they describe different situations. If there is a round, adjudicate it. If there is not, be it.
 
 The lane's round has already produced claims. **Your job is to decide which are real, not to find new
 ones.** Codex produces claims, not verdicts; a review relayed without adjudication launders a guess into

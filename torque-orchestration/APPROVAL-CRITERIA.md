@@ -131,10 +131,16 @@ ROUTE B   THE ADJUDICATOR PERFORMS THE PASS FIRST-PARTY
 ```
 engine/**          models/**          risk/**
 api/services/<product>/**   for any product in `_REAL_PRODUCTS` (api/routers/companies.py)
-db/schema.py · api/auth/** · api/services/{publishing,vault,silver,computation}/**
+db/schema.py · api/auth/** · api/services/{vault,silver,computation}/**
+api/services/publishing.py              CORRECTED 2026-09-18 — see §4A.6
 authored_pages/** EXCEPT **/README.md   ADDED 2026-09-15 — see the amendment directly below
 api/services/projector/**               ADDED 2026-09-16 — see §4A.2
 ```
+
+⚠️ **`api/services/publishing.py` is a FILE entry on purpose — it is a module, not a package.** It sat
+inside the brace group as `publishing/**` until 2026-09-18, a selector matching **zero paths**; §4A.6
+holds the measurement. **Keep this fence machine-parseable — put reasons outside it, never inside**, or a
+matcher reads the explanation as a class entry (which happened to the very check that produced §4A.6).
 
 ⚠️ **A sidecar naming an EARLIER sha can still discharge route A — §4A.4, bounded. And the SCOPE of a
 round on `authored_pages/<page>/` is that whole directory, its README included — §4A.1.**
@@ -535,6 +541,149 @@ SHAHAR'S, left UNRULED   replacing the PATH-GLOB selector with a PROPERTY-DEFINE
                          glance than a glob — and tonight's three defects close without it.
                          ⚠️ Recorded rather than decided to be tidy.
 ```
+
+### ⚠️ AMENDMENT 2026-09-17 · §4A.5 — A CONDITIONAL APPROVAL MAY NOT PRE-DECLARE §4A.4's OUTCOME
+
+**The incident, per this file's own rule. PR #970's ruling of 2026-09-17 15:20Z approved conditionally
+on a re-merge and offered remedy (a) with the words:** *"A README is outside §4A's trigger, so **r10
+still carries under §4A.4** and no fresh round is owed."* **Two paragraphs earlier the same ruling had
+found the re-merge was NOT mechanical and that it therefore *"may not pre-authorise a future head."*
+Those two sentences cannot both be safe.** Measured after the lane re-merged (`bb85f408..bba92fb0`,
+50 rows): **2 mandatory-class rows** (`api/services/smp/{data,loan_simulator}.py`, SMP ∈
+`_REAL_PRODUCTS`) and **9 `authored_pages/**` non-README rows** arrived FROM DEVELOP — another lane's
+merged work. The allowance was voided and a fresh round was owed. The lane measured this itself,
+ran round 11 against its own ruling's estimate, and r11 returned a real finding.
+
+**RULING — clause 1 is measured over the WHOLE `covered-sha..head` delta, INCLUDING bytes that arrived
+via a merge.** Three reasons, and the section decides itself:
+
+1. **§4A.4's own HEADING is `WHEN THE HEAD MOVES ONLY OUTSIDE THE MANDATORY CLASS`.** A re-merge that
+   pulls mandatory-class bytes in is, by the title, not the case it governs.
+2. **Clause 1's subject is the PATH SET, not the PR's authored diff** — *"Every path in the mandatory
+   class is byte-identical between the covered sha and the head"* — and §4A.4's own worked measurement
+   is `git diff --name-only <sidecar sha> <head>`, which a merge commit populates.
+3. **"NO SIZE TERM, deliberately… any mandatory-class byte moving voids the allowance, however small."**
+   There is no authored-vs-arrived carve-out, and inventing one is the size term by another name.
+
+**And the FUNCTION settles it**: clause 2 already says the round's claim *"is about the artifact as it
+will be published."* A merge changes that artifact. PR #970 is its own proof — develop's generator
+change moved two reader-visible lines at `merge-tree` **rc=0** with every test green. Each side's round
+read bytes that were fine; **nobody had read the combination.**
+
+🔑 **So a conditional approval may STATE the §4A.4 test and may NOT pre-declare its OUTCOME.** The
+correct form:
+
+> *"the standing round carries **iff** `git diff --name-only <covered-sha>..<new head>` contains zero
+> mandatory-class rows — measure it and state the count; otherwise a fresh route-A round is owed."*
+
+This is §5's pre-authorisation rule applied to the Codex gate, and it inherits §5's hole verbatim: **git
+reports no conflict for a semantic one.** ⚠️ **Note the cost is asymmetric and it is why this is not
+softened**: pre-declaring "it carries" is the reassuring direction, it is the direction a lane will not
+push back on, and it retires the gate silently. A lane that measures and finds zero has lost nothing.
+
+⚠️ **This constrains the RULING's wording, not the allowance.** §4A.4 is unchanged; both of its prior
+rulings (`#935` release, `#939` hold) still stand.
+
+### ⚠️ CORRECTION 2026-09-18 · §4A.6 — `api/services/publishing/**` MATCHED ZERO PATHS. A DEAD SELECTOR, NOT A WIDENING
+
+**Found by the `record-rulings-0918` lane when its §4A matcher's MUST-HIT CONTROL FAILED** — not by
+anyone reading line 134. That is the instrument discipline working, and it is the only reason this
+surfaced at all.
+
+**Measured first-party at `origin/develop` = `dd45836e`, with two-direction controls
+(neg `api/services/definitely_not_a_real_dir/**` → 0; pos `api/services/**` → 164):**
+
+```
+api/services/publishing/**    ->    0 paths   DEAD ENTRY
+api/services/vault/**         ->    5         api/services/silver/**       -> 5
+api/services/computation/**   ->    7         api/services/projector/**    -> 10
+api/auth/**  -> 8   ·  db/schema.py -> 1  ·  engine/** -> 24  ·  models/** -> 28  ·  risk/** -> 4
+```
+
+`publishing` is the ONLY module in the brace group; the other three are packages. `api/services/publishing.py`
+is a 677-line module and **`api/services/publishing/` has never existed** — verified across all reachable
+commits, no rename in its 15-commit history.
+
+🔴 **Why this entry, of all of them, is the worst to have void:** `api/services/publishing.py` is the
+**sole writer in all production code** of `page_pointers`, `page_versions` and `publish_log` — 9 write
+statements, and nothing else under `api/` writes those tables at all. It defines `set_serve_mode`
+(the live/off-air flip), `publish_page`, `next_version`, `cas_predicate`, `_lock_pointer` and the four
+publish exceptions. Everything else reaches the immutable record *through* it.
+
+**THIS IS A CORRECTION, NOT AN AMENDMENT, and the distinction is load-bearing.** Two things in this
+file already read the entry the way the correction now writes it:
+
+1. **The principle block above** states that naming clause 2 makes membership **derivable instead of
+   enumerated**. Clause 1 is satisfied by the sole-writer fact.
+2. **§4A.2's own applied usage** — *"`projector` is in neither `_REAL_PRODUCTS` nor
+   `{publishing,vault,silver,computation}`"* — drops the prefix and the `/**` and reads the brace group
+   as a bare NAME set, under which `publishing` was always a member.
+
+🔑 **So the defect's subject was the MECHANICAL path, never the reading path.** A human at line 134
+routes A; a matcher does not. `db/schema.py` was already a bare-file entry in the same list, so naming
+a file is a format this class supports — the `/**` was an error, not a limitation.
+
+**IT HAS NOT BITTEN, and it structurally could not have.** 11 merged PRs have touched
+`api/services/publishing.py`; the last is `1e967b32` (2026-08-24), and the earliest PR body citing this
+file at all is `#788` (2026-08-28). **No route-era PR has ever had `publishing.py` in its delta**, and
+zero of the 11 declare either route. **No retrospective review is owed** — re-reviewing them applies a
+rule that did not exist, and this section's own lesson is that *a rule whose first act is to condemn
+correct rulings is a rule that gets deleted.*
+
+**Cost, MEASURED with a must-fire control** (`db/schema.py`, a known member, → 42; a dead probe would
+have returned 0): over 918 merge commits on `origin/develop` in 30 days,
+**`api/services/publishing.py` is touched by 9** — ~1%, **smaller than every existing member** and far
+below the projector's 33. The merge-treadmill objection does not reach a correction this size.
+
+⚠️ **THE CLASS IS NOT WIDENED BY THIS, deliberately.** Measured while ruling, and **recorded rather than
+ruled** — each is a class *expansion* and belongs to Shahar or its own ruling, per §4A.2's handling of
+TOR-1123's option 2. **All three are the same mechanism as this correction and as TOR-1123: a publish
+boundary matching no glob.**
+
+```
+api/routers/publishing.py    NOT IN ANY ENTRY, and `api/routers/**` appears nowhere in this file
+                             except as the citation for _REAL_PRODUCTS. It owns ALL FIVE publish
+                             endpoints — POST /publish · /revert · /restore · /artifact · /serve-mode
+                             (:359) — and is the SOLE CALLER of set_serve_mode (:369). The known
+                             hard-coded `"kind": "human"` actor defect is at :131, i.e. INSIDE the
+                             file route A never mandates.        7 / 918 merge commits
+                             ⚠️ §4A.3 says §4A has no jurisdiction where immutability is CREATED
+                             because that act "has no diff". The CODE serving POST /api/publishing/*
+                             does have a diff — §4A.3 did not notice it is also unclassed.
+
+api/services/manifest_controls.py   TOR-1123's OWN first named instance, still uncovered 4 days on.
+                             `assert_publishable_generically` — the generic publish writer.  6 / 918
+
+api/services/control_plane/**       TOR-1123's OWN second named instance (`pages.py`:
+                             publish_manifest · validate_manifest · serve_mode_of ·
+                             refuse_unapplied_serve_mode), plus pins.py and silver.py.
+                             ⚠️ 44 / 918 — this would be the LARGEST single addition the class has
+                             ever had, bigger than the projector's 33. Do not bundle it in on alarm;
+                             it needs its own cost ruling.
+```
+
+⚠️ **Clause 2 of the principle argues AGAINST route A for `publishing.py`, and that is stated because it
+is the unflattering direction.** 19 test files exercise `api.services.publishing` against live Postgres
+under the bare `pytest -n 8 -q` at `ci.yml:105` — `set_serve_mode` in 9 files, `cas_predicate` /
+`PublishConflict` / `VersionOutOfSequence` in 5. **That is materially stronger than either prior
+amendment's clause-2 case**, where §4A.2 measured the semantic gate running in *zero* workflows. So this
+entry is corrected for **mechanical soundness and consistency with how the file already reads itself** —
+NOT on a claim that a wrong number is about to reach a client through it. Whether clause 2 is *satisfied*
+here (do those tests discriminate the failure class route A catches?) is a mutation question this ruling
+did not measure and does not assert.
+
+🔴 **THE REMEDY THIS SECTION CANNOT BE: the structural half is owed and is NOT a prose fix.** A class
+expressed as globs over a tree that mixes modules and packages will drift again the moment a package is
+split or a module promoted — **17 top-level modules under `api/services/` and 4 class packages are each
+a future instance of this.** What is owed is a committed **must-hit assertion that every §4A class entry
+resolves to ≥1 tracked path**, with a two-direction control. It was written and run to produce the table
+above; it fires on exactly this entry and passes the other ten. **§4A.3's second "smaller one" already
+asked for this** (*"Class membership is eyeballed, not computed"*) and **TOR-1160's third done-when asks
+for the same script** — one tool answers all three. Until it exists, this correction is checked by
+nobody, ever again, which is the property this file distrusts everywhere else.
+
+⚠️ **The identical defective string is duplicated at `LANE-PREAMBLE.md:566`** and is corrected there in
+the same act. A rule held in two transcribed copies has two places to rot.
 
 ### ⚠️ ROUTE A HAS A LOCATION PROBLEM — the LANE must cite the path, not the adjudicator hunt for it
 

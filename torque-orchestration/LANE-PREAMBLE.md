@@ -90,6 +90,57 @@ change would actually change something.**
 
 ---
 
+### 1.x · DISPATCHER: THE FINDER FILES. A reported finding is work in flight, not an unclaimed gap.
+
+Measured 2026-08-31: the dispatcher created **three duplicate tickets in one session**, every one by
+reading a lane's or an adjudicator's *report of a finding* as a gap nobody had claimed — while that
+same agent was writing the ticket. TOR-1043/1044, TOR-1046/1048, and a duplicate `/adjudicate` spawned
+onto a PR whose seat was still live.
+
+**In all three the finder's version was better**, and not by courtesy: it had the artifact open. One
+corrected a fact the dispatcher had asserted (`GenericLFI_BODY` keys on a bare `../`, not on the
+filename); one caught a cost the dispatcher had missed entirely (a pinned rule-set version **expires**,
+so pinning relocates maintenance rather than removing it); one verified state from `tofu show -json`
+where the dispatcher had taken it from a report.
+
+**THE RULE: when an agent reports a finding, it files the ticket. The dispatcher does not.** File only
+when the agent says it is not filing, or when the finding is the dispatcher's own.
+
+⚠️ **The trap is a routing sentence.** *"It needs its own ticket"*, *"routed to whoever owns X"*,
+*"filed separately"* — each reads as *nobody has this*, and each means **someone already does**. Ask,
+or wait one turn. **A duplicate costs more than a delay**: it splits the evidence across two records,
+and the better-evidenced one is not always the one that survives.
+
+### 1.y · A BOUND ON YOU IS NOT A PROPERTY OF THE CHANGE — say which, in the brief
+
+Measured 2026-08-31 (TOR-1040). A lane was told **"author the PR, do not apply."** It held that
+perfectly. Another seat then merged and applied to dev — **within the authority its own brief gave
+it** — and the lane reported that a change *"labelled do not apply reached production
+infrastructure."*
+
+**Two errors, and the lane found both itself.** It was **dev**, not prod (prod was unwired and
+verified so). And nothing had escaped: dev applies were always `/adjudicate`'s to perform.
+
+🔑 **Its own diagnosis is the durable part: *"I held my bound correctly and then misread someone
+else's authority as its absence."*** A prohibition addressed to you says nothing about whether the
+action is permitted to anyone else — but read from inside a lane it looks like a property of the
+work, and the lane then reports a legitimate act as an escape.
+
+⚠️ **The failure lands in the ALARMING direction** — *"reached production"* is the sentence that gets
+quoted and repeated, and it is expensive to unwind. The lane checked whether its false claim had
+reached anything durable (PR comments, tickets, commit messages: none — chat only) before correcting
+it, which is the right second move.
+
+**DISPATCHER'S FIX, and it is on the brief, not the lane:** when you scope a bound to a lane, **say
+whether the same action is permitted to another seat.** *"Do not apply — a dev apply is
+`/adjudicate`'s and one may run this after ruling"* costs one clause and removes the whole ambiguity.
+
+**LANE'S FIX:** before reporting that a bound was breached, establish **whose** bound it was. And
+before reporting anything as *production*, measure prod — the same probe, with a control that
+discriminates. See [[capability-is-not-permission]], [[branch-and-actor-do-not-attribute]].
+
+---
+
 ## 2 · Before you start: is it already done?
 
 ```bash
@@ -377,6 +428,86 @@ read is not enough to declare any session dead.** Re-read a minute apart before 
 stale bytecode, which is exactly the mutation-testing case (flipping a numeric default or a comparison
 operator preserves size by construction).
 
+### 4.x · THE STEP: before trusting a new instrument, run it against an input whose answer you already know
+
+Added 2026-08-31 by the dispatcher seat, on a measurement produced by two adjudicator seats and a lane
+on TOR-1040. **Not a habit — a step, taken before the instrument's first real reading is believed.**
+
+🔴 **LEAD WITH THIS ONE, because it is the case the other four do not make.** A lane withdrew an
+overstated sweep, re-ran it properly repo-wide — **and piped the re-run through `head -20`.** The one
+tracked instance fell **below the cut** while `.terragrunt-cache` copies of the very lines it was
+hunting filled the visible rows. **A corrected instrument returning a clean-looking answer for an
+entirely new reason.** Its own notes already said *never `head` a probe whose ABSENCE you will act on*.
+
+🔑 **An instrument can fail twice, differently — and the SECOND failure is the one nobody budgets for,
+because the first has just been fixed.** So this is a **repeated check, not a one-time gate**: a
+correction is a new instrument and gets a new first run. *"I already checked that"* is the weakest
+possible reason to skip it. ([[fix-a-fix-chain]], pointed at measurement rather than code.)
+
+**Four further instruments in the same session had a wrong FIRST run:**
+
+| instrument | how it was wrong |
+|---|---|
+| a CloudWatch probe | queried `Rule=common` when the dimension is `torque-dev-alb-common` — returned an **empty datapoint set, shaped exactly like a real answer** |
+| a plan "before" control | `git stash` removed only the uncommitted file, so "before" was *the other design*, not `origin/main` |
+| an inherited `1500` WCU "ceiling" | never measured — it is a **price**; the real quota is 5000 and unadjustable |
+| a prescribed zero-alarm detector | the metric published **6 events in 14 days**, so a zero-alarm fires on any quiet period and gets muted |
+
+**Every one was caught by a value already known to be true, and every one by accident** — a control
+that came back empty for a rule the author had personally driven to 403 hours earlier; a delta that
+disagreed with a remembered plan. **Four of four caught by luck is not a method.** The step is cheap
+and would have caught all four.
+
+### A SEVENTH shape: an UNCONDITIONAL LABEL printed beside conditional data
+
+Measured 2026-08-31, **twice in one session, by two different agents, from the same pattern** — including the dispatcher, inside the command it ran to verify a lane-boundary claim:
+
+```bash
+for b in $(...); do  n=$(git rev-list --count ... -- path/); [ "$n" -gt 0 ] && echo "  $b  $n commit(s)"; done
+echo "  (empty above = no cross-branch collision)"     # <- fires ALWAYS
+```
+
+**The loop was correct and the caption was a lie.** It printed *"empty above = no collision"* directly beneath **two non-empty rows**. The other agent's version printed `(empty above = no overlap)` next to a real overlap and it *"nearly reported no overlap."*
+
+🔑 **A `echo` outside the loop is not a verdict — it is a constant.** It cannot disagree with the data it sits under, so it says the same thing whether the finding is present or absent, and a reader scanning for the conclusion reads the constant.
+
+**Fix: make the verdict a FUNCTION of the count.**
+
+```bash
+n=$(... | wc -l); [ "$n" -eq 0 ] && echo "NONE (0 rows)" || echo "$n ROW(S) — read them"
+```
+
+⚠️ **This is the same family as `cmd && echo PASS || echo FAIL`** — which this file already warns reports FAIL for an *error* status — and the same family as a `# Source:` comment beside a claim it does not support. **Any text asserting a result must be computed from the result.** Emitting the count in the verdict line makes the two impossible to separate.
+
+🔴 **THIS RULE WAS WRITTEN DOWN AND THEN BROKEN AGAIN, TWICE, WITHIN THE HOUR — read that as data about rules, not as carelessness.** After the two instances above were measured and this section was added, the same lane printed `"(empty = bundle NOT rebuilt)"` **directly beneath a non-empty result**, and said so itself:
+
+> *"I made that mistake a third time, minutes after documenting it. Writing the rule down did not stop me reaching for it; the constant is simply the easy thing to type."*
+
+🔑 **So the remedy is NOT knowing the rule. It is that the computed form is the only one that survives contact.** In the same report, the two verdicts written as `[ "$pre" = "$post" ] && … || …` were both correct, while the constant recurred. **Type the comparison, not the caption** — and treat "I know about this one" as the weakest possible protection, since three of the four instances were committed by people who did.
+
+This is [[naming-a-rule-lowers-your-guard]] measured on itself: **a rule you have just written is one you believe you are already following**, which is exactly when it stops being a check.
+
+### A SIXTH shape, and it needs no broken tool at all: the predicate answered, the property did not
+
+An adjudicator warned that a claim was unconfirmed. **It had printed the confirming line in full, two
+commands earlier.** It then grepped for the exact *wording* (`NOT enforced|not enforced`), got zero,
+and reported that as bearing on the *property* — which the file states twice, in different words.
+
+🔑 **A zero is a claim about your PREDICATE, never about the world** — and here the instrument was
+working perfectly. Nothing was broken; the question asked was narrower than the question answered.
+**Before acting on a zero, state what a TRUE instance would have to look like, and check your predicate
+would match it.** ⚠️ It landed in the **alarming** direction: the ticket would have sent someone to
+re-verify something already confirmed. See [[wrong-key-spelling-returns-a-true-zero]].
+
+⚠️ **The empty-set instrument is the most dangerous shape.** One that CONTRADICTS something checkable
+announces itself. One returning NO DATA is indistinguishable from *"the thing you are measuring is
+genuinely quiet"* — and quiet is usually the reassuring reading. **Prefer a probe that must produce a
+non-zero known value over one whose success looks like silence.**
+
+⚠️ **This does not replace §4's existing rules — it precedes them.** A two-direction control, a
+must-fire mutation and a discriminating population all assume the instrument can report at all. This
+step is what establishes that.
+
 ---
 
 ## 5 · Facts-or-flag — verbatim, because subagents and fresh sessions will not infer it
@@ -419,6 +550,32 @@ REQUIRED   the artifact's core evidence CANNOT BE EXECUTED BY A READER
            -> anything whose "it works" rests on a run only the author made
 NOT REQUIRED   doc-only · test-only · a diff whose evidence the adjudicator can simply RE-RUN
 ```
+
+🔴 **SUPERSEDED 2026-08-28 — the box above is the WRONG AXIS and is kept only so the change is
+legible. The authority is now `APPROVAL-CRITERIA.md` §4A; read it there, and do not cite this box
+as licence.** Re-runnability of the EVIDENCE is orthogonal to what a round catches: re-running
+answers *does the claimed check pass*, never *is the check the right check / does it discriminate /
+did the fix drain its own control* — which is where this repo's dominant defect class lives.
+Measured on PR #784: the lane's four committed mutations all reproduced clean, and a FIFTH the
+adjudicator originated (delete the `sweep()` call) left **3,219 tests passing** over dead code.
+
+**What §4A rules, in short, so a lane knows what to hand over:** the gate applies to every PR; it is
+discharged either by a round artifact whose `.provenance` `sha=` matches the head, or by the
+adjudicator originating its own hypothesis; **route A is MANDATORY** when the diff touches
+`engine/**`, `models/**`, `risk/**`, a `_REAL_PRODUCTS` client's `api/services/<product>/**`,
+`db/schema.py`, `api/auth/**`, `api/services/publishing.py`, or
+`api/services/{vault,silver,computation}/**`; and the gate must be **RECORDED** in the ruling either way.
+
+⚠️ **`api/services/publishing.py` is a MODULE, and this line used to say `publishing/**` inside the brace
+group — a selector that matched ZERO paths.** Corrected 2026-09-18 alongside `APPROVAL-CRITERIA.md` §4A.6,
+which holds the ruling and the measurement. **Read the class THERE, not from this restatement** — this
+copy is a transcription and it has now rotted once. `authored_pages/**` (except `**/README.md`) and
+`api/services/projector/**` are also members and this summary predates both.
+
+⚠️ **A lane citing this section to an adjudicator does not discharge anything** — PR #782's seat was
+cited it and answered *"which is not an artifact I can read, so I am not accepting it as licence."*
+That seat was right. **If your change is in the mandatory class, run the round** — measured median
+**280s**, which fits inside the CI window you are already waiting on.
 
 **When it is not run, the ruling must SAY SO and name what was substituted.** Two adjudicators did
 exactly this on 2026-08-18 — one recorded *"no Codex round artifact exists; `.codex-review/` has 868
@@ -481,10 +638,74 @@ project does — so do not cite it in repo documentation as though a fresh clone
 
 **Ancestry proves the BRANCH landed. It does NOT prove your POST-REVIEW commits did.**
 
-`git merge-base --is-ancestor <your-head> origin/develop` returns true for a **squash**, a **partial
-merge**, or a **conflict resolution that took the older side**. So it answers *"did my branch reach
-develop"* — not *"did my last four commits reach develop"*, which is the question you actually have
-after a round found defects you then fixed.
+`git merge-base --is-ancestor <your-head> origin/develop` returns true for a **partial merge** or a
+**conflict resolution that took the older side**. Those two share a mechanism worth naming: they are
+**true merges that dropped content**, so ancestry holds while content does not. It therefore answers
+*"did my branch reach develop"* — not *"did my last four commits reach develop"*, which is the
+question you actually have after a round found defects you then fixed.
+
+⚠️ **This list used to begin "a squash", and that was measurably FALSE — corrected 2026-08-25.**
+Measured in a throwaway repo, one variable, both arms:
+
+```
+TRUE MERGE   git merge-base --is-ancestor <feat> <base>   rc=0   (2 parents)
+SQUASH       git merge-base --is-ancestor <feat> <base>   rc=1   (1 parent)
+```
+
+— with the control that the branch's file is present in **both** arms, i.e. the squash's content
+landed while its ancestry did not. A squash creates a new **single-parent** commit with no parent
+link to your head.
+
+🔑 **The wrong word was the smaller half. The list above enumerates FALSE POSITIVES — things that
+make ancestry answer `true` when your content did not land, the REASSURING direction. A squash is a
+FALSE NEGATIVE: `rc=1` while the content DID land, the ALARMING direction.** Filing one inside a list
+of the other destroys the reader's ability to tell them apart, and **they have opposite remedies** —
+a false positive means *go check the content*, a false negative means *stop, your work already
+shipped*. A lane holding the old version re-pushes work that landed, or reports a merge failed when
+it succeeded.
+
+⚠️ **And the rule is REPO-CONDITIONAL, so no unconditional sentence can be right for both repos this
+document governs.** Re-measured 2026-08-25 with a discriminating control rather than recalled:
+
+```
+Torque-Capital/torque         merge=true  squash=FALSE  rebase=FALSE   <- a squash CANNOT occur
+Torque-Capital/torque-infra   merge=true  squash=true   rebase=true    <- it can; rc=1 is not failure
+```
+
+So in **`torque`** an ancestry check is structurally sound, not incidentally so — and its residual
+gap is only the true-merge-that-dropped-content case above, which the content check closes. In
+**`torque-infra`** `rc=1` is not evidence of failure; compare the blob. That property is a **GitHub
+repo setting, invisible in the tree and unreviewed — one checkbox from false, tracked as TOR-526.**
+`CLAUDE.md`'s deploy-provenance rule is this same ancestry test and rests on the same setting.
+**Re-run the `gh api repos/<r> --jq '.allow_squash_merge'` reading rather than quoting this block.**
+
+**Corroborated by a SECOND instrument of a different kind**, because the first two readings were both
+`gh api repos/…` — the same tool run twice, which is one measurement confirmed, not two. Scanning git
+history for the one-parent `Title (#N)` shape, with `torque-infra` as the positive control proving
+the probe can detect one:
+
+```
+torque/develop      300 commits scanned   squash-shaped: 0   2-parent merges: 111
+torque-infra/main   169 commits scanned   squash-shaped: 6   2-parent merges:  54   <- control fires
+```
+
+🔑 **Building that second instrument produced the more durable rule, and it is this: ask what your
+probe is STRUCTURALLY INCAPABLE OF RETURNING.** The first attempt at it mis-parsed `%P`/`%s` and
+reported *"6 parents"* — absurd, therefore cheap to catch. **The fix was worse:** filtering subjects
+on `Merge pull request #` returned a clean *"64 PR-merges, all 2 parents"* — and that is **circular**,
+because a squash's subject is `Title (#N)`, so the filter excluded squashes **by construction**. It
+could only ever return *"all merges are merges."* It failed toward tidy **and** toward the
+hypothesis, and no amount of re-reading the number catches that.
+
+**A filter drawn from the answer's vocabulary cannot find the answer's absence.** That is a stronger
+rule than *"check your controls"*, because a control on that probe would also have passed.
+
+⚠️ **This document and the fleet memory `squash-merge-defeats-ancestry-test` contradicted each other
+for as long as both stood**, and the memory was the correct one. A rule stated in two places is a
+disagreement waiting to be found by whoever is caught between them — a lane followed this file, never
+consulted the memory, and relayed this file's version to an adjudicator as a reusable claim about an
+instrument. **A lane reading only the preamble had no way to detect it.** That is how it surfaced,
+and it is the argument for stating the mechanism rather than listing examples.
 
 ```
 WEAK    git merge-base --is-ancestor <head> origin/develop        <- necessary, not sufficient
