@@ -1408,3 +1408,42 @@ reader looking.
 
 *(Mitigating and stated by that seat: nothing in-repo issues any of the three — `RESET ALL` 0 hits,
 `DISCARD ALL` 1, which is the PR's own test asserting it safe. Filed as TOR-1337.)*
+
+### 🔴 CORRECTION 2026-09-18 · THE SLOT RECIPE I PUT IN ~15 BRIEFS RELEASES NOTHING, SILENTLY
+
+**Broken — do not use.** Reported by a lane, then reproduced live:
+
+```bash
+SLOT=$(… acquire 4 $$) || exit 64
+trap '… release "${SLOT#SLOT=}" $$' EXIT INT TERM      # <- WRONG
+```
+
+`acquire` prints **three** fields, not one:
+
+```
+SLOT=/Users/…/slots/slot2 BACKENDS=11 OWNER=43761
+${SLOT#SLOT=}  ->  /Users/…/slots/slot2 BACKENDS=11 OWNER=43761      <- path PLUS two junk fields
+correct        ->  /Users/…/slots/slot2
+```
+
+🔴 **And it fails toward success.** `release` does `[ -d "$SLOT" ] || { echo "GONE=$SLOT (already
+released or reaped)"; exit 0; }`. The junk path is not a directory, so it prints *"already released
+or reaped"* and **exits 0**. The trap looks clean, the lane sees a success line, **and the slot stays
+held** until the dead-owner reaper collects it. A live sighting: the shared registry's `slot1` held
+by a dead owner earlier today.
+
+**Correct form — the script's own header carried it all along** (`suite_slot.sh:23`); I invented a
+shorter one that does not work:
+
+```bash
+OUT=$(~/.claude/torque-orchestration/suite_slot.sh acquire 4 $$) || exit 64
+SLOT=$(printf '%s' "$OUT" | sed -n 's/^SLOT=\([^ ]*\).*/\1/p')
+[ -n "$SLOT" ] || { echo "acquire returned 0 with no SLOT= — refusing to run"; exit 64; }
+trap '~/.claude/torque-orchestration/suite_slot.sh release "$SLOT" $$' EXIT INT TERM
+<run the suite here, in this same call>
+```
+
+⚠️ **This is §6A Part 4 in the dispatcher's own hand.** A release that reports success while releasing
+nothing is an instrument that cannot return the opposite value — and it was pasted into roughly
+fifteen briefs today **after** the `$$` defect it was written to fix. **The remedy for a broken
+recipe is to run it once and read what it produced**, not to reason about what it should produce.
