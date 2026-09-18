@@ -205,7 +205,7 @@ and `.claude/skills/torque-page-kit/**` stay route B — **but NOT for the reaso
 
 🔴 **The original justification was *"a defect there surfaces on the next build rather than being frozen into
 a published artifact"*, and that is FALSE for one file in the exempted set.** `assets/vendor/torque-charts.js`
-is inlined **VERBATIM** by `build_page.py:61` into a page that is immutable once published, and CLAUDE.md's
+is inlined **VERBATIM** by `build_page.py:190` into a page that is immutable once published, and CLAUDE.md's
 own TOR-785 entry records a stale bundle freezing **7 wrong numbers onto `LR/historical` v1**. The repo had
 already falsified that sentence before it was written here.
 
@@ -475,7 +475,7 @@ all three hold, and the ruling STATES the measurement:**
    measured **blob-by-blob with a must-differ control**, counts stated. `#935`'s adjudicator did
    exactly this (15 SAME / 1 DIFFERS) and that is the model.
 2. **The uncovered delta contains nothing EMBEDDED VERBATIM into a mandatory-class artifact.** This is
-   the `#935` ÷ `#939` discriminator TOR-1160 says nothing currently decides. `scripts/build_page.py:61`
+   the `#935` ÷ `#939` discriminator TOR-1160 says nothing currently decides. `scripts/build_page.py:190`
    —`_replace_block(html, BUNDLE_MARK, BUNDLE.read_text() …)` — inlines the page-kit bundle into a page
    that is **immutable once published**, so a renderer change is INSIDE this bound even though it is
    route B standing alone. **Not a contradiction of the page-kit carve-out:** a standalone renderer PR
