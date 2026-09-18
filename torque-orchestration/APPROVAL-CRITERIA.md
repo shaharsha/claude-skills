@@ -130,12 +130,32 @@ ROUTE B   THE ADJUDICATOR PERFORMS THE PASS FIRST-PARTY
 
 ```
 engine/**          models/**          risk/**
-api/services/<product>/**   for any product in `_REAL_PRODUCTS` (api/routers/companies.py)
+api/services/<product>/**   for any product in COMPANY_ROW (tests/fixtures/company_rows.py)
 db/schema.py · api/auth/** · api/services/{vault,silver,computation}/**
 api/services/publishing.py              CORRECTED 2026-09-18 — see §4A.6
 authored_pages/** EXCEPT **/README.md   ADDED 2026-09-15 — see the amendment directly below
 api/services/projector/**               ADDED 2026-09-16 — see §4A.2
 ```
+
+🔴 **PRODUCT-LIST SOURCE CHANGED 2026-09-18 — `_REAL_PRODUCTS` NO LONGER EXISTS.** PR #1040 deleted it
+(develop `abbb8e4f`): a client is now a row in `clients`, not a literal in `api/routers/companies.py`.
+**Every matcher that AST-parses that constant now resolves NOTHING and returns a silent zero for the
+product branch** — a clean-looking §4A count that measured nothing, on the gate every PR passes
+through. **This is §4A.6's failure mode repeating: a selector matching zero paths, reported as zero
+rows.**
+
+**Read the product list from `tests/fixtures/company_rows.py` — `COMPANY_ROW` (code → company name),
+with `TENANTS` beside it.** 🔑 **Why a fixture and not the registry: the registry is per-DATABASE, so
+no checkout can read the live set, and a glob needs something a checkout can compute.** A matcher must
+resolve from tracked bytes or it cannot run in CI, in a worktree, or on a detached head.
+
+⚠️ **Run a MUST-HIT control on the product branch specifically** — e.g. `api/services/lr/x.py` → hit —
+before believing any count. A non-resolving source and an empty product set are indistinguishable from
+the count alone, and **all seven codes are UPPERCASE against seven lowercase directories, so
+case-normalisation stays load-bearing.**
+
+⚠️ **Historical case records below (§4A.5, §4A.6 and the ruling log) still name `_REAL_PRODUCTS` and
+are LEFT AS WRITTEN** — they are the record of what was measured at the time, not live instructions.
 
 ⚠️ **`api/services/publishing.py` is a FILE entry on purpose — it is a module, not a package.** It sat
 inside the brace group as `publishing/**` until 2026-09-18, a selector matching **zero paths**; §4A.6
