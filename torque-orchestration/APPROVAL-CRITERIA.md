@@ -1314,3 +1314,48 @@ neighbours.** The same memo caught one genuinely stale claim and absorbed the fa
 beside it in the same section, unmeasured — and the absorbed claim pointed the way its own
 conclusion needed. **Enumerate every factual claim in each section you touch and mark it measured /
 unmeasured / out-of-scope**, and say in the PR which neighbours you did not check.
+
+### ⚠️ AMENDMENT 2026-09-18 · §6A Part 4 — AN INSTRUMENT THAT CANNOT RETURN THE OPPOSITE VALUE
+
+**Before believing any probe, answer one question: what would this say if the opposite were true?**
+If there is no input on which it returns the other value, it is not a measurement — it is a
+constant wearing the shape of one.
+
+**Three instances in one afternoon, found by two independent seats**, all verifying whether an
+authored page had picked up a changed page-kit bundle — i.e. all guarding bytes that become
+**immutable on publish**:
+
+| instrument | what it could never return |
+|---|---|
+| `grep -c hairline` on the bundle | **any change at all** — `1` before, `1` after. `grep -c` counts LINES and the bundle is minified, so every match shares one. The blob gained 5 occurrences and a new mark role. |
+| extract-the-inlined-region-and-hash | **a boundary slip distinguished from a stale bundle.** `build_page.py` *consumes* the marker it splices at, so the region has no delimiter; an off-by-one is indistinguishable from the defect. |
+| `grep TORQUE_PAGEKIT_BUNDLE` | **`True`.** The string was invented and exists in no input. The real marker is `/* PASTE assets/vendor/torque-charts.js HERE` (`build_page.py:44`). |
+
+🔴 **Each returned a clean answer, each pointed the way its author already believed, and none was
+capable of the other verdict.** Two of the three were the lane's; the third *agreed with the
+adjudicator's own published claim* — and surfaced only because that seat checked a probe that was
+flattering it instead of banking it. **A probe that confirms you is the one that stops being
+examined.**
+
+**Cost if unexamined:** *"bundle unchanged"* written into a README about a materially different
+artifact, on a page that cannot be corrected after publish. CLAUDE.md records TOR-785 because a
+stale bundle once shipped 7 wrong numbers to a real client.
+
+**The rule.** Every probe whose **absence or constancy** you intend to act on ships with a control
+that **fires** — on a subject where the answer is known to differ:
+
+```
+CONTROL  marker in template.html : True     <- proves the probe CAN find it
+         marker in out.html      : False    <- the finding
+```
+
+And prefer a comparator that is **exact by construction** over one that needs alignment. For
+"did this file change?" use the **blob sha** (`git rev-parse <ref>:<path>`). For "was this content
+spliced into that artifact?" use **substring containment in both directions** — new text present,
+old text absent, plus `old != new` to prove the pair is non-vacuous — because the splice is
+byte-exact and there is nothing to align.
+
+⚠️ **This is §6A Part 3 one level down.** There, an allowlist failed through what it ADMITTED
+while every enforcement-path control stayed green. Here, a probe fails through what it CANNOT
+RETURN while every reading stays clean. **Both are answered by varying the axis the controls do
+not vary**, and in all four cases it took a second seat asking.
