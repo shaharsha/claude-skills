@@ -116,6 +116,8 @@ You cannot verify audio headlessly. Say so; never claim you heard it.
 | Deck prints its own slide numbers | Number appears twice | Render from a numberless variant, or `--no-counter` |
 | ffmpeg hangs at 0% CPU mid-segment | Build stalls forever; a killed attempt leaves an INVALID partial file | Script times out each segment (300s) and retries once, deleting the partial first |
 | Piping the build through `\| tail` in an `&&` chain | Pipeline exit becomes tail's 0 — a failed build "succeeds" and stale artifacts ship | Run unpiped, or `set -o pipefail`; gate delivery on verified output |
+| Expecting a sidecar `.srt` or a soft subtitle track to show in Slack | Its inline player exposes no CC control, so viewers who just hit play see nothing | Burn them in for that destination — SKILL.md's *Subtitles* section |
+| Leaving the sidecar `.srt` beside a burned-in mp4 | VLC auto-loads it by basename — two sets of subtitles stacked on screen | Move the sidecar out of the folder; a burned video is self-contained |
 
 ## Caveats
 

@@ -1,6 +1,6 @@
 ---
 name: deck-to-video
-description: Use when turning a slide deck plus per-slide narration audio into an mp4 video — a self-playing/self-presenting deck video, "slides to video", "presentation to mp4", a shareable WhatsApp/Slack/Drive video of a narrated deck, or when a slide video needs a per-slide progress bar / countdown / slide counter. Also use when a slide video should highlight, glow or spotlight the element being talked about in time with the voice, or when narration and on-screen animation need syncing. Also use when an ffmpeg-drawn progress bar renders full/static from the first frame, or ffmpeg errors "No such filter: 'drawtext'".
+description: Use when turning a slide deck plus per-slide narration audio into an mp4 video — a self-playing/self-presenting deck video, "slides to video", "presentation to mp4", a shareable WhatsApp/Slack/Drive video of a narrated deck, or when a slide video needs a per-slide progress bar / countdown / slide counter. Also use when a slide video should highlight, glow or spotlight the element being talked about in time with the voice, or when narration and on-screen animation need syncing. Also use when an ffmpeg-drawn progress bar renders full/static from the first frame, or ffmpeg errors "No such filter: 'drawtext'". Also use when burning or hardcoding subtitles into a deck video, when subtitles do not show in a Slack or Teams inline player, when VLC shows two sets of subtitles at once, or when ffmpeg reports "No option name near" on a subtitles filter.
 ---
 
 # Deck to Video (slides + narration → self-playing mp4)
@@ -76,7 +76,43 @@ Derive `box` from the deck's own layout code (inches → pixels), never by eyeba
 ```bash
 python3 <this-skill-dir>/scripts/make_srt.py narration/alignment/ narration/audio/ out.srt --pad 0.7
 ```
-`--pad` must match the pad the video was built with, or cues drift further out with every slide. Ship it as a sidecar rather than burning it in — burned-in subtitles can't be turned off and fight the slide's own text.
+`--pad` must match the pad the video was built with, or cues drift further out with every slide.
+
+**Three ways to ship them, and the destination decides which.**
+
+| Form | How | What the viewer gets |
+|---|---|---|
+| Sidecar `.srt` | ship the file beside the mp4 | subtitles only if they open both in a real player |
+| Soft track | `-c copy -c:s mov_text -disposition:s:0 default` — lossless mux, ~12 KB, seconds | player-dependent; needs a CC control to exist |
+| Burned in | re-encode through libass | always visible, everywhere, cannot be turned off |
+
+**Default to the sidecar or the soft track** — both are reversible and neither touches the picture. **Burn only when the video will be played somewhere with no subtitle control.** A Slack or Teams thread's inline player is the case that forces it: a viewer who just hits play there gets nothing from the other two forms.
+
+### Burning them in
+
+```bash
+ffmpeg -i deck.srt /tmp/subs.ass          # convert FIRST; do not pass force_style
+# …edit the Style: line in /tmp/subs.ass (see below), then:
+<static-ffmpeg> -i master.mp4 -vf "ass=/tmp/subs.ass" \
+  -c:v libx264 -crf 20 -preset medium -tune stillimage -pix_fmt yuv420p \
+  -c:a copy -sn -movflags +faststart out.mp4
+```
+
+Four things that each cost a cycle:
+
+- **Homebrew's ffmpeg has no libass** — the same gap as `drawtext`/libfreetype, and the tell is misleading. You get `No option name near '<filename>'`, a *filtergraph parse* error rather than `No such filter`, so it reads as a quoting bug and sends you rewriting escapes that were already correct. Check with `ffmpeg -filters | grep -E ' (ass|subtitles) '` and use the static-ffmpeg build.
+- **Style the `.ass` file; never cram `force_style` into the filter string.** Its commas are read as filter separators, and backslash-escaping them is fragile enough that it fails twice before it works.
+- **Map ASS style fields by the `Format:` header, never by counting positions.** An off-by-one writes Alignment=0 (invalid) and leaves MarginV unset, and libass renders it without complaining.
+- **Burn from the pre-burn master and keep that master.** Restyling from an already-burned file stacks a second generation *and* bakes the old text in permanently.
+
+**Placement — band or overlay. The deck decides, not taste.**
+
+| | How | Cost |
+|---|---|---|
+| Band below the slide | `pad=1920:1200:0:0:black` then `ass=`, MarginV inside the band | nothing on the slide is ever covered; output stops being 16:9 |
+| Overlay (the familiar VLC look) | `ass=` alone; bottom-centred, bold ~48 px at 1080p, heavy black outline, MarginV ~40 | classic and self-contained, but it *will* cover whatever the deck puts in its bottom strip |
+
+Overlay is what most people mean by "subtitles". On a text-dense deck, extract a frame and look before committing: it lands on footer callouts, legends and the progress bar.
 
 **1 fps is a sync limit, not just a smoothness one.** The default bake is one frame per second, so a highlight can only change on an integer second — up to a full second off the word it points at, which reads as broken. Animated slides need ~30 fps.
 
@@ -108,9 +144,13 @@ if key in cache: os.link(cache[key], path); continue
 | Estimating when a phrase lands instead of aligning | highlights drift off the words, worst on the longest slides | forced alignment on the finished clip |
 | Reading card geometry off a rendered image | boxes are a few px out and the glow sits crooked | compute from the deck's own layout constants |
 | Piping the build through `\| tail` inside an `&&` chain | pipeline exit = tail's 0 — a failed build "succeeds" and stale artifacts get delivered | run the script unpiped (or `set -o pipefail`); keep delivery/sync in a separate step gated on verified output |
+| Leaving the sidecar `.srt` beside a burned-in mp4 | VLC auto-loads any `.srt` matching the video's basename — the viewer sees **two** sets of subtitles stacked | move the sidecar out of that folder; a burned video is self-contained |
+| `force_style='…'` with commas, in the filter string | `No option name near …` — looks like a shell quoting bug, is actually the filtergraph splitting on those commas | convert to `.ass` and set the style in the file |
+| Counting ASS `Style:` field positions | Alignment/MarginV land on the wrong fields and libass renders it silently | map fields by the `Format:` header line |
 
 ## Caveats
 
 - Hard cuts between slides by design — crossfades break the lossless `-c copy` concat and add little.
 - ~13–17 min of 1080p mostly-static slides ≈ 40–50 MB.
 - The video is a *third* artifact beside the clean pptx and the narrated pptx — it forces the narration's pace on the viewer, so keep the pptx variants for people who prefer reading.
+- Burning re-encodes the whole video (~60 s for 10 min at CRF 20 on an M-series); the sidecar and soft-track forms are seconds and lossless. Keep the pre-burn master so a restyle is one re-encode from source, not two stacked.

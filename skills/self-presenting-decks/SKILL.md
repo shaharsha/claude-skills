@@ -41,7 +41,7 @@ Keep `narration/` and all artifacts as siblings next to the deck.
 
 - **Clean pptx** — live presenting; humans talk over it.
 - **Narrated pptx** — guided self-review at the viewer's own pace (they can linger, skip, re-listen per slide).
-- **mp4** — zero-friction async sharing; plays anywhere, but forces the narration's pace. Never ship *only* the mp4 to someone who needs to study the content.
+- **mp4** — zero-friction async sharing; plays anywhere, but forces the narration's pace. Never ship *only* the mp4 to someone who needs to study the content. Where it will be *played* decides how subtitles ship: a sidecar or soft track is reversible and free, but an inline Slack/Teams player exposes no subtitle control, so reaching those viewers means burning them in (deck-to-video).
 
 Keep all three named as siblings (`Deck.pptx`, `Deck_Narrated.pptx`, `Deck.mp4`) so nobody presents the narrated copy live by accident.
 
@@ -54,6 +54,7 @@ Keep all three named as siblings (`Deck.pptx`, `Deck_Narrated.pptx`, `Deck.mp4`)
 | Narration voice settings (e.g. stability) | **all** clips, not just the changed ones — mixed settings are audible → re-embed → re-align → video |
 | Narration pace ("too slow") | `ffmpeg -filter:a atempo=1.1` on the mp3s (pitch-preserving, no TTS cost) → re-embed → **re-align if anything is synced to the voice** (atempo shifts every timestamp) → video |
 | Video overlay only (bar, counter) | video only — pptx artifacts untouched |
+| Subtitle form (sidecar ⇄ soft track ⇄ burned in) | video only — re-mux, or re-encode **from the pre-burn master**; pptx artifacts untouched. Keep that master, or a restyle stacks a second generation |
 
 Regenerating *only changed* narration clips saves TTS cost — but always rebuild the narrated pptx and video from the full final audio set.
 
