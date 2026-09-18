@@ -1359,3 +1359,52 @@ byte-exact and there is nothing to align.
 while every enforcement-path control stayed green. Here, a probe fails through what it CANNOT
 RETURN while every reading stays clean. **Both are answered by varying the axis the controls do
 not vary**, and in all four cases it took a second seat asking.
+
+### 🔴 CORRECTION 2026-09-18 · §6A Part 3 IS ONE-DIRECTIONAL AND THAT IS NOT ENOUGH
+
+Part 3 says: *one violating case per **admitted** member.* **That covers only half the boundary, and
+the dispatcher's claim that a second PR "doubly evidenced" it does not survive checking** — measured
+by #1020's second adjudicator:
+
+```
+#1020  the ADMITTED set contains members that should not be   -> violating case from INSIDE
+#1021  states OUTSIDE the admitted set are REACHABLE and treated as inside -> the opposite direction
+```
+
+**They are two different failures of one boundary, not two instances of one failure.** The rule must
+be **two-directional**:
+
+1. For each **admitted** member, a case that begins with it and nonetheless violates.
+2. For each **reachable non-member**, proof it is actually excluded — enumerate what the producing
+   code can write, not what the consuming code expects to read.
+
+### 🔴 AND THE THIRD ROUND ON THAT SAME GUARD IS THE REASON THIS MATTERS
+
+Round 1: `SELECT … INTO` / `setval` / `nextval` admitted by `_READ_VERBS`, sent, wrote.
+**The fix was correct** — enforcement moved to the only complete oracle, a PostgreSQL session that is
+`READ ONLY` at open, with the name-classifier demoted to a pre-send filter and **documented as not
+complete**. Round 2 then measured, on a scratch DB with a must-fire control on the same connection:
+
+```
+RESET ALL · DISCARD ALL · SET SESSION CHARACTERISTICS … READ WRITE
+    all in _READ_VERBS · all is_write=False · all flip transaction_read_only on -> off
+then SELECT innocuous_looking_report()   -> LANDED A ROW   (control refused it while armed)
+```
+
+`db/protected.py:51` asserts the server layer is *"THE VERDICT. Complete by construction."* It is not.
+
+🔑 **The mechanism, and it generalises past SQL:** the classifier's predicate is *"can this verb
+write?"*, and for those three the honest answer is **no**. `_CANNOT_WRITE`'s recorded reasons are
+**true about writing — and they are the bypass.** A verb that does not write but **disarms what stops
+writes** is invisible to a predicate about writing.
+
+> **Enforcement moved layers; the membership question did not move with it.**
+
+**So when a guard is relocated to a stronger layer, re-ask the membership question AT THE NEW LAYER.**
+A correct relocation does not inherit the old layer's boundary, and the old boundary is usually still
+sitting there deciding what reaches the new one. ⚠️ **Treat "complete by construction" in any
+docstring as a claim to execute, never to read** — it is the sentence most likely to stop the next
+reader looking.
+
+*(Mitigating and stated by that seat: nothing in-repo issues any of the three — `RESET ALL` 0 hits,
+`DISCARD ALL` 1, which is the PR's own test asserting it safe. Filed as TOR-1337.)*
