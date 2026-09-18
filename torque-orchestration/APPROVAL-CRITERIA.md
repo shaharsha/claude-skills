@@ -1161,3 +1161,108 @@ fourth same-class defect in one paragraph meant the message should stop assertin
 observable — and that pre-commitment, written before the verdict, is what made the deletion available
 instead of another attempt. ⚠️ **Do not let a lane replace the deleted claim with a corrected one:**
 silence about an unmeasured property is honest; a fourth statement of it is not.
+
+---
+
+## §6A · REVIEW TIERING AND A NARROW DISPATCHER SELF-MERGE — Shahar, 2026-09-18
+
+**Authorising words:** *"i approve your recommendations. also for 5a as you recommend."* The
+dispatcher seat proposed both halves below and stated the argument against the second; Shahar
+delegated the call and the seat adopted it. **Either half is revocable by one sentence from him.**
+
+### Why this exists — the measurement, not a preference
+
+Six adjudications ran on 2026-09-18. Two returned defects that would otherwise have shipped: a guard
+documented fail-CLOSED that was **fail-OPEN through the first entry of its own read-allowlist**,
+against a real-client restore; and a **terminal HOLD sitting on a PR's exact head** that the seat's
+brief had declared absent. **Three of the six spent part of their round correcting the DISPATCHER'S
+BRIEF rather than reviewing the PR.**
+
+Separately, PR-cycle profiling records a median of ~18–21 minutes with **every** long outlier
+(158 / 121 / 90 / 80 / 68 min) being a multi-round adjudication. **Round count is the largest single
+lever on wall clock in this programme — larger than test time.**
+
+So the cost is real AND the catches are real. The defect was applying one apparatus flatly: a skill
+DESCRIPTION REWRITE was receiving the same treatment as a write-guard on real client data.
+
+### Part 1 · TIERING — by blast radius, not by diff size
+
+**FULL TIER — a fresh `/adjudicate` seat, always.** A PR whose delta touches any of:
+- `authored_pages/**` (except `**/README.md`), or any published-bytes or artifact path
+- the §4A route-A mandatory class, at a count **greater than zero**
+- `api/services/**`, `db/**`, `contracts/**`, `scripts/baseline/**`, `.github/**`
+- **any guard, gate, refusal, allowlist, denylist or classifier** — see Part 3
+- anything reading or writing `torque_baseline`, `torque_qa`, `railway_production_restore`
+- a serve-mode, pin, descriptor, publish or restore operation
+
+**MEASURED-PASS TIER — one pass, no round.** Everything else: docs, skills, decision records. The
+pass is not a skim and its four steps are mandatory:
+1. §4A mandatory-class count **with must-hit AND must-miss controls on the matcher**
+2. freshness measured with `scripts/pr_freshness.sh` — never a green rollup or a three-dot diff
+3. CI green on the **exact head**, read from `commits/<sha>/check-runs`
+4. **"What is the biggest problem with this PR that I did NOT name?"** — this line has returned the
+   review's most important finding thirteen times out of thirteen, every one outside every flag the
+   brief wrote. It is not optional in either tier.
+
+### Part 2 · THE SELF-MERGE GRANT — every condition, conjunctively
+
+The dispatcher may merge **without a second seat** only when ALL of these hold, each measured at the
+moment of merging:
+
+```
+1  §4A mandatory-class rows == 0, measured with must-hit AND must-miss controls
+2  MERGEABLE/CLEAN and freshness CURRENT via scripts/pr_freshness.sh
+3  CI green on the EXACT head (commits/<sha>/check-runs, total_count > 0 AND all complete)
+4  NO comment requesting changes — read `gh pr view N --json comments`, NEVER `reviewDecision`
+5  the delta touches none of the FULL-TIER paths in Part 1
+6  it is not a guard, gate, refusal, allowlist, denylist or classifier change
+7  no publish is in flight on the current develop  (see the ordering rule below)
+```
+
+⚠️ **Condition 4 is load-bearing and the field that looks like it is useless.** §4B: `reviewDecision`
+is **ALWAYS EMPTY** in this fleet — one shared GitHub actor, so every ruling is a comment, and that
+field structurally cannot distinguish *never adjudicated* from *changes requested*. A seat that
+checks it will merge under a live hold and believe it checked.
+
+⚠️ **Condition 7 exists because `build.sh` bakes `BUILD_BASE="$(git rev-parse origin/develop)"` into
+the IMMUTABLE descriptor.** If develop moves between a rebuild and its publish, the descriptor and
+the tree disagree permanently and no gate sees it. The fleet ordering is
+**merge → rebuild ON THE MERGE COMMIT → read `page_pointers` → publish PINNED.**
+
+**Audit obligation:** every self-merge records, in the PR, the seven conditions with the measurement
+that discharged each. A merge without that record is a gate bypass wearing a green tick.
+
+### Part 3 · WHY GUARDS ARE CARVED OUT — the finding that set the boundary
+
+An allowlist fails through **what it ADMITS**, never through whether its enforcement path fires.
+Measured 2026-09-18 on the protected-DSN guard, first-party with a must-fire control:
+
+```
+SELECT * INTO new_tbl FROM …   is_write -> False, AND IS SENT   <- PostgreSQL CREATES A TABLE
+SELECT setval(…) / nextval(…)  is_write -> False, AND IS SENT
+```
+
+Five red mutations, three-route coverage and a real-database verification were all green. The
+adjudicator's diagnosis:
+
+> **"Every control varies the PLUMBING; none varies the MEMBERSHIP of `_READ_VERBS` — and membership
+> is where an allowlist fails."**
+
+⚠️ **And the obvious fix does not work:** escalating `SELECT` into the scanned-verb set leaves it
+open, because `SELECT … INTO` contains no DML token. **The test owed is one violating case per
+ADMITTED member**, not another route test.
+
+🔑 **This is why a guard can never take the measured-pass tier.** The artifact a guard produces —
+a green mutation table on its enforcement path — is the most convincing evidence available and is
+structurally silent about the guard's actual decision. Maximally reassuring, maximally blind.
+
+### What this section does NOT grant
+
+- **No merge of anything in the FULL tier**, at any confidence, on any freshness.
+- **No ruling.** The dispatcher still rules on nothing: not design, not plans, not code.
+- **No Terraform apply of any kind.** Dev applies are `/adjudicate`'s; **PROD is Shahar's every time.**
+- **No serve-mode flip.** A page goes live on Shahar's quoted sentence, per page, with the flip record
+  quoting it. Publishing PINNED is sanctioned; flipping is not.
+- **No self-granted widening.** A seat that finds these conditions inconvenient escalates; it does not
+  reinterpret them. ⚠️ Taking authority feels efficient the way standing down feels costless — both
+  get less scrutiny than they deserve, and both are decisions.
