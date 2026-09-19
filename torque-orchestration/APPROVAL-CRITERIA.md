@@ -126,6 +126,13 @@ ROUTE B   THE ADJUDICATOR PERFORMS THE PASS FIRST-PARTY
           adjudicate the bytes, and the gate is UNDISCHARGED.
 ```
 
+⚠️ **ROUTE A ALSO REQUIRES A PROMPT VERDICT — `VERIFIED` / `BROKEN` / `CANNOT-TELL`, ADDED
+2026-09-19, §4A.7.** The two conditions in the fence above are about the *answer*; a sidecar can
+satisfy both while the *question* it names is unreadable or has been replaced. Measured: 242 of 498
+sidecars record a `prompt=` that no longer resolves, and 3 resolve to bytes that disagree with the
+hash recorded beside them. **Read §4A.7 before ruling route A discharged** — a dangling prompt is
+CANNOT-TELL, which is neither a pass nor a refusal and must be STATED.
+
 ### 🔴 ROUTE A IS MANDATORY — route B cannot discharge it — for this change class
 
 ```
@@ -704,6 +711,131 @@ nobody, ever again, which is the property this file distrusts everywhere else.
 
 ⚠️ **The identical defective string is duplicated at `LANE-PREAMBLE.md:566`** and is corrected there in
 the same act. A rule held in two transcribed copies has two places to rot.
+
+### ⚠️ AMENDMENT 2026-09-19 · §4A.7 — ROUTE A MUST CHECK THE **PROMPT**, AND THE VERDICT IS THREE-STATE
+
+**The incident, per this file's own rule. Route A is stated as two conditions — the `.md` exists and
+its sidecar reads `sha=<the head>` and `tree=clean`. Neither touches the PROMPT, and the producer's
+own comment says why that is a hole:** *"for a PLAN round the repo sha is nearly meaningless and the
+prompt hash is the whole claim. Cite them, or the citation is about a revision nobody has."* **A
+round whose prompt cannot be read has recorded a verdict about a question nobody can see, and route A
+passes it today on the strength of a sha.**
+
+**Measured first-party 2026-09-19, sweeping every `.provenance` on this machine — 498 sidecars, with
+both controls stated (MUST-HIT: a resolving `prompt=` exists; MUST-MISS: a synthetic absent path
+reports unresolved):**
+
+```
+prompt= no longer resolves                242 / 498   48.6%
+   of those, claiming prompt_durable=yes    55        <- the claim a checker would have believed
+   of those 55, the bytes ARE beside the sidecar      52   and all 52 hash to prompt_sha256
+   of those 55, the bytes are really gone              3
+prompt= resolves, bytes DISAGREE with prompt_sha256    3   <- the worst shape in the corpus
+predate the durable-copy mechanism entirely          187   <- permanently uncheckable
+```
+
+🔑 **THE FINDING THAT CHANGES THE FIX: the retention was never broken. The CITATION FORM was.**
+`codex_review.sh` has copied each prompt next to its artifact since 2026-08-07 and records
+`prompt=` as an **absolute path to a file that is always a sibling.** Absolute-plus-sibling is a
+citation that breaks on exactly the act preserving evidence requires — lifting the set out of a
+worktree about to be removed. 52 of the 55 "durable" dangling citations are bytes that never went
+anywhere, mis-addressed. **A clause that read `prompt_durable=yes` and stopped would have been
+reassured by the field in every one of those cases**, which is the shape this file distrusts.
+
+🔴 **AND A TWO-STATE CLAUSE WOULD HAVE PASSED THE THREE WORST ARTIFACTS IN THE CORPUS.** A drafted
+version of this clause enumerated only PASS and REFUSE, keyed on whether the path resolves.
+`tor428-plan-r1/r2/r3` (2026-08-06) each cite the **same** plan file at a **different** recorded
+hash; the file resolves today and holds a **fourth** set of bytes matching none of them. Three rounds
+whose verdicts are about three revisions nobody has — and a resolve-check calls all three PASS.
+**Resolution is not the predicate. The HASH is.**
+
+**RULING — route A additionally requires a prompt verdict, and it has three states:**
+
+```
+VERIFIED     (0)  a citation resolved and its bytes hash to prompt_sha256
+BROKEN       (1)  a citation resolved and its bytes DIFFER from prompt_sha256
+CANNOT-TELL  (2)  nothing resolved, or there was nothing to check against
+```
+
+1. **VERIFIED discharges the prompt half of route A. BROKEN does not, and neither does CANNOT-TELL.**
+2. **A dangling citation is CANNOT-TELL, never BROKEN and never VERIFIED.** As VERIFIED it certifies a
+   round nobody examined; as BROKEN it accuses one nobody examined. This is `verify_artifact.sh`'s
+   rule for its own third state, applied to the same sidecar.
+3. **CANNOT-TELL is not a refusal of the PR.** 187 sidecars predate the mechanism and are in this
+   class permanently — that is a fact about the evidence, not a defect in the round. It obliges the
+   ruling to **say so in the line §4A already makes mandatory**, so an unreadable prompt is a stated
+   gap rather than a silent pass. A lane may close it by re-running the round.
+4. **Resolution order is `prompt_relative` → the basename of `prompt=` beside the sidecar → the
+   recorded absolute path.** A bare-name citation the sidecar's own directory vouches for beats an
+   absolute path into a home directory that may today hold a **different file of the same name**.
+
+⚠️ **THE NAME. The adjudicator who ruled this called the third state `COULD NOT RUN`, after
+`silver_doctor.py` as §4A.3 cites it. It is renamed `CANNOT-TELL` here and the reason is this file's
+own §4A.6 lesson — a rule held in two transcribed copies has two places to rot.** The checker for
+this clause is the sibling of `verify_artifact.sh`, in the same directory, reading the same sidecar,
+and that script has named its third state `CANNOT-TELL` at exit 2 since it was written. Three names
+for one state across one directory is how a matcher ends up testing for a word nothing emits.
+`ccdoccheck`'s *"exit 2 could not check <- NOT a pass"* and this section's own *"exit-2 UNKNOWN,
+never a fail and never a pass"* are the same state under two more names; **the exit CODE is the
+durable part and it is 2 in all of them.**
+
+**BOTH HALVES SHIP TOGETHER, because the clause alone is not a working gate.** A three-state rule on
+top of the old producer converts a silent pass into a loud CANNOT-TELL on half the corpus — honest,
+and useless. The producer change is the load-bearing half:
+
+- `prompt_relative=<basename>` is emitted, and a checker resolves **that** first.
+- **`prompt_durable=yes` is now EARNED, not asserted.** It used to mean *"`cp` exited 0"* — a claim
+  about a command, not about bytes a later reader will find. The copy is now re-hashed against
+  `prompt_sha256` at generation, and a copy that does not match records `no`. The sidecar comment
+  already argued the copy is identical *"BY CONSTRUCTION"*; re-hashing is what makes that argument
+  checkable by the one process that can still see both files.
+- `prompt_sha256` gets the guard `artifact_sha256` already had. Written bare under `set -euo
+  pipefail` the old form **aborted the round** when the hasher failed, so the `unknown` sentinel the
+  script believes it has was unreachable. Both are now exercised.
+
+**The checker is `skills/codex-review/scripts/verify_prompt.sh`, with `--self-test` and `--dir`.**
+🔑 **It is committed rather than described, and that is deliberate** — §4A.3's second "smaller one"
+(*"class membership is eyeballed, not computed"*) and §4A.6's *"until it exists, this correction is
+checked by nobody, ever again"* both ask for exactly this property, and a prose clause about hashes
+would have neither.
+
+**Cost, MEASURED rather than asserted — the shipped checker over all 498 sidecars, single-file and
+`--dir` modes agreeing, and independently reproduced by a second implementation:**
+
+```
+VERIFIED     305      BROKEN  3      CANNOT-TELL  190        sum 498, nothing left the denominator
+```
+
+**So the gate is green on 61% of the corpus on day one, and the 190 are 187 pre-mechanism rounds
+plus 3 genuinely lost.**
+
+🔴 **DO NOT CITE THOSE DIGITS BACK — RE-RUN THEM, AND THE REASON IS MEASURED.** Two sweeps twenty
+minutes apart returned `305/3/190` and `309/3/186` **over an identical 498-file population, with no
+new round run.** Four prompt files appeared and vanished again: a lane on this machine created and
+removed a worktree between the reads. **This corpus is a MOVING PANEL, not a fixed one** — a sidecar
+citing a live worktree VERIFIES while that worktree exists and is CANNOT-TELL the moment it is
+removed, which is TOR-255 showing up inside the measurement of it. Both readings were true of their
+instant; the figures above are the single-instant reading where two independent implementations were
+run against the same filesystem state and agreed on all 498. ⚠️ **What does NOT move is the shape:**
+242 dangling, 55 of them claiming durable, 52 of those recoverable beside their sidecar, 3 BROKEN —
+stable across every sweep.
+
+⚠️ **A third instrument — an ad-hoc shell aggregator written to summarise this — was the one that
+first showed the drift, and it is recorded because the discipline is the only reason any of it was
+caught:** when two implementations agree and a summariser does not, the summariser is the suspect,
+and when the same implementation disagrees with ITSELF the subject is moving. Neither would have
+been visible from a single run of a single tool, which is what a cost line normally is.
+
+⚠️ **NOT CLAIMED.** This does not reach TOR-255's location problem — a prompt that VERIFIES in a
+worktree still dies with it. It does not reach §4A.3: a publish still has no prompt, no sha and no
+route. And it says nothing about whether a prompt asked the *right* question; it compares bytes, and
+bytes cannot tell a legitimate revision from a substitution — the three BROKEN instances are almost
+certainly honest edits between rounds.
+
+**Falsifier, so this is held to the same standard as §4A.1 and §4A.2:** if over the next two weeks no
+route-A round returns BROKEN or CANNOT-TELL on a prompt a lane actually needed, the prompt half is
+ceremony and should be folded back into `verify_artifact.sh` as one more CANNOT-TELL cause. Record it
+with the PR number.
 
 ### ⚠️ ROUTE A HAS A LOCATION PROBLEM — the LANE must cite the path, not the adjudicator hunt for it
 
