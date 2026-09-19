@@ -72,5 +72,33 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(self.run_adapter('status').returncode,23)
 
 
+def validate_brief_guidance(runner, dispatcher):
+    required = (
+        (runner, "only after Torque's reviewed selected-local policy is merged"),
+        (runner, 'Do not wrap feedback or a migrated push in `suite_slot.sh run`'),
+        (runner, 'same coordinated registry as the adapter'),
+        (runner, 'A selected local pass permits PR preparation, not merging.'),
+        (dispatcher, 'Verification policy belongs to those repository guides'),
+        (dispatcher, 'do not wrap them in another slot command'),
+        (dispatcher, 'complete CI and the reviewed current head/base remain required'),
+    )
+    for body, clause in required:
+        assert clause in body, clause
+
+
+class BriefGuidanceTests(unittest.TestCase):
+    def test_current_routes_and_missing_obligation_controls(self):
+        runner = (HERE / 'SUITE-RUNNER.md').read_text()
+        dispatcher = (HERE.parent / 'commands/dispatch.md').read_text()
+        validate_brief_guidance(runner, dispatcher)
+        for clause in ('Do not wrap feedback or a migrated push in `suite_slot.sh run`',
+                       'same coordinated registry as the adapter',
+                       'A selected local pass permits PR preparation, not merging.'):
+            with self.subTest(clause=clause), self.assertRaises(AssertionError):
+                validate_brief_guidance(runner.replace(clause, ''), dispatcher)
+        with self.assertRaises(AssertionError):
+            validate_brief_guidance(runner, dispatcher.replace('Verification policy belongs to those repository guides', ''))
+
+
 if __name__=='__main__':
     unittest.main()

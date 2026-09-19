@@ -41,3 +41,11 @@ Torque's verification or merge requirements.
 
 Rollback must preserve safe ownership and the matching instructions. Do not reinstall the old
 PID-only helper over a registry containing new-format reservations.
+
+## Handoff to Torque's selected-feedback policy
+
+This section applies only after Torque's reviewed selected-local policy is merged; it does not activate that policy or install this adapter. Read the lane's current `docs/agents/testing.md` and `docs/agents/workflow.md` before constructing its verification brief.
+
+The supported `python -m scripts.feedback` command and migrated push hook already own execution admission. Do not wrap feedback or a migrated push in `suite_slot.sh run`: a nested cache miss refuses, and an extra reservation can consume capacity without useful work. Configure their TORQUE_SUITE_SLOTS to the same coordinated registry as the adapter. Use affected-test declarations for normal changes and the explicit `--full` route when the repository policy requires broad verification. Raw foreground diagnostic commands still need the adapter's ownership wrapper.
+
+A selected local pass permits PR preparation, not merging. Preserve complete required CI, reviewed head/base, current-base verification and independent remote-push proof. Refresh future briefs at the coordinated handoff; existing copied instructions do not update themselves. Never introduce another registry to make a blocked lane run.

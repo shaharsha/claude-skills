@@ -82,6 +82,12 @@ you made, an appeal, or a question about your own sequencing. There, a subagent 
 prompt you write is not independent review — it is a performance of independent review, and you are
 the one who would not be able to tell the difference.
 
+## Verification brief ownership
+
+Before launching a verification command, read the lane's current Torque `docs/agents/testing.md` and `docs/agents/workflow.md`, plus `~/.claude/torque-orchestration/SUITE-RUNNER.md`. Verification policy belongs to those repository guides; this dispatcher does not override it. Do not copy a historical full-suite or cross-shell acquire recipe into a new brief.
+
+The owned adapter handoff and the selected-feedback policy handoff are separate prerequisites. Follow the coordinated installation record, preserve existing jobs/leases, and use one host registry. Once the reviewed selected-feedback policy is active, feedback and the migrated push hook own admission themselves: do not wrap them in another slot command. Keep raw diagnostic commands owned. A selected result never grants merge approval; complete CI and the reviewed current head/base remain required.
+
 ## 1 · Name yourself, and learn who you can reach
 
 **There is nothing to arm.** As of 2026-08-12 this sprint uses Claude Code's native cross-session
