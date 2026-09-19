@@ -1452,16 +1452,19 @@ or reaped"* and **exits 0**. The trap looks clean, the lane sees a success line,
 held** until the dead-owner reaper collects it. A live sighting: the shared registry's `slot1` held
 by a dead owner earlier today.
 
-**Correct form — the script's own header carried it all along** (`suite_slot.sh:23`); I invented a
-shorter one that does not work:
+**Current supported form — use the owned runner.** After the coordinated installation in
+[SUITE-RUNNER.md](SUITE-RUNNER.md), the private entry point delegates to Torque's pinned
+process-group-aware runner. Configure the intended worktree's interpreter/PYTHONPATH in the same
+invocation, then run:
 
 ```bash
-OUT=$(~/.claude/torque-orchestration/suite_slot.sh acquire 4 $$) || exit 64
-SLOT=$(printf '%s' "$OUT" | sed -n 's/^SLOT=\([^ ]*\).*/\1/p')
-[ -n "$SLOT" ] || { echo "acquire returned 0 with no SLOT= — refusing to run"; exit 64; }
-trap '~/.claude/torque-orchestration/suite_slot.sh release "$SLOT" $$' EXIT INT TERM
-<run the suite here, in this same call>
+~/.claude/torque-orchestration/suite_slot.sh run --wait-seconds 60 4 -- <foreground suite command>
 ```
+
+Options precede the slot count; these values are operational examples, not measured capacity.
+The adapter refuses the old `acquire` recipe so a copied brief cannot reserve with a short-lived
+shell and launch later. `claim` is only for explicitly registering already-running work. The
+historical failure below explains why; it does not authorize an old reaper during the cutover.
 
 ⚠️ **This is §6A Part 4 in the dispatcher's own hand.** A release that reports success while releasing
 nothing is an instrument that cannot return the opposite value — and it was pasted into roughly
