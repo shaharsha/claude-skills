@@ -1,0 +1,11 @@
+sha=d9645863f3606f27702f880dee54f56328d1e20d
+branch=me/smp-decision-pages
+tree=clean
+prompt=/Users/shaharshavit/Projects/torque/.claude/worktrees/smp-decision/.codex-review/20260918-062116-tor1297-code-r5-smpdecision.prompt.md
+prompt_sha256=5281959387b43774d68d6dfda53292b357bfa035fc9fa85eb3f1f935910c5c8a
+prompt_origin=/Users/shaharshavit/Projects/torque/.claude/worktrees/smp-decision/.codex-review/tor1297-routea-r5.prompt.src.md
+prompt_durable=yes
+label=tor1297-code-r5-smpdecision
+session=01a0b288-5f54-7733-9d83-3dcdc043f54a
+stamp=20260918-062116
+artifact_sha256=04be00264db9c455ae531f418e0242fa16a95b77445226203d898da60b88f331

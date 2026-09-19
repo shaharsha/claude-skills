@@ -1,0 +1,11 @@
+sha=d9e51ae7032c9632a9660e0e2de622a7d9b0c13b
+branch=me/tor-1324-lr-intro-names-the-spend-table
+tree=clean
+prompt=/Users/shaharshavit/Projects/torque/.claude/worktrees/tor1314-computed-live/.codex-review/20260918-171308-tor1324-pr1027-postmerge-r1.prompt.md
+prompt_sha256=3493d56b054641d0383141f1f6c57c9ec1135716076108396a70032b46e38f5a
+prompt_origin=/tmp/pr1027-round-prompt.md
+prompt_durable=yes
+label=tor1324-pr1027-postmerge-r1
+session=01a0b4dd-324d-75d2-a97c-9ccd3b499096
+stamp=20260918-171308
+artifact_sha256=ab2212cd0f77c00a27248fbb4c2cf059d01abf2b50c5a25990a4c92b3bbb17c1

@@ -1,0 +1,22 @@
+{
+  "analyst-cli-r2": {
+    "session_id": "01a0b3ac-4d79-7ac1-ad84-873b59fc734e",
+    "label": "analyst-cli-r2",
+    "updated_at": "2026-09-18T08:46:21Z"
+  },
+  "20260918-115910-analyst-cli-r2-round2": {
+    "session_id": "01a0b3bd-bdd9-7db2-a531-4a754026529a",
+    "label": "analyst-cli-r2-round2",
+    "updated_at": "2026-09-18T09:05:38Z"
+  },
+  "20260918-123518-analyst-cli-r2-round3": {
+    "session_id": "01a0b3de-d25d-7a40-b3a3-8968df08abec",
+    "label": "analyst-cli-r2-round3",
+    "updated_at": "2026-09-18T09:40:21Z"
+  },
+  "20260918-125024-analyst-cli-r2-round4": {
+    "session_id": "01a0b3ec-a536-7a63-845c-24a14118c0c3",
+    "label": "analyst-cli-r2-round4",
+    "updated_at": "2026-09-18T09:55:08Z"
+  }
+}

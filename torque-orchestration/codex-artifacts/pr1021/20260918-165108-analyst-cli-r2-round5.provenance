@@ -1,0 +1,11 @@
+sha=29c75f56797e07efa01d2db61e13a51c09a303f4
+branch=HEAD
+tree=clean
+prompt=/Users/shaharshavit/Projects/torque/.claude/worktrees/pr1021-remerge/.codex-review/20260918-165108-analyst-cli-r2-round5.prompt.md
+prompt_sha256=2b1d9c5911a7c1f8f564c137e0d73b293d665d58cbf7cb7ea022dfce98ca798c
+prompt_origin=/Users/shaharshavit/.claude/torque-orchestration/codex-artifacts/pr1021/round5.prompt.md
+prompt_durable=yes
+label=analyst-cli-r2-round5
+session=01a0b4c9-0b81-7061-8926-c0ef4f71cc42
+stamp=20260918-165108
+artifact_sha256=cdcf0e4b951383e31a4d2c4b26507ea759b366ee59a7d6b62990153075887dc1

@@ -1,0 +1,11 @@
+sha=2f71371a45d70b0ca608abcfabb0516f45468ee7
+branch=HEAD
+tree=clean
+prompt=/Users/shaharshavit/Projects/torque/.claude/worktrees/pr1023-remedies/.codex-review/20260918-165224-tor1309-tor1216-postmerge-r3.prompt.md
+prompt_sha256=16180a954783b09efe599f1ddea030458e97b32592da7aef949a8cf334af7814
+prompt_origin=/tmp/pr1023-r3-prompt.md
+prompt_durable=yes
+label=tor1309-tor1216-postmerge-r3
+session=01a0b4ca-329b-7be3-ba8c-eb6fcace9e27
+stamp=20260918-165224
+artifact_sha256=27d2758912fd8364fe7f81b40a0e91cc6e995b265a1baf17f657b9d43cac12c4
