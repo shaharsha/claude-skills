@@ -7,6 +7,10 @@ Torque owns reservation policy and lifecycle tests; this repository owns only th
 
 ## Coordinated installation
 
+Integrate [Torque #1053](https://github.com/Torque-Capital/torque/pull/1053) before choosing the runtime for [this adapter, #26](https://github.com/shaharsha/claude-skills/pull/26). Install from a verified clean revision containing that change; an earlier installation must be reverified and replaced at the coordinated handoff. A GitHub merge alone does not update a machine.
+
+Resolve the complete installed path before updating a local checkout: `~/.claude/torque-orchestration` may itself be a symlink, even when `suite_slot.sh` is a regular file. Updating that checkout can immediately replace the live helper. Stage the runtime, configuration and adapter in a separate checkout/directory first. Do not pull the live linked checkout until the exclusion and installation steps below are ready.
+
 1. Verify the chosen Torque revision and run its `tests/structure/test_suite_slot.py` controls
    against a disposable registry. Also run `python3 -m unittest discover -s torque-orchestration
    -p test_suite_adapter.py` in this repository. Use the configured shared Python for Torque.
@@ -15,7 +19,10 @@ Torque owns reservation policy and lifecycle tests; this repository owns only th
 3. Install the verified standalone `suite_slot.py` bytes in a stable revision-named runtime
    directory outside disposable worktrees. Record the source commit and SHA-256.
 4. Write an untracked `suite-runner.json` beside the adapter with absolute `script`, `python`,
-   `registry` paths and the script's `sha256`. No credentials belong in it. `TORQUE_SUITE_CONFIG`
+   `registry` paths, the script's `sha256`, and the full verified `source_commit` object ID.
+   Derive the commit and digest from the same clean source checkout; the adapter validates their
+   format and installed bytes, not the truth of an installer's commit declaration.
+   No credentials belong in it. `TORQUE_SUITE_CONFIG`
    can choose an explicit configuration for a disposable test; it does not change policy.
 5. Atomically install the adapter only once all old future writers/reapers are excluded.
    The old helper defaults to `~/.claude/torque-suite-slots`; do not expose process-group records
@@ -24,6 +31,18 @@ Torque owns reservation policy and lifecycle tests; this repository owns only th
 6. Refresh dispatcher and future worker briefs. Already-running sessions do not automatically
    reload changed files. Observe a newly launched command, failure propagation, ownership and
    final cleanup before claiming adoption complete.
+
+Before resuming launches, run `suite_slot.sh provenance` from the intended Torque checkout.
+This command validates the installation and reports its configured source commit/digest and
+checkout comparison as MATCH, DIFFERENT or UNKNOWN, without executing the runner or touching
+reservations. It compares the nearest checkout's `scripts/suite_slot.py` bytes, including from
+a nested directory or linked worktree. It does not use inherited Git environment variables.
+Normal delegation warns on DIFFERENT or UNKNOWN and still uses the verified pinned runtime.
+DIFFERENT means review/reinstall may be needed, not that the installed version is necessarily
+older; UNKNOWN means the source comparison could not be made. A newer commit with identical
+runner bytes still matches. Neither ancestry nor a digest alone establishes compatibility.
+
+Fleet adoption still requires disposition of [TOR-1334](https://linear.app/torque-capital/issue/TOR-1334), not merely merging this adapter. Torque's testing guide and `docs/instruction-migration/push-gate-review.md` explain generation checks and the remaining conservative handling of unverifiable leaderless groups. Never resolve such ambiguity by expiring live work or clearing another session's reservation. The observed launcher handoff and representative concurrent-work acceptance remain required.
 
 ## Commands
 

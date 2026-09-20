@@ -23,6 +23,7 @@ class AdapterTests(unittest.TestCase):
         self.config = self.root / 'config.json'
         self.data = {'script':str(self.script), 'python':sys.executable,
                      'registry':str(self.root / 'slots'),
+                     'source_commit':'a'*40,
                      'sha256':hashlib.sha256(self.script.read_bytes()).hexdigest()}
         self.config.write_text(json.dumps(self.data))
         self.env = {k:v for k,v in os.environ.items()
@@ -71,6 +72,65 @@ class AdapterTests(unittest.TestCase):
         self.env['TORQUE_SUITE_SLOTS']=self.data['registry']
         self.assertEqual(self.run_adapter('status').returncode,23)
 
+    def test_source_commit_is_required_and_diagnostics_do_not_echo_config_secrets(self):
+        for value in (None, 'secret-do-not-print', 123):
+            with self.subTest(value=value):
+                data = dict(self.data)
+                if value is None:
+                    data.pop('source_commit')
+                else:
+                    data['source_commit'] = value
+                self.config.write_text(json.dumps(data))
+                result = self.run_adapter('status')
+                self.assertEqual(result.returncode, 64)
+                self.assertNotIn('secret-do-not-print', result.stderr)
+                self.assertEqual(result.stdout, '')
+        self.config.write_text('{"secret-do-not-print": invalid}')
+        result = self.run_adapter('status')
+        self.assertEqual(result.returncode, 64)
+        self.assertIn('JSONDecodeError', result.stderr)
+        self.assertNotIn('secret-do-not-print', result.stderr)
+
+    def test_provenance_is_read_only_and_compares_runner_bytes_not_commit_ancestry(self):
+        # A linked-worktree .git file is enough; never invoke Git or follow its
+        # inherited environment into another checkout to decide what is current.
+        (self.root / '.git').write_text('gitdir: /unrelated/repository')
+        source = self.root / 'scripts/suite_slot.py'
+        source.parent.mkdir()
+        self.env['GIT_DIR'] = '/unrelated/repository'
+        for state, content in [('MATCH', self.script.read_bytes()),
+                               ('DIFFERENT', b'# newer or older implementation\n'),
+                               ('UNKNOWN', None)]:
+            with self.subTest(state=state):
+                if content is None:
+                    source.unlink()
+                else:
+                    source.write_bytes(content)
+                result = self.run_adapter('provenance')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                observed = json.loads(result.stdout)
+                self.assertEqual(observed['source_commit'], self.data['source_commit'])
+                self.assertEqual(observed['sha256'], self.data['sha256'])
+                self.assertEqual(observed['source_comparison']['state'], state)
+                self.assertFalse((self.root / 'slots').exists())
+                delegated = self.run_adapter('status')
+                self.assertEqual(delegated.returncode, 23)
+                self.assertEqual('WARNING:' in delegated.stderr, state != 'MATCH')
+
+    def test_nested_checkout_discovery_and_unknown_outside_checkout(self):
+        self.assertEqual(json.loads(self.run_adapter('provenance').stdout)
+                         ['source_comparison']['state'], 'UNKNOWN')
+        (self.root / '.git').mkdir()
+        source = self.root / 'scripts/suite_slot.py'
+        source.parent.mkdir()
+        source.write_bytes(self.script.read_bytes())
+        nested = self.root / 'api/nested'
+        nested.mkdir(parents=True)
+        result = subprocess.run([str(HERE / 'suite_slot.sh'), 'provenance'], env=self.env,
+                                cwd=nested, text=True, capture_output=True, timeout=10)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stdout)['source_comparison']['state'], 'MATCH')
+
 
 def validate_brief_guidance(runner, dispatcher):
     required = (
@@ -78,6 +138,10 @@ def validate_brief_guidance(runner, dispatcher):
         (runner, 'Do not wrap feedback or a migrated push in `suite_slot.sh run`'),
         (runner, 'same coordinated registry as the adapter'),
         (runner, 'A selected local pass permits PR preparation, not merging.'),
+        (runner, 'Integrate [Torque #1053]'),
+        (runner, 'Do not pull the live linked checkout'),
+        (runner, '`source_commit`'),
+        (runner, 'without executing the runner or touching'),
         (dispatcher, 'Verification policy belongs to those repository guides'),
         (dispatcher, 'do not wrap them in another slot command'),
         (dispatcher, 'complete CI and the reviewed current head/base remain required'),
@@ -93,7 +157,11 @@ class BriefGuidanceTests(unittest.TestCase):
         validate_brief_guidance(runner, dispatcher)
         for clause in ('Do not wrap feedback or a migrated push in `suite_slot.sh run`',
                        'same coordinated registry as the adapter',
-                       'A selected local pass permits PR preparation, not merging.'):
+                       'A selected local pass permits PR preparation, not merging.',
+                       'Integrate [Torque #1053]',
+                       'Do not pull the live linked checkout',
+                       '`source_commit`',
+                       'without executing the runner or touching'):
             with self.subTest(clause=clause), self.assertRaises(AssertionError):
                 validate_brief_guidance(runner.replace(clause, ''), dispatcher)
         with self.assertRaises(AssertionError):

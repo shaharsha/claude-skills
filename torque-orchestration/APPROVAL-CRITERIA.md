@@ -1589,6 +1589,10 @@ by a dead owner earlier today.
 process-group-aware runner. Configure the intended worktree's interpreter/PYTHONPATH in the same
 invocation, then run:
 
+The installation guide also owns the single host-budget invariant: never use two independent
+registries to admit work on the same host. Its ordering and parent-symlink checks apply before
+updating a live checkout. Verify installed provenance there before adopting a newly merged runner.
+
 ```bash
 ~/.claude/torque-orchestration/suite_slot.sh run --wait-seconds 60 4 -- <foreground suite command>
 ```

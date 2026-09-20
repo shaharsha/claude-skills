@@ -5,7 +5,28 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import sys
+
+
+def source_comparison(expected):
+    """Compare bytes in the nearest checkout, without trusting inherited GIT_*.
+
+    This is a diagnostic, not a version ordering or compatibility decision. A
+    commit may be newer while this standalone file is identical, or an older
+    ancestor may contain different bytes. Neither case is answered by ancestry.
+    """
+    try:
+        cwd = Path.cwd().resolve()
+        for root in (cwd, *cwd.parents):
+            if (root / '.git').exists():
+                source = root / 'scripts/suite_slot.py'
+                observed = hashlib.sha256(source.read_bytes()).hexdigest()
+                return {'state': 'MATCH' if observed == expected else 'DIFFERENT',
+                        'sha256': observed}
+    except OSError:
+        pass
+    return {'state': 'UNKNOWN', 'sha256': None}
 
 
 def main(argv=None):
@@ -27,8 +48,11 @@ def main(argv=None):
         if not all(path.is_absolute() for path in (script, interpreter, registry)):
             raise ValueError('runtime, interpreter and registry paths must be absolute')
         expected = config['sha256']
-        if not isinstance(expected, str) or len(expected) != 64:
+        if not isinstance(expected, str) or not re.fullmatch(r'[0-9a-f]{64}', expected):
             raise ValueError('a pinned runtime SHA-256 is required')
+        source_commit = config['source_commit']
+        if not isinstance(source_commit, str) or not re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', source_commit):
+            raise ValueError('the verified source commit is required')
         if hashlib.sha256(script.read_bytes()).hexdigest() != expected:
             raise ValueError('installed Torque runner changed; verify and reinstall its pinned revision')
         if not interpreter.is_file() or not os.access(interpreter, os.X_OK):
@@ -36,10 +60,22 @@ def main(argv=None):
         override = os.environ.get('TORQUE_SUITE_SLOTS')
         if override and Path(override).expanduser().resolve() != registry.resolve():
             raise ValueError('registry override disagrees with the coordinated fleet configuration')
+        comparison = source_comparison(expected)
+        if argv[:1] == ['provenance']:
+            if len(argv) != 1:
+                raise ValueError('run provenance without arguments from the intended Torque checkout')
+            print(json.dumps({'source_commit': source_commit, 'sha256': expected,
+                              'source_comparison': comparison}, sort_keys=True))
+            return 0
+        if comparison['state'] != 'MATCH':
+            print(f'WARNING: installed runner source={source_commit}; checkout comparison '
+                  f'{comparison["state"]}. Follow SUITE-RUNNER.md to verify the intended '
+                  'runtime; continuing with the pinned installation.', file=sys.stderr)
         env = dict(os.environ, TORQUE_SUITE_SLOTS=str(registry))
         os.execve(str(interpreter), [str(interpreter), str(script), *argv], env)
     except (OSError, ValueError, KeyError, TypeError) as exc:
-        # Do not echo file contents, credentials or arbitrary JSON fields.
+        # Exact type is deliberate: JSONDecodeError subclasses ValueError and
+        # can contain config text. Do not echo that or arbitrary JSON fields.
         detail = str(exc) if type(exc) is ValueError else type(exc).__name__
         print(f'REFUSED: suite runner configuration/runtime unavailable ({detail}); '
               'follow SUITE-RUNNER.md before adoption. No reservation was changed.', file=sys.stderr)
