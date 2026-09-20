@@ -1,0 +1,57 @@
+AST positive control   26 Assign nodes in api/routers/companies.py
+entries=7  arity=[3]   ['LR', 'WL', 'VYB', 'TBR', 'FRTC', 'ALM', 'SMP']
+product slugs          ['alm', 'frtc', 'lr', 'smp', 'tbr', 'vyb', 'wl']
+selectors              18
+
+tracked paths          2055
+DEAD SELECTORS         none
+corpus control         neg=0 (must be 0)  pos=169 (must be >0)
+MUST-HIT   engine/x.py                                          engine/**
+MUST-HIT   models/x.py                                          models/**
+MUST-HIT   risk/x.py                                            risk/**
+MUST-HIT   db/schema.py                                         db/schema.py
+MUST-HIT   api/auth/sessions.py                                 api/auth/**
+MUST-HIT   api/services/vault/raw_read.py                       api/services/vault/**
+MUST-HIT   api/services/silver/x.py                             api/services/silver/**
+MUST-HIT   api/services/computation/batch.py                    api/services/computation/**
+MUST-HIT   api/services/publishing.py                           api/services/publishing.py
+MUST-HIT   api/services/projector/chart_compiler.py             api/services/projector/**
+MUST-HIT   api/services/smp/data.py                             api/services/smp/**
+MUST-HIT   api/services/lr/forecast.py                          api/services/lr/**
+MUST-HIT   api/services/tbr/historical_analysis.py              api/services/tbr/**
+MUST-HIT   authored_pages/alm_historical/body.html              authored_pages/**
+MUST-MISS  api/services/control_plane/pages.py                  ok
+MUST-MISS  scripts/torque_admin.py                              ok
+MUST-MISS  scripts/build_page.py                                ok
+MUST-MISS  db/pg.py                                             ok
+MUST-MISS  tests/test_vault_raw_read.py                         ok
+MUST-MISS  authored_pages/alm_historical/README.md              ok
+MUST-MISS  api/routers/publishing.py                            ok
+MUST-MISS  api/services/SMP/data.py                             ok
+MUST-MISS  api/services/publishing/x.py                         ok
+MUST-MISS  frontend/src/App.tsx                                 ok
+MUST-MISS  api/services/vaultish/x.py                           ok
+CONTROLS   must-hit 14/14   must-miss 11/11
+
+DELTA baaf5c8b..29c75f56797e07efa01d2db61e13a51c09a303f4
+rows 140   MANDATORY 18
+    api/auth/__init__.py                                         <- api/auth/**
+    api/auth/config.py                                           <- api/auth/**
+    api/auth/deps.py                                             <- api/auth/**
+    api/auth/grants.py                                           <- api/auth/**
+    api/auth/roles.py                                            <- api/auth/**
+    api/auth/session_format.py                                   <- api/auth/**
+    api/auth/sessions.py                                         <- api/auth/**
+    api/auth/tokens.py                                           <- api/auth/**
+    api/services/alm/dealops.py                                  <- api/services/alm/**
+    api/services/alm/dealops_context.py                          <- api/services/alm/**
+    api/services/alm/live_risk_analysis.py                       <- api/services/alm/**
+    api/services/alm/monitoring.py                               <- api/services/alm/**
+    api/services/alm/monitoring_management.py                    <- api/services/alm/**
+    api/services/computation/batch.py                            <- api/services/computation/**
+    api/services/computation/broker.py                           <- api/services/computation/**
+    api/services/publishing.py                                   <- api/services/publishing.py
+    api/services/smp/historical_analysis.py                      <- api/services/smp/**
+    db/schema.py                                                 <- db/schema.py
+
+MATCHER SELF-CHECK PASS

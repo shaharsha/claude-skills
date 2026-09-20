@@ -227,8 +227,16 @@ LOG="$BASE.log"
 # times while the repo sha it would have recorded stayed put, and "round 3 covers the
 # previous revision" was recoverable only because codex volunteered a hash in its scan
 # notes -- incidental on two rounds, absent on the third.
-PROMPT_SHA="$(shasum -a 256 "$PROMPT_FILE" 2>/dev/null | awk '{print $1}')"
-PROMPT_SHA="${PROMPT_SHA:-unknown}"
+# `|| PROMPT_SHA=unknown` sits OUTSIDE the substitution, and the shape check is
+# separate -- the same two-part guard ARTIFACT_SHA gets further down, and for the
+# same two reasons. Written as a bare `VAR="$(pipeline)"` under `set -euo pipefail`
+# the failing status is the assignment's status, so a missing hasher ABORTS the
+# round for a provenance reason; and `${VAR:-unknown}` on the next line is then
+# unreachable, so the sentinel this script believes it has could never be written.
+# Success is also not the same as a digest: a hasher exiting 0 with junk would be
+# recorded verbatim, putting a value in the sidecar that looks like data and is not.
+PROMPT_SHA="$(shasum -a 256 "$PROMPT_FILE" 2>/dev/null | awk '{print $1}')" || PROMPT_SHA="unknown"
+[[ "$PROMPT_SHA" =~ ^[0-9a-f]{64}$ ]] || PROMPT_SHA="unknown"
 
 # OWN THE BYTES YOU CITE. Until 2026-08-07 the header pointed at the CALLER's path, whose
 # lifetime this script does not control -- and lanes keep their prompts under /private/tmp
@@ -249,10 +257,40 @@ PROMPT_SHA="${PROMPT_SHA:-unknown}"
 # rounds sharing a base would otherwise have one overwrite the other's prompt copy, which is
 # the collision that block exists to close -- and it would corrupt the record in the one
 # direction this comment says is worst: a citation that still resolves, to the wrong bytes.
+#
+# ⚠️ `prompt=` IS ABSOLUTE AND THE FILE IT NAMES IS ALWAYS A SIBLING. Those two
+# facts together are a citation that breaks on precisely the act this copy exists
+# to survive: lifting the artifact set OUT of a worktree that is about to be
+# removed. Measured 2026-09-19 over 498 sidecars — 242 record a `prompt=` that no
+# longer resolves, and of the 55 of those claiming `prompt_durable=yes`, 52 have
+# the bytes sitting right beside them, all 52 hashing to the recorded
+# `prompt_sha256`. The retention worked; the path spelling threw it away. So
+# `prompt_relative=` is emitted too, and a checker resolves THAT first.
 PROMPT_COPY="$BASE.prompt.md"
 PROMPT_ORIGIN="$PROMPT_FILE"
+PROMPT_RELATIVE=""
 if cp "$PROMPT_FILE" "$PROMPT_COPY" 2>/dev/null; then
   PROMPT_CITE="$PROMPT_COPY"
+  # ── EARN `prompt_durable=yes`, DO NOT ASSERT IT ─────────────────────────────
+  # It used to mean "cp exited 0", which is a claim about a command, not about the
+  # bytes a later reader will find. The comment at the sidecar printf says the copy
+  # is byte-identical "BY CONSTRUCTION ... If anything is ever interposed between
+  # the read and the copy, this claim breaks silently." Re-hashing the copy is what
+  # turns that construction argument into something checkable, here, at generation,
+  # by the only process that can still see both files. A copy that does not match
+  # is NOT durable, however successfully it was written.
+  PROMPT_COPY_SHA="$(shasum -a 256 "$PROMPT_COPY" 2>/dev/null | awk '{print $1}')" || PROMPT_COPY_SHA=""
+  if [[ "$PROMPT_SHA" =~ ^[0-9a-f]{64}$ && "$PROMPT_COPY_SHA" == "$PROMPT_SHA" ]]; then
+    PROMPT_RELATIVE="${PROMPT_COPY##*/}"
+  else
+    # The copy exists but cannot be shown to hold the reviewed bytes -- either the
+    # hasher failed, or the source moved under us between the two reads. Say `no`:
+    # a dangling citation is recoverable, a citation that RESOLVES to the wrong
+    # bytes is the one failure mode this whole block calls worse than absence.
+    PROMPT_COPY=""
+    echo "codex_review: WARNING the prompt copy does not hash to the reviewed prompt." >&2
+    echo "codex_review: recording prompt_durable=no; the citation is NOT checkable." >&2
+  fi
 else
   # Never fail the round over provenance, but never silently downgrade the claim either:
   # cite the caller's path and say plainly that it may not outlive this round.
@@ -393,8 +431,16 @@ ARTIFACT_SHA="$(shasum -a 256 "$MD" 2>/dev/null | awk '{print $1}')" || ARTIFACT
 # interposed between the read and the copy, this claim breaks silently -- the citation
 # would still resolve, to bytes whose hash no longer matches, which is the one failure
 # mode worse than a dangling path.
-printf 'sha=%s\nbranch=%s\ntree=%s\nprompt=%s\nprompt_sha256=%s\nprompt_origin=%s\nprompt_durable=%s\nlabel=%s\nsession=%s\nstamp=%s\nartifact_sha256=%s\n' \
-  "$REVIEW_SHA" "$REVIEW_BRANCH" "$REVIEW_DIRTY" "$PROMPT_CITE" "$PROMPT_SHA" \
+#
+# `prompt_relative=` is the citation a checker must try FIRST: it is a bare
+# basename resolved against the SIDECAR's own directory, so it survives the set
+# being moved, which the absolute `prompt=` does not. It is written only when the
+# copy was made AND re-hashed to `prompt_sha256`, so its presence is exactly the
+# condition `prompt_durable=yes` now asserts -- one fact, not two that can drift.
+# `prompt=` and `prompt_origin=` are unchanged, so every existing reader keeps
+# working and no sidecar already on disk becomes harder to interpret.
+printf 'sha=%s\nbranch=%s\ntree=%s\nprompt=%s\nprompt_relative=%s\nprompt_sha256=%s\nprompt_origin=%s\nprompt_durable=%s\nlabel=%s\nsession=%s\nstamp=%s\nartifact_sha256=%s\n' \
+  "$REVIEW_SHA" "$REVIEW_BRANCH" "$REVIEW_DIRTY" "$PROMPT_CITE" "$PROMPT_RELATIVE" "$PROMPT_SHA" \
   "$PROMPT_ORIGIN" "$([[ -n "$PROMPT_COPY" ]] && echo yes || echo no)" \
   "$LABEL" "${SESSION_ID:-unknown}" "$STAMP" "$ARTIFACT_SHA" > "$BASE.provenance"
 

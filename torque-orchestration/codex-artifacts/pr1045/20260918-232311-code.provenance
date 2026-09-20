@@ -1,0 +1,11 @@
+sha=114caf7c19fa767b444861703d408cf8c9feb2d6
+branch=me/tor-1355-1354-canary-backfill
+tree=clean
+prompt=/Users/shaharshavit/Projects/torque/.claude/worktrees/tor1355-1354/.codex-review/20260918-232311-code.prompt.md
+prompt_sha256=2bd9d4c5d64267bb6da12ee2f603ef0c5c25f9c6e67cdf041c38cebb3cfa4b86
+prompt_origin=/tmp/codex-tor1355-prompt.md
+prompt_durable=yes
+label=code
+session=01a0b62f-f9d6-7b93-b35e-951501696eb5
+stamp=20260918-232311
+artifact_sha256=5d6ac0c380d5cff637713466f1739223a8fd254811dd8cff84cc5c71e5dbe98f

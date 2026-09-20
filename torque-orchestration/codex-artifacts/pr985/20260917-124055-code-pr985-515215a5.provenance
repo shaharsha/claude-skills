@@ -1,0 +1,11 @@
+sha=515215a51c0d9a4d7cacb03b8f0273814344d000
+branch=me/lr-simulator
+tree=clean
+prompt=/Users/shaharshavit/Projects/torque/.claude/worktrees/lr-sim/.codex-review/20260917-124055-code-pr985-515215a5.prompt.md
+prompt_sha256=872179c85f5b8287c22a81602b968498500bb7b5794e89de5ebe50407bba516c
+prompt_origin=/private/tmp/claude-501/-Users-shaharshavit-Projects-torque/5ef4e269-9733-434d-be85-22de209c34db/scratchpad/psim.md
+prompt_durable=yes
+label=code-pr985-515215a5
+session=01a0aebd-981b-7071-b7f4-d623e1d8cf25
+stamp=20260917-124055
+artifact_sha256=22078a26b9a709339c774afdebfb1f2f91dac737e8929026e3c4a0f594418ec5

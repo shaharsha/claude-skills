@@ -1,0 +1,11 @@
+sha=b83cd626b4b294cb4c3a395250f44c06ddd647b8
+branch=HEAD
+tree=clean
+prompt=/Users/shaharshavit/Projects/torque/.claude/worktrees/lr-capture-1001/.codex-review/20260918-135810-tor282-impl-r8.prompt.md
+prompt_sha256=9869c5038c7d9a53b6488a13e4175dd0f9e40e6d976bad248807a60526c6d313
+prompt_origin=/tmp/tor282-r8.prompt.md
+prompt_durable=yes
+label=tor282-impl-r8
+session=01a0b42a-b12d-71b3-a2c6-1d1963dfb474
+stamp=20260918-135810
+artifact_sha256=7513f29282a494fc53c81299fccf1c29af66e8ab58da5ea6bb3c8c6b959074cc

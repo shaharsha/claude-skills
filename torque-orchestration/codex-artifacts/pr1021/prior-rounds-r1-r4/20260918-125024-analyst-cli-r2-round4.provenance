@@ -1,0 +1,11 @@
+sha=baaf5c8ba258be56f79dcb12de7a22ef01515d11
+branch=HEAD
+tree=clean
+prompt=/Users/shaharshavit/Projects/torque/.claude/worktrees/analyst-cli-2-r2/.codex-review/20260918-125024-analyst-cli-r2-round4.prompt.md
+prompt_sha256=d0aaae77d77fd804743797cd236821570d19690ef49ac1a8389480cc77404b3d
+prompt_origin=/tmp/codex_prompt_1021_r2.md
+prompt_durable=yes
+label=analyst-cli-r2-round4
+session=01a0b3ec-a536-7a63-845c-24a14118c0c3
+stamp=20260918-125024
+artifact_sha256=30f33ec011777d4d6d8ea38e0fae2d72f53c3e08141d1e5b82a13fa03fe9052f

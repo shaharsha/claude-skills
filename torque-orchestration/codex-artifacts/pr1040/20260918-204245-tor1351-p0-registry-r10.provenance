@@ -1,0 +1,11 @@
+sha=979a0d8eb77856b184872a6a4948ab5f36ec95c7
+branch=me/p0-client-registry
+tree=clean
+prompt=/Users/shaharshavit/Projects/torque/.claude/worktrees/p0-s3-native-registry/.codex-review/20260918-204245-tor1351-p0-registry-r10.prompt.md
+prompt_sha256=745e1bdfa6732b7d578afd3123158c8810f8008aa070334d019477cdfb998284
+prompt_origin=/tmp/codex-p0-r10-prompt.md
+prompt_durable=yes
+label=tor1351-p0-registry-r10
+session=01a0b59d-1783-79f3-9198-31827ac76978
+stamp=20260918-204245
+artifact_sha256=8c1b55f13bc2d40a66693848dcafd6a67a146575c86eddf79b8d979c859abfe5

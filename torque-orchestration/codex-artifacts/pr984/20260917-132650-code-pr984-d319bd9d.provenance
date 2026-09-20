@@ -1,0 +1,11 @@
+sha=d319bd9d3cb686841b1ae4968dfb06f8c38839f0
+branch=me/tor-1241-offer-b-status-label
+tree=clean
+prompt=/Users/shaharshavit/Projects/torque/.claude/worktrees/lr-1241/.codex-review/20260917-132650-code-pr984-d319bd9d.prompt.md
+prompt_sha256=4cb37bf8577057a19f9e343de7e27c479ebf604aa702ce77718a81d75fcedc12
+prompt_origin=/private/tmp/claude-501/-Users-shaharshavit-Projects-torque/5ef4e269-9733-434d-be85-22de209c34db/scratchpad/p1241.md
+prompt_durable=yes
+label=code-pr984-d319bd9d
+session=01a0aee7-a19e-7e40-a6d4-f244e179c124
+stamp=20260917-132650
+artifact_sha256=b1e332126cee37ba1eefbf063017b4e2e4448137925b7944950c8eb4e76814c0
