@@ -110,6 +110,7 @@ class AdapterTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 observed = json.loads(result.stdout)
                 self.assertEqual(observed['source_commit'], self.data['source_commit'])
+                self.assertIs(observed['source_commit_verified'], False)
                 self.assertEqual(observed['sha256'], self.data['sha256'])
                 self.assertEqual(observed['source_comparison']['state'], state)
                 self.assertFalse((self.root / 'slots').exists())

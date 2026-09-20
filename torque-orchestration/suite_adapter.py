@@ -52,7 +52,7 @@ def main(argv=None):
             raise ValueError('a pinned runtime SHA-256 is required')
         source_commit = config['source_commit']
         if not isinstance(source_commit, str) or not re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', source_commit):
-            raise ValueError('the verified source commit is required')
+            raise ValueError('a full declared source commit is required')
         if hashlib.sha256(script.read_bytes()).hexdigest() != expected:
             raise ValueError('installed Torque runner changed; verify and reinstall its pinned revision')
         if not interpreter.is_file() or not os.access(interpreter, os.X_OK):
@@ -64,7 +64,8 @@ def main(argv=None):
         if argv[:1] == ['provenance']:
             if len(argv) != 1:
                 raise ValueError('run provenance without arguments from the intended Torque checkout')
-            print(json.dumps({'source_commit': source_commit, 'sha256': expected,
+            print(json.dumps({'source_commit': source_commit, 'source_commit_verified': False,
+                              'sha256': expected,
                               'source_comparison': comparison}, sort_keys=True))
             return 0
         if comparison['state'] != 'MATCH':

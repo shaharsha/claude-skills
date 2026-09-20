@@ -35,7 +35,9 @@ Resolve the complete installed path before updating a local checkout: `~/.claude
 Before resuming launches, run `suite_slot.sh provenance` from the intended Torque checkout.
 This command validates the installation and reports its configured source commit/digest and
 checkout comparison as MATCH, DIFFERENT or UNKNOWN, without executing the runner or touching
-reservations. It compares the nearest checkout's `scripts/suite_slot.py` bytes, including from
+reservations. Output always includes `source_commit_verified: false`: the commit is an installer
+declaration, even when the measured runner bytes MATCH. It compares the nearest checkout's
+`scripts/suite_slot.py` bytes, including from
 a nested directory or linked worktree. It does not use inherited Git environment variables.
 Normal delegation warns on DIFFERENT or UNKNOWN and still uses the verified pinned runtime.
 DIFFERENT means review/reinstall may be needed, not that the installed version is necessarily
