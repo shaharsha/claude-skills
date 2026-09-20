@@ -1,2 +1,5 @@
 # session state, not instruction — rewritten by whoever holds the orchestrator role
 torque-orchestration/CURRENT-ORCHESTRATOR
+
+# Local pinned suite-runner installation, no machine paths in source control.
+/torque-orchestration/suite-runner.json
