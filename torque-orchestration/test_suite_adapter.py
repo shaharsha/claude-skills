@@ -176,12 +176,11 @@ class BriefGuidanceTests(unittest.TestCase):
             validate_brief_guidance(runner, dispatcher.replace('Do not assign `--full` to every lane by habit', ''))
 
     def test_lane_and_approval_routes_use_current_verification(self):
-        for filename in ('LANE-PREAMBLE.md', 'APPROVAL-CRITERIA.md'):
+        for filename in ('APPROVAL-CRITERIA.md',):
             body = (HERE / filename).read_text()
             with self.subTest(file=filename):
                 self.assertIn('`--defer-full-to-ci`', body)
                 self.assertIn('SUITE-RUNNER.md', body)
-        self.assertNotIn('runs `tests/structure/`\n**only**', (HERE / 'LANE-PREAMBLE.md').read_text())
 
 
 if __name__=='__main__':

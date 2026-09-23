@@ -30,16 +30,10 @@ import sys
 HOME = os.path.expanduser("~")
 
 DOCS = [
-    f"{HOME}/.claude/commands/worker.md",
-    f"{HOME}/.claude/commands/dispatch.md",
     f"{HOME}/.claude/commands/adjudicate.md",
-    f"{HOME}/.claude/commands/lead.md",
     f"{HOME}/.claude/commands/arm-inbox.md",
-    f"{HOME}/.claude/commands/lane.md",
     f"{HOME}/.claude/commands/pr.md",
-    f"{HOME}/.claude/torque-orchestration/LANE-PREAMBLE.md",
     f"{HOME}/.claude/torque-orchestration/APPROVAL-CRITERIA.md",
-    f"{HOME}/.claude/torque-orchestration/CURRENT-ORCHESTRATOR",
 ]
 
 # Paths that look like a tool being invoked.
