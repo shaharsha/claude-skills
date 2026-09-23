@@ -89,7 +89,7 @@ scripts/codex_review.sh \
   --name refund-api
 ```
 
-Defaults to `gpt-5.6-sol` at `high` effort, read-only sandbox, structured
+Defaults to `gpt-6-astra` at `high` effort, read-only sandbox, structured
 output. `--model`, `--effort` (`low`|`medium`|`high`|`xhigh`|`max`), and
 `--no-schema` override. It writes `.codex-review/<stamp>-<label>.{json,md,log}`
 in the repo and prints `REVIEW_MD=<path>` last.
@@ -154,7 +154,7 @@ too, exactly as inside the script:
 
 ```bash
 cat /abs/path/prompt.md | codex exec -s read-only \
-  -c 'tools.web_search=true' -m gpt-5.6-sol -c model_reasoning_effort=high \
+  -c 'tools.web_search=true' -m gpt-6-astra -c model_reasoning_effort=high \
   -i shot1.png -i shot2.png > review.md 2>review.log
 ```
 
