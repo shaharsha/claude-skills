@@ -114,8 +114,8 @@ that `customTitle` into every account's index entry. Syncing 394 entries that wa
 divergences, one of them a genuine session reading `Elementor MCP integration` under one account and
 its raw first message `I need to add the elementor-mcp` under the other.
 
-Never sync from `aiTitle` — for the reason in *How transcripts are stored* (4): lanes that run
-`/arm-inbox` first all summarise to `Review ARM inbox`, so an aiTitle sweep renames a whole sprint's
+Never sync from `aiTitle` — for the reason in *How transcripts are stored* (4): lanes that arm
+their inbox first all summarise to `Review ARM inbox`, so an aiTitle sweep renames a whole sprint's
 lanes to the same useless string and destroys the names their human uses out loud.
 
 #### ⚠️ The CCD id is a DIFFERENT ID SPACE from the one `ccsend`/`ccread` use — never bridge it by title
@@ -353,7 +353,7 @@ EOF
 
 **This is not a `ccsend` problem — it is a shell problem, so it applies to every command that takes a body as an argument.** `gh pr comment --body`, `gh pr create --body`, `gh issue comment --body`: same trap, same silence. Measured 2026-07-30: a code review posted through `gh pr comment --body "…"` arrived with **three empty code blocks** where its fenced examples had been, and `gh` reported success — the shell had already run the backticked contents as commands and spliced in their (empty) output. Reviews are the worst case, because a garbled review still reads as authoritative. Use `--body-file` / `--file` for anything containing backticks, `$`, or code, and if you catch it late, **delete and repost** rather than leaving a review with holes in it.
 
-**To become reachable yourself, run `/arm-inbox`** — or call Monitor directly with `command: ccarm`, `persistent: true`. `ccarm` needs no argument: the harness exports `CLAUDE_CODE_SESSION_ID`, so a session can arm itself without being told who it is.
+**To become reachable yourself, call Monitor with `command: ccarm`, `persistent: true`.** `ccarm` needs no argument: the harness exports `CLAUDE_CODE_SESSION_ID`, so a session can arm itself without being told who it is.
 
 **A session receives only while it holds an open Monitor on its inbox.** That watch is the entire mechanism, and it is what reaches a session sitting *idle* waiting for its human — which hooks, MCP channels and process wrappers all fail to do (a hook fires on tool calls; an idle session makes none). Monitor is explicit that events arrive "even if one lands while you're waiting for the user to answer a question."
 

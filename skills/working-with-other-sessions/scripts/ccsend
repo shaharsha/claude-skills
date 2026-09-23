@@ -561,8 +561,8 @@ def main():
     inbox = inbox_for(sid)
 
     if a.arm:
-        print(f"# {sid[:8]} ({title}) can be armed via /arm-inbox — arming is not receipt,")
-        print("# or calls Monitor with persistent: true and this command:\n")
+        print(f"# {sid[:8]} ({title}) can be armed — arming is not receipt — when it")
+        print("# calls Monitor with persistent: true and this command:\n")
         print(f"{CCARM} {sid}")
         return
 

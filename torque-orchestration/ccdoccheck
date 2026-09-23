@@ -31,7 +31,6 @@ HOME = os.path.expanduser("~")
 
 DOCS = [
     f"{HOME}/.claude/commands/adjudicate.md",
-    f"{HOME}/.claude/commands/arm-inbox.md",
     f"{HOME}/.claude/commands/pr.md",
     f"{HOME}/.claude/torque-orchestration/APPROVAL-CRITERIA.md",
 ]

@@ -69,7 +69,6 @@ scripts/ccread "TOR-55" --tools                  # with tool calls interleaved
 scripts/ccread --all --grep "credential" --since 2026-07-29
 
 # message
-/arm-inbox                                       # make THIS session hold a lease
 scripts/ccsend --list                            # who is armed (not who will receive)
 scripts/ccsend --self                            # do *I* still hold a lease?  0 lease · 1 none · 3 unknown
 scripts/ccsend --ping                            # round-trip: proves the inbox was DRAINED, not receipt
