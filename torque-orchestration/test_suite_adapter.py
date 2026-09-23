@@ -138,6 +138,9 @@ def validate_brief_guidance(runner, dispatcher):
         (runner, "only after Torque's reviewed selected-local policy is merged"),
         (runner, 'Do not wrap feedback or a migrated push in `suite_slot.sh run`'),
         (runner, 'same coordinated registry as the adapter'),
+        (runner, '`--defer-full-to-ci`'),
+        (runner, 'Every full diagnostic must reserve the entire configured range.'),
+        (dispatcher, 'Do not assign `--full` to every lane by habit'),
         (runner, 'A selected local pass permits PR preparation, not merging.'),
         (runner, 'Integrate [Torque #1053]'),
         (runner, 'Do not pull the live linked checkout'),
@@ -158,6 +161,8 @@ class BriefGuidanceTests(unittest.TestCase):
         validate_brief_guidance(runner, dispatcher)
         for clause in ('Do not wrap feedback or a migrated push in `suite_slot.sh run`',
                        'same coordinated registry as the adapter',
+                       '`--defer-full-to-ci`',
+                       'Every full diagnostic must reserve the entire configured range.',
                        'A selected local pass permits PR preparation, not merging.',
                        'Integrate [Torque #1053]',
                        'Do not pull the live linked checkout',
@@ -167,6 +172,16 @@ class BriefGuidanceTests(unittest.TestCase):
                 validate_brief_guidance(runner.replace(clause, ''), dispatcher)
         with self.assertRaises(AssertionError):
             validate_brief_guidance(runner, dispatcher.replace('Verification policy belongs to those repository guides', ''))
+        with self.assertRaises(AssertionError):
+            validate_brief_guidance(runner, dispatcher.replace('Do not assign `--full` to every lane by habit', ''))
+
+    def test_lane_and_approval_routes_use_current_verification(self):
+        for filename in ('LANE-PREAMBLE.md', 'APPROVAL-CRITERIA.md'):
+            body = (HERE / filename).read_text()
+            with self.subTest(file=filename):
+                self.assertIn('`--defer-full-to-ci`', body)
+                self.assertIn('SUITE-RUNNER.md', body)
+        self.assertNotIn('runs `tests/structure/`\n**only**', (HERE / 'LANE-PREAMBLE.md').read_text())
 
 
 if __name__=='__main__':
