@@ -1,6 +1,6 @@
 # codex-review
 
-Get an independent second opinion on a plan or a diff from **OpenAI Codex** — fresh context, no write access — then **adjudicate every finding against the source** before acting on any of it. Runs `codex exec` at `gpt-5.6-sol` / `high` reasoning effort with the read-only sandbox forced on every invocation, and returns schema-constrained findings that each require a concrete failure scenario. Optional `--search` gives the reviewer web search and page fetch without granting it network access.
+Get an independent second opinion on a plan or a diff from **OpenAI Codex** — fresh context, no write access — then **adjudicate every finding against the source** before acting on any of it. Runs `codex exec` at `gpt-6-astra` / `high` reasoning effort with the read-only sandbox forced on every invocation, and returns schema-constrained findings that each require a concrete failure scenario. Optional `--search` gives the reviewer web search and page fetch without granting it network access.
 
 Part of [shaharsha/claude-skills](../..). MIT.
 
@@ -101,7 +101,7 @@ scripts/codex_review.sh --repo <dir> --list
 | `--name <name>` | — | Records the reviewer session under a label you can `--resume` later |
 | `--resume <name>` | — | Continue an existing reviewer instead of starting fresh |
 | `--list` | — | Show the reviewer labels on record |
-| `--model <id>` | `gpt-5.6-sol` | Override the reviewer model |
+| `--model <id>` | `gpt-6-astra` | Override the reviewer model |
 | `--effort <level>` | `high` | `low`\|`medium`\|`high`\|`xhigh`\|`max` |
 | `--no-schema` | off | Return prose instead of structured findings |
 | `--search` | off | Give the reviewer web search and page fetch. Runs server-side, so it works under the read-only sandbox with no local network. |
