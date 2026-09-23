@@ -88,6 +88,8 @@ Before launching a verification command, read the lane's current Torque `docs/ag
 
 The owned adapter handoff and the selected-feedback policy handoff are separate prerequisites. Follow the coordinated installation record, preserve existing jobs/leases, and use one host registry. Once the reviewed selected-feedback policy is active, feedback and the migrated push hook own admission themselves: do not wrap them in another slot command. Keep raw diagnostic commands owned. A selected result never grants merge approval; complete CI and the reviewed current head/base remain required.
 
+New verification briefs should request declared selected feedback for ordinary edits. For eligible broad/shared changes, use the repository's explicit `--defer-full-to-ci` route with affected-test declarations and complete required CI before merge. Do not assign `--full` to every lane by habit; it reserves the entire host budget and blocks selected feedback. Use full local diagnostics when their scope is deliberately needed. Private PostgreSQL, FIFO and `private-10` need the coordinated handoff in SUITE-RUNNER.md; a merge does not update copied launch scripts or active sessions.
+
 ## 1 · Name yourself, and learn who you can reach
 
 **There is nothing to arm.** As of 2026-08-12 this sprint uses Claude Code's native cross-session

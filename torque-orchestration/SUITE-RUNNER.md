@@ -67,6 +67,28 @@ PID-only helper over a registry containing new-format reservations.
 
 This section applies only after Torque's reviewed selected-local policy is merged; it does not activate that policy or install this adapter. Read the lane's current `docs/agents/testing.md` and `docs/agents/workflow.md` before constructing its verification brief.
 
-The supported `python -m scripts.feedback` command and migrated push hook already own execution admission. Do not wrap feedback or a migrated push in `suite_slot.sh run`: a nested cache miss refuses, and an extra reservation can consume capacity without useful work. Configure their TORQUE_SUITE_SLOTS to the same coordinated registry as the adapter. Use affected-test declarations for normal changes and the explicit `--full` route when the repository policy requires broad verification. Raw foreground diagnostic commands still need the adapter's ownership wrapper.
+The supported `python -m scripts.feedback` command and migrated push hook already own execution admission. Do not wrap feedback or a migrated push in `suite_slot.sh run`: a nested cache miss refuses, and an extra reservation can consume capacity without useful work. Configure their TORQUE_SUITE_SLOTS to the same coordinated registry as the adapter. Use affected-test declarations for normal changes. For eligible shared or unknown scope, choose `--defer-full-to-ci` with explicit affected tests; complete required CI still runs before merge. Reserve `--full` for deliberately requested full local diagnostics, not as the default for every lane. Raw foreground diagnostic commands still need the adapter's ownership wrapper.
 
 A selected local pass permits PR preparation, not merging. Preserve complete required CI, reviewed head/base, current-base verification and independent remote-push proof. Refresh future briefs at the coordinated handoff; existing copied instructions do not update themselves. Never introduce another registry to make a blocked lane run.
+
+## Private PostgreSQL and FIFO adoption
+
+Torque's current testing guide owns the exact environment and command contract.
+After the corresponding implementation is merged into the lane, configure
+`TORQUE_TEST_POSTGRES=private` and a validated PostgreSQL18 binary directory for
+DB-dependent feedback; clear conflicting connection overrides as that guide requires.
+Do not point tests at RDS or a protected restore. Configure the same environment for
+the feedback invocation and its normal push hook so valid evidence can be reused.
+
+The optional `TORQUE_FEEDBACK_PROFILE=private-10` widens the shared admission range.
+Do not enable it while older full callers still reserve only four units. Coordinate
+all future callers and copied briefs first, let admitted jobs drain, and pin the merged
+FIFO runner. Every full diagnostic must reserve the entire configured range.
+Use supported feedback for ordinary verification; a raw diagnostic wrapper must
+declare its capacity demand with `--units` rather than silently reserve one slot for
+a multi-worker full suite. Never wrap feedback in another reservation.
+
+FIFO prevents new selected arrivals overtaking a queued full diagnostic; it does not
+make full work fast or promise sub-minute results behind it. Observe the next actual
+conforming command and cleanup from each resumed session before claiming adoption.
+A provenance MATCH alone cannot prove copied briefs or worktree-native runners changed.

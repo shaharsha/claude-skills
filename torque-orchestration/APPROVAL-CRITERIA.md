@@ -1597,6 +1597,13 @@ updating a live checkout. Verify installed provenance there before adopting a ne
 ~/.claude/torque-orchestration/suite_slot.sh run --wait-seconds 60 4 -- <foreground suite command>
 ```
 
+The wrapper example is for raw diagnostics with an explicit capacity demand (`--units` before
+the slot count). Prefer Torque's supported `python -m scripts.feedback` for verification; do not
+wrap feedback or a migrated push again. Ordinary changes use declared affected tests, and eligible
+broad/shared work may use `--defer-full-to-ci` with explicit declarations and complete CI before
+merge. `--full` deliberately reserves the whole configured budget. The installed guide owns
+private PostgreSQL/FIFO/profile adoption; never widen a registry while older callers remain.
+
 Options precede the slot count; these values are operational examples, not measured capacity.
 The adapter refuses the old `acquire` recipe so a copied brief cannot reserve with a short-lived
 shell and launch later. `claim` is only for explicitly registering already-running work. The

@@ -175,23 +175,25 @@ so a bare `git` command runs in the main checkout, which sits on `develop`.
 **`PYTHONPATH="$PWD:$PWD/contracts:$PWD/engine"` on every pytest AND every push.** `$PWD` first —
 `contracts/` holds its own `tests/`, and with it first `import tests` resolves into the wrong package.
 
-**`DATABASE_URL` on the push line too.** Without it `.githooks/pre-push` runs `tests/structure/`
-**only**, and that run's green summary has the same shape as a full one's. Read the hook's **MODE**
-line (last line), never the test count — counts drift per branch and no remembered number is a check.
+**Use the current verification policy, not the historical full-suite recipe.** Read the lane's
+Torque `docs/agents/testing.md`, `docs/agents/workflow.md` and the installed
+[SUITE-RUNNER.md](SUITE-RUNNER.md). Use the configured absolute interpreter from the intended
+worktree, with the ordered PYTHONPATH above and the canonical registry in the same invocation.
+Normal work uses `python -m scripts.feedback` with declared affected tests. Eligible broad/shared
+changes can use `--defer-full-to-ci` with explicit declarations; complete required CI is still
+mandatory before merge. `--full` is an explicit full local diagnostic and reserves the entire
+configured budget, so it blocks other selected work. Do not run it for every lane by default.
 
-**Run the suite with `-n 4`, not `-n auto`.** `init_db()` creates ~725 relations in one transaction;
-11 workers exceed the lock slots. Locks blow first, so the output is dominated by `too many clients`
-while the real limit is buried — four lanes independently misdiagnosed it as connection exhaustion.
+Keep the configured private PostgreSQL environment (or validated disposable local DSN) on the
+feedback and push invocations. Missing DB input is a refusal, not permission to downgrade.
+Read the hook's current `GATE mode` and source-bound terminal result: SELECTED permits PR
+preparation; neither SELECTED nor FULL_LOCAL replaces complete CI/current-base verification.
+Do not wrap feedback or a migrated push in another slot reservation. The optional `private-10`
+profile and FIFO runner require coordinated adoption by all future full callers first.
 
-**Print the tree and branch in the SAME command that runs the suite:**
-
-```bash
-echo "TREE $(pwd) BRANCH $(git rev-parse --abbrev-ref HEAD)" && pytest …
-```
-
-A slipped cwd runs the suite against a tree without your change and reports an ordinary pass —
-measured 1521 vs 1703 passed at the same moment, both green, nothing in either output naming a tree.
-The `git` there is deliberately bare so it slips *together* with pytest.
+**Record tree, branch and revision in the same invocation as verification.** A slipped cwd can
+run a different tree and produce an ordinary pass; an earlier shell's identity is not evidence
+for the actual suite. Local full diagnostics remain `-n 4`, never `-n auto`; CI has its own budget.
 
 ---
 
