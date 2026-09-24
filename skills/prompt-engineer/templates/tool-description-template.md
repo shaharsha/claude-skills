@@ -61,4 +61,8 @@ Why this works: covers all 6 elements (what/when/when-not/params/returns/caveats
 - [ ] "When NOT to use" prevents common misuse and names alternatives
 - [ ] Every parameter has type, meaning, and constraints
 - [ ] Return value is specific about what's included AND excluded
-- [ ] Total description is at least 3-4 sentences
+- [ ] Total description is at least 3-4 sentences (coverage of the six elements, not padding; trim hand-holding on frontier models)
+- [ ] The model isn't asked to fill arguments your code already knows (pass them in code instead)
+- [ ] Invalid combinations are impossible by schema (enums, required fields), not just forbidden in prose
+- [ ] Tool-specific guidance lives here and is NOT repeated in the system prompt
+- [ ] If the tool must be called (Claude Opus 5.5 / Fable 5.1 have no forced `tool_choice`), the prompt says when it applies
