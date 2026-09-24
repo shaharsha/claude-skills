@@ -49,9 +49,21 @@ Fleet adoption still requires disposition of [TOR-1334](https://linear.app/torqu
 ## Commands
 
 From the intended Torque worktree, with its absolute interpreter and PYTHONPATH configured,
-run `suite_slot.sh run --wait-seconds 60 4 -- <foreground command>`.
+run `suite_slot.sh run --units 1 --wait-seconds 60 4 -- <single-worker command>`.
+Declare the actual worker demand: four workers need `--units 4 4`. The final positional
+number is the eligible slot range, not the worker demand. `run 1` is slot1-only,
+can block FIFO while other slots are free, and is not host-wide exclusivity.
+A shared-resource lock is a separate requirement.
+
+After installing a verified Torque runner that supports `run-shared`, the default
+four-unit pool also accepts `suite_slot.sh run-shared --units 1 -- <single-worker command>`;
+a four-worker diagnostic uses `--units 4`. This mode is not the private-10 profile.
+Check the pinned runtime's help before using the new mode; merging its source does
+not update the installed runtime. Until coordinated installation, retain the explicit
+`run --units 1 4` form. Refresh copied future briefs; leave live commands and leases alone.
+
 These numbers are operational examples, not measured capacity or latency guarantees.
-All runner options precede the slot count. The command must remain in its owned process group;
+Legacy runner options precede the slot count; named-mode options precede `--`. The command must remain in its owned process group;
 backgrounding or daemonizing it is unsupported. The runner preserves command exit status and
 reports incomplete cleanup. Do not pipe a Git push; verify the remote revision afterwards.
 
@@ -92,3 +104,12 @@ FIFO prevents new selected arrivals overtaking a queued full diagnostic; it does
 make full work fast or promise sub-minute results behind it. Observe the next actual
 conforming command and cleanup from each resumed session before claiming adoption.
 A provenance MATCH alone cannot prove copied briefs or worktree-native runners changed.
+
+## Waiting versus execution
+
+Updated Torque feedback results retain fresh invocation totals and admission timing.
+Read `timing.total_seconds` and `timing.admission.queue_seconds` separately; execution
+includes process-group drain/cleanup, and total excludes interpreter/import startup
+and the final result write/print. Cache hits have a fresh total and no admission record.
+Missing timing in an older runtime is unavailable, not zero waiting. These diagnostics
+do not replace the actual process status or invocation-result verifier in Torque's guide.
