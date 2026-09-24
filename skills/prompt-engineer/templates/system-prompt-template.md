@@ -26,6 +26,14 @@ Your task succeeds when:
 [Only if the agent has tools — describe each tool's purpose, when to use it, and when NOT to use it. See tool-description-template.md for per-tool format.]
 </tools>
 
+<autonomy_and_completion>
+[For agents only.]
+Done means: [the concrete end state, e.g. "the change is implemented, the tests pass, and you have reported what changed"].
+Proceed without asking for: [reversible, in-scope actions].
+Confirm before: [destructive, externally visible, costly, or scope-expanding actions].
+Stop and ask only when: [nothing can proceed without the user / a protected blocker].
+</autonomy_and_completion>
+
 <uncertainty_handling>
 When you encounter ambiguity or missing information:
 - [What to do: ask the user, make a reasonable assumption, flag uncertainty, etc.]
@@ -56,6 +64,8 @@ When you encounter ambiguity or missing information:
 - **Role** is 1-2 sentences max. Sets tone and expertise.
 - **Success criteria** are verifiable — the model can self-check against them.
 - **Constraints** explain WHY when not obvious — Claude generalizes from explanations.
-- **Examples** are the most reliable steering mechanism. Include 3-5, covering edge cases.
-- **Put long reference documents ABOVE this template** in the actual prompt, instructions at the bottom.
+- **Autonomy and completion** state "done" and the approval boundary once. Current models stop early in model-specific ways when "done" is undefined, and repeated "ask first" language makes them pause on safe actions.
+- **Examples** pin output format, tone, and depth. Include 3-5 for format-sensitive tasks (Claude and Gemini respond strongly to them). On GPT reasoning models try zero-shot first, don't use examples to teach *how to call* tools on Claude 5 (a clear schema works better), and make every example model only behavior you want.
+- **Long reference documents go ABOVE the instructions** on Claude and Gemini (query last). OpenAI's recommended developer-message order puts variable context at the end: identity → instructions → examples → context.
+- **Per-request values** (dates, user state) go in the newest user turn, not in this template, so the prefix stays cacheable.
 - **Start minimal.** Add sections only when you observe failure modes that need addressing.

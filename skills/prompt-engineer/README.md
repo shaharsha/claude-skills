@@ -56,7 +56,7 @@ There's nothing to run — this is a reference library the agent loads. It fires
 
 - "review this system prompt for our Claude agent"
 - "the agent keeps picking the wrong tool — look at the tool descriptions"
-- "we're migrating this prompt from GPT-5.5 to 5.6, what changes"
+- "we're migrating this prompt from GPT-5.6 to GPT-6, what changes"
 - "write a judge prompt to evaluate these outputs"
 
 ## What's in the box
@@ -67,7 +67,9 @@ There's nothing to run — this is a reference library the agent loads. It fires
 | `references/claude.md` | Claude / Anthropic — effort defaults, sampling, thinking, caching, migration notes |
 | `references/gpt.md` | GPT / OpenAI incl. Azure — verbosity, reasoning effort, the "stop doing" list |
 | `references/gemini.md` | Gemini / Google incl. Vertex — thought signatures, caching, thinking cost |
-| `references/model-selection.md` | Benchmarks and cost across providers |
+| `references/langgraph.md` | LangGraph / LangChain / Deep Agents: layers, context primitives, subagent context modes, eval practice |
+| `references/use-cases.md` | Task playbooks: coding and code review, research/RAG, data/SQL, extraction, multimodal |
+| `references/model-selection.md` | Intelligence, cost per task, agent rankings, false-premise detection, routing math |
 | `templates/` | Reusable prompt scaffolds |
 
 ## The rules that carry the most weight
