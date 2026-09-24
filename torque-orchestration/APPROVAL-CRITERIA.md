@@ -142,7 +142,22 @@ db/schema.py · api/auth/** · api/services/{vault,silver,computation}/**
 api/services/publishing.py              CORRECTED 2026-09-18 — see §4A.6
 authored_pages/** EXCEPT **/README.md   ADDED 2026-09-15 — see the amendment directly below
 api/services/projector/**               ADDED 2026-09-16 — see §4A.2
+api/services/slots.py                   ADDED 2026-09-24 — see §4A.8
 ```
+
+### ⚠️ AMENDMENT 2026-09-24 · §4A.8 — `api/services/slots.py` JOINS THE MANDATORY CLASS (approved by Shahar)
+
+**Shahar, verbatim, 2026-09-24: "i approve all your recommendations"**, answering the dispatcher's
+recommendation to add this file. The reasoning is the recommending seats', not his. Raised by the PR #1151
+`/adjudicate` seat (ruling 5816666394, recorded on TOR-1123 comment `298a1c4f`): after #1151 (`cc6a56d6`),
+`_PUBLISHED_SHAPE` in `api/services/slots.py` decides BOTH what a reader's Recompute returns on a published
+decision page (via the compute broker) AND what the drift detector compares that page against. So one edit
+to that table can silence both signals, and until now it owed no route-A round.
+
+⚠️ **It is a FILE entry, like `publishing.py`, and must stay one.** `api/services/slot_registry.py` is a
+DIFFERENT module and is NOT in the class. The shared matcher (`fourA_class.py`) carries both the entry and a
+must-miss control on `slot_registry.py`. **A matcher that transcribes this fence by hand must add the entry
+too, or it will return a clean-looking zero for a PR that edits the table.**
 
 🔴 **PRODUCT-LIST SOURCE CHANGED 2026-09-18 — `_REAL_PRODUCTS` NO LONGER EXISTS.** PR #1040 deleted it
 (develop `abbb8e4f`): a client is now a row in `clients`, not a literal in `api/routers/companies.py`.
