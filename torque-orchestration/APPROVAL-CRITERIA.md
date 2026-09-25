@@ -1609,7 +1609,7 @@ registries to admit work on the same host. Its ordering and parent-symlink check
 updating a live checkout. Verify installed provenance there before adopting a newly merged runner.
 
 ```bash
-~/.claude/torque-orchestration/suite_slot.sh run --wait-seconds 60 4 -- <foreground suite command>
+~/.claude/torque-orchestration/suite_slot.sh run --units 1 --wait-seconds 60 4 -- <single-worker diagnostic>
 ```
 
 The wrapper example is for raw diagnostics with an explicit capacity demand (`--units` before
@@ -1620,6 +1620,10 @@ merge. `--full` deliberately reserves the whole configured budget. The installed
 private PostgreSQL/FIFO/profile adoption; never widen a registry while older callers remain.
 
 Options precede the slot count; these values are operational examples, not measured capacity.
+The final count is the eligible range: `run 1` restricts work to slot1, not one worker
+from the shared pool. Declare all workers through `--units`; a four-worker diagnostic
+requires `--units 4 4`. Use the named `run-shared` form only after the installation
+check described in SUITE-RUNNER.md. Refresh future copied briefs, never live leases.
 The adapter refuses the old `acquire` recipe so a copied brief cannot reserve with a short-lived
 shell and launch later. `claim` is only for explicitly registering already-running work. The
 historical failure below explains why; it does not authorize an old reaper during the cutover.

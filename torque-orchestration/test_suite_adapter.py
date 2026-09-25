@@ -35,7 +35,8 @@ class AdapterTests(unittest.TestCase):
                               cwd=self.root, text=True, capture_output=True, timeout=10)
 
     def test_delegates_all_supported_verbs_and_preserves_status_arguments_and_cwd(self):
-        for args in [('run','--wait-seconds','0','4','--','echo','a b'),
+        for args in [('run','--units','1','--wait-seconds','0','4','--','echo','a b'),
+                     ('run-shared','--units','1','--','echo','a b'),
                      ('claim','4',str(os.getpid())),('release','some slot',str(os.getpid())),
                      ('status',),('--help',)]:
             with self.subTest(args=args):
@@ -133,22 +134,24 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout)['source_comparison']['state'], 'MATCH')
 
 
-def validate_brief_guidance(runner, dispatcher):
+def validate_brief_guidance(runner, approval):
     required = (
         (runner, "only after Torque's reviewed selected-local policy is merged"),
         (runner, 'Do not wrap feedback or a migrated push in `suite_slot.sh run`'),
         (runner, 'same coordinated registry as the adapter'),
         (runner, '`--defer-full-to-ci`'),
+        (runner, '`run 1` is slot1-only,'),
+        (runner, 'Until coordinated installation, retain the explicit'),
         (runner, 'Every full diagnostic must reserve the entire configured range.'),
-        (dispatcher, 'Do not assign `--full` to every lane by habit'),
+        (runner, 'Reserve `--full` for deliberately requested full local diagnostics, not as the default for every lane.'),
         (runner, 'A selected local pass permits PR preparation, not merging.'),
         (runner, 'Integrate [Torque #1053]'),
         (runner, 'Do not pull the live linked checkout'),
         (runner, '`source_commit`'),
         (runner, 'without executing the runner or touching'),
-        (dispatcher, 'Verification policy belongs to those repository guides'),
-        (dispatcher, 'do not wrap them in another slot command'),
-        (dispatcher, 'complete CI and the reviewed current head/base remain required'),
+        (approval, "Prefer Torque's supported `python -m scripts.feedback` for verification"),
+        (approval, 'wrap feedback or a migrated push again.'),
+        (runner, 'Preserve complete required CI, reviewed head/base, current-base verification and independent remote-push proof.'),
     )
     for body, clause in required:
         assert clause in body, clause
@@ -157,11 +160,13 @@ def validate_brief_guidance(runner, dispatcher):
 class BriefGuidanceTests(unittest.TestCase):
     def test_current_routes_and_missing_obligation_controls(self):
         runner = (HERE / 'SUITE-RUNNER.md').read_text()
-        dispatcher = (HERE.parent / 'commands/dispatch.md').read_text()
-        validate_brief_guidance(runner, dispatcher)
+        approval = (HERE / 'APPROVAL-CRITERIA.md').read_text()
+        validate_brief_guidance(runner, approval)
         for clause in ('Do not wrap feedback or a migrated push in `suite_slot.sh run`',
                        'same coordinated registry as the adapter',
                        '`--defer-full-to-ci`',
+                       '`run 1` is slot1-only,',
+                       'Until coordinated installation, retain the explicit',
                        'Every full diagnostic must reserve the entire configured range.',
                        'A selected local pass permits PR preparation, not merging.',
                        'Integrate [Torque #1053]',
@@ -169,11 +174,11 @@ class BriefGuidanceTests(unittest.TestCase):
                        '`source_commit`',
                        'without executing the runner or touching'):
             with self.subTest(clause=clause), self.assertRaises(AssertionError):
-                validate_brief_guidance(runner.replace(clause, ''), dispatcher)
+                validate_brief_guidance(runner.replace(clause, ''), approval)
         with self.assertRaises(AssertionError):
-            validate_brief_guidance(runner, dispatcher.replace('Verification policy belongs to those repository guides', ''))
+            validate_brief_guidance(runner, approval.replace("Prefer Torque's supported `python -m scripts.feedback` for verification", ''))
         with self.assertRaises(AssertionError):
-            validate_brief_guidance(runner, dispatcher.replace('Do not assign `--full` to every lane by habit', ''))
+            validate_brief_guidance(runner.replace('Reserve `--full` for deliberately requested full local diagnostics, not as the default for every lane.', ''), approval)
 
     def test_lane_and_approval_routes_use_current_verification(self):
         for filename in ('APPROVAL-CRITERIA.md',):
@@ -181,6 +186,8 @@ class BriefGuidanceTests(unittest.TestCase):
             with self.subTest(file=filename):
                 self.assertIn('`--defer-full-to-ci`', body)
                 self.assertIn('SUITE-RUNNER.md', body)
+                self.assertIn('run --units 1 --wait-seconds 60 4', body)
+                self.assertIn('requires `--units 4 4`', body)
 
 
 if __name__=='__main__':
