@@ -9,8 +9,9 @@ ask for exactly this.  Until it is committed INTO the repo it is still
 orchestration-local; that is TOR-1160's remaining ask, not this file's claim.
 
 Class entries are transcribed from APPROVAL-CRITERIA.md §4A as amended by
-§4A.1 (authored_pages, README carve-out), §4A.2 (projector), §4A.8 (slots.py)
-and corrected by §4A.6 (publishing is a FILE, not a package).
+§4A.1 (authored_pages, README carve-out), §4A.2 (projector), §4A.8 (slots.py),
+§4A.9 (provenance_gate.py, chart_width.py) and corrected by §4A.6 (publishing is
+a FILE, not a package).
 
 Usage:
     fourA_class.py --repo <path> --range <base>..<head>
@@ -46,6 +47,14 @@ STATIC_FILE_ENTRIES = [
     # §4A.8 (2026-09-24, Shahar): `_PUBLISHED_SHAPE` decides both the reader's
     # Recompute and the drift detector's comparison for a published page.
     "api/services/slots.py",
+    # §4A.9 (2026-09-26, Shahar, TOR-1995): once torque #1239 lifts the interim
+    # refusal, these two are the only guard between a wrong number and an
+    # immutable published page.  FILE entries: the rest of control_plane/**
+    # stays unruled (§4A.6) and outside the class.
+    "api/services/control_plane/provenance_gate.py",
+    # ⚠️ Created by torque #1239; until that merges, entry liveness reports it
+    # DEAD on any ref that lacks it.  That is the truthful reading, not a bug.
+    "api/services/chart_width.py",
 ]
 # §4A.1: authored_pages/** is in the class EXCEPT **/README.md
 AUTHORED_PREFIX = "authored_pages/"
@@ -169,6 +178,8 @@ MUST_HIT = [
     ("db/schema.py", "db/schema.py"),
     ("api/services/publishing.py", "publishing.py (§4A.6)"),
     ("api/services/slots.py", "slots.py (§4A.8)"),
+    ("api/services/control_plane/provenance_gate.py", "provenance_gate.py (§4A.9)"),
+    ("api/services/chart_width.py", "chart_width.py (§4A.9)"),
     ("authored_pages/lr_historical/body.html", "authored_pages non-README"),
     ("api/services/lr/forecast.py", "PRODUCT branch (§4A product control)"),
 ]
@@ -179,6 +190,11 @@ MUST_MISS = [
     ("api/services/control_plane/pages.py", "control_plane is not in the class"),
     ("api/services/control_plane/pins.py", "control_plane is not in the class"),
     ("api/services/control_plane/descriptors.py", "control_plane is not in the class"),
+    ("api/services/control_plane/artifacts.py",
+     "§4A.9 added two FILES, not control_plane/**"),
+    ("api/services/control_plane/provenance_gate_helpers.py",
+     "§4A.9 is an exact FILE entry, not a prefix"),
+    ("api/services/chart_width_legacy.py", "§4A.9 is an exact FILE entry, not a prefix"),
     ("api/routers/publishing.py", "routers/publishing.py is NOT in any entry"),
     ("api/services/manifest_controls.py", "TOR-1123's instance, still uncovered"),
     ("api/schemas/version_descriptor.py", "schemas are not in the class"),
