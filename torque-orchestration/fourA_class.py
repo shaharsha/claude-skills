@@ -214,6 +214,7 @@ MUST_HIT = [
     ("api/services/drawn_text.py", "drawn_text.py (§4A.10)"),
     ("scripts/rendered_text_differential.py", "scripts/rendered_text_*.py (§4A.10)"),
     ("scripts/rendered_text_canaries.py", "scripts/rendered_text_*.py (§4A.10)"),
+    ("scripts/rendered_text_.py", "the stem's `*` may match nothing (§4A.10)"),
     ("scripts/rendered_text_corpus.py", "scripts/rendered_text_*.py (§4A.10)"),
     ("scripts/rendered_text_real_pages.py", "scripts/rendered_text_*.py (§4A.10)"),
     ("scripts/rendered_text_a_script_not_written_yet.py", "the stem covers scripts added later (§4A.10)"),
@@ -301,20 +302,36 @@ def run_controls(entries) -> bool:
     return ok
 
 
+def _resolved(tracked, kind: str, pat) -> int:
+    """How many tracked paths one class entry resolves to."""
+    if kind == "file":
+        return sum(1 for t in tracked if t == pat)
+    if kind == "stem":
+        return sum(1 for t in tracked if _stem_match(t, pat))
+    if kind == "authored":
+        return sum(1 for t in tracked if t.startswith(pat) and Path(t).name != "README.md")
+    return sum(1 for t in tracked if t.startswith(pat))
+
+
+def liveness_control(entries) -> bool:
+    """Negative control for entry liveness (§4A.10): on a tree that holds the stem entry's directory and
+    its register but NO `rendered_text_*.py` script, the stem entry must resolve to nothing."""
+    tracked = ["scripts/rendered_text_expected_differences.yml", "scripts/rendered_text_sub/x.py",
+               "scripts/build_page.py"]
+    stems = [(k, p) for k, p, _ in entries if k == "stem"]
+    bad = [p for k, p in stems if _resolved(tracked, k, p) != 0]
+    ok = bool(stems) and not bad
+    print(f"  LIVENESS control (stem entry must be DEAD with no matching script): {'ok' if ok else '🔴 FAILED'}")
+    return ok
+
+
 def entry_liveness(repo: Path, ref: str, entries) -> bool:
     """§4A.6's owed structural half: every class entry must resolve to >=1 tracked path."""
     tracked = tracked_at(repo, ref)
-    ok = True
+    ok = liveness_control(entries)
     live = 0
     for kind, pat, label in entries:
-        if kind == "file":
-            n = sum(1 for t in tracked if t == pat)
-        elif kind == "stem":
-            n = sum(1 for t in tracked if _stem_match(t, pat))
-        elif kind == "authored":
-            n = sum(1 for t in tracked if t.startswith(pat) and Path(t).name != "README.md")
-        else:
-            n = sum(1 for t in tracked if t.startswith(pat))
+        n = _resolved(tracked, kind, pat)
         if n == 0:
             ok = False
             print(f"    🔴 DEAD ENTRY (0 tracked paths): {label}")
