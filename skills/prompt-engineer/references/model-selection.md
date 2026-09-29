@@ -2,50 +2,85 @@
 
 > **Scope - read this when *choosing* a model, not when *prompting* one.** Which tier for a task, at what budget, good at what. For *how to write the prompt* once you've picked, use `claude.md` / `gpt.md` / `gemini.md`. Keep this file **out of the prompt-authoring context** - benchmark tables are low-signal noise while writing a prompt (the "context rot" caution in SKILL.md Section A applies to the skill itself).
 >
-> **Staleness - the numbers are a dated snapshot, the *relationships* are the durable part.** Sources: Artificial Analysis Intelligence Index (API pull **2026-09-23**; Sonnet 5.5 and GPT-6.1 Sol rows added **2026-09-29**), Arena (formerly LMArena) Agent arena (**2026-09-15**), BullshitBench (repo pulled **2026-09-23**). **AA re-based its index between July and September** - scores dropped ~10 points across the board (Opus 5 at max: 60.7 in July, 50.8 now), so **never compare against the July numbers**. Releases now land weekly (Opus 5.5 and GPT-6 Sol/Luna shipped Sept 22 and have only a headline AA score so far). Trust the **bands, gaps, and "good at what" shape**; re-pull before relying on a figure. AA API: `GET https://artificialanalysis.ai/api/v2/data/llms/models` with header `x-api-key` (fields: `evaluations.*`, `pricing.*`, `median_output_tokens_per_second`). Arena: arena.ai/leaderboard/<arena>.
+> **Staleness - the numbers are a dated snapshot, the *relationships* are the durable part.** Sources: Artificial Analysis (**2026-09-29**, every model × effort variant), Arena (formerly LMArena) Agent arena (**2026-09-15**), BullshitBench (repo pulled **2026-09-23**). **AA re-based its index between July and September** - scores dropped ~10 points across the board (Opus 5 at max: 60.7 in July, 50.8 now), so **never compare against the July numbers**. Releases land weekly; trust the **bands, gaps, and shape of the curves**, and re-pull before relying on a figure (see *Refreshing the AA data* at the end).
 
-## Snapshot - AA Intelligence Index (2026-09-23)
+## Intelligence, cost, and speed - per model and effort (AA, 2026-09-29)
 
-Best available effort per model unless noted. Coding = AA Coding Index; Agentic = TerminalBench 2.1 (%); `$/1M` = AA blended price (3:1 in:out, **intro prices where they apply**); tok/s = median output speed (blank = not yet measured). "-" = sub-benchmarks not yet published.
+Every effort level AA tests for the current models. **Intel** = AA Intelligence Index. **Cost / task** = what AA actually paid per Intelligence Index task (list prices × tokens really used, incl. reasoning and cache reads/writes) - the number to compare, not $/1M. **Time / task** = wall-clock per task. **tok/s** = median output speed. **Halluc.** = AA-Omniscience hallucination rate (answers wrong instead of abstaining on knowledge it lacks; lower is better - Haiku and Flash-Lite score low by abstaining, not by knowing more). "-" = not published. Superseded models (GPT-6 Sol, Opus 5, Sonnet 5, GPT-5.6 Luna) are omitted; GPT-6.1 Sol beats GPT-6 Sol at every effort for similar cost.
 
-| Model | Intel | Coding | Agentic | $/1M blended | tok/s |
-|-------|:-----:|:------:|:-------:|:------------:|:-----:|
-| **Claude Opus 5.5** (max) - new Sept 22 | 57.6 | - | - | $8.00 | - |
-| **Claude Opus 5.5** (xhigh / *medium, default*) | 56.0 / *51.2* | - | - | $8.00 | 84 / 75 |
-| **Claude Sonnet 5.5** (max / xhigh / *high, default*) - new Sept 28 | 56.0 / 51.9 / *46.7* | - | - | $4.00 | 145 |
-| **Claude Fable 5.1** (max) | 53.4 | 81.6 | 91% | $20.00 | 63 |
-| **GPT-6 Astra** (max) | 52.7 | 76.9 | 88% | $20.00 | 55 |
-| **Claude Opus 5** (max) | 50.8 | 78.0 | 89% | $10.00 | 53 |
-| **GPT-6.1 Sol** (max / *medium, default*) - new Sept 29 | 51.8 / *47.8* | - | - | $4.00 | 87 |
-| **GPT-6 Sol** (max) | 47.5 | - | - | $4.00 | 107 |
-| **GPT-5.6 Sol** (max) | 47.0 | 77.4 | 88% | $8.00 | 58 |
-| **GPT-5.6 Terra** (max) | 42.1 | 76.7 | 88% | $4.50 | 84 |
-| **Claude Opus 4.8** (max) | 41.8 | 74.3 | 85% | $10.00 | - |
-| **Gemini 3.8 Flash** (high) | 40.9 | 76.3 | 88% | $1.50 (intro) | 315 |
-| **Gemini 3.7 Flash** (medium) | 39.6 | 71.5 | 78% | $1.50 (intro) | - |
-| **Claude Sonnet 5** (max) | 38.2 | 71.5 | 81% | $4.00 | 83 |
-| **GPT-6 Luna** (max) - new Sept 22 | 37.3 | - | - | $0.20 | 136 |
-| **Gemini 3.1 Pro** (preview) | 29.7 | 68.8 | 74% | $4.50 | 140 |
-| **Gemini 3.5 Flash-Lite** | 22.2 | 49.3 | 54% | $0.85 | 350 |
-| **Claude Haiku 4.5** (reasoning) | 16.9 | 43.9 | 44% | $2.00 | 159 |
+| Model | Effort | Intel | Cost / task | Time / task | tok/s | Halluc. |
+|---|---|:---:|:---:|:---:|:---:|:---:|
+| **Claude Opus 5.5** | max | 57.6 | $5.98 | 807 s | 96 | 59% |
+|  | xhigh | 56.0 | $3.46 | 503 s | 81 | 66% |
+|  | high | 53.6 | $1.82 | 294 s | 74 | 68% |
+|  | *medium (default)* | 51.2 | $1.34 | 216 s | 74 | 68% |
+|  | low | 42.3 | $0.55 | 86 s | 75 | 68% |
+| **Claude Sonnet 5.5** | max | 56.0 | $7.60 | 868 s | 145 | 47% |
+|  | xhigh | 51.9 | $2.74 | 443 s | 110 | 63% |
+|  | *high (default)* | 46.7 | $1.08 | 228 s | 106 | 65% |
+|  | medium | 40.7 | $0.59 | 135 s | 88 | 51% |
+|  | low | 35.8 | $0.41 | 99 s | 91 | 50% |
+| **Claude Fable 5.1** | max | 53.4 | $7.63 | 723 s | 69 | 73% |
+|  | xhigh | 53.2 | $5.98 | 662 s | 60 | 71% |
+|  | *high (default)* | 51.2 | $3.91 | 442 s | 51 | 69% |
+|  | medium | 48.9 | $2.98 | 332 s | 50 | 69% |
+|  | low | 46.8 | $2.37 | 272 s | 51 | 66% |
+| **GPT-6 Astra** | max | 52.7 | $3.26 | 472 s | 59 | 51% |
+|  | xhigh | 52.4 | $2.31 | 340 s | 54 | 48% |
+|  | high | 50.9 | $1.73 | 238 s | 52 | 45% |
+|  | medium | 49.6 | $1.54 | 207 s | 52 | 47% |
+|  | low | 45.8 | $0.82 | 92 s | 50 | 47% |
+| **GPT-6.1 Sol** | max | 51.8 | $0.72 | 569 s | 87 | 54% |
+|  | xhigh | 51.0 | $0.39 | 271 s | 89 | 51% |
+|  | high | 50.2 | $0.32 | 203 s | 78 | 49% |
+|  | *medium (default)* | 47.8 | $0.21 | 127 s | 74 | 52% |
+|  | low | 42.1 | $0.13 | 54 s | 81 | 52% |
+| **GPT-6 Luna** | max | 37.3 | $0.068 | 335 s | 138 | 77% |
+|  | xhigh | 33.9 | $0.042 | 203 s | 137 | 82% |
+|  | high | 32.1 | $0.029 | 150 s | 140 | 84% |
+|  | *medium (default)* | 29.5 | $0.018 | - | - | 85% |
+|  | low | 20.9 | $0.005 | 17 s | 137 | 84% |
+|  | none | 18.3 | $0.011 | 27 s | 136 | 79% |
+| **GPT-5.6 Terra** | max | 42.1 | $1.40 | 398 s | 106 | 88% |
+|  | xhigh | 38.0 | $0.63 | 242 s | 88 | 89% |
+|  | high | 34.2 | $0.34 | 131 s | 90 | 90% |
+|  | *medium (default)* | 30.1 | $0.18 | 68 s | 95 | 90% |
+|  | low | 27.5 | $0.14 | 49 s | 90 | 90% |
+|  | none | 20.8 | $0.14 | 37 s | 87 | 95% |
+| **Gemini 3.8 Flash** | high | 40.9 | $1.24 | 291 s | 230 | 55% |
+|  | *medium (default)* | 39.8 | $0.93 | - | - | 52% |
+| **Gemini 3.7 Flash** | high | 39.1 | $0.93 | 198 s | - | 65% |
+| **Gemini 3.1 Pro (preview)** | - | 29.7 | $0.67 | 158 s | 131 | 51% |
+| **Gemini 3.5 Flash-Lite** | high | 22.2 | $0.12 | 56 s | 329 | 34% |
+| **Claude Haiku 4.5** | - | 16.9 | $0.28 | 176 s | 105 | 27% |
 
-**Effort moves both axes.** Opus 5.5 spans 42.3 (low) → 51.2 (medium, its default) → 57.6 (max); GPT-6 Sol spans 33.9 (low) → 47.5 (max). Compare models *at the effort you'll actually run*, not at their max. Non-covered labs sit in the same bands (Grok 4.7 ≈ 46, Kimi K3 ≈ 44).
+### What the curves say
+
+- **Cost frontier (most intelligence per dollar): GPT-6 Luna → GPT-6.1 Sol → Claude Opus 5.5.** Nothing else is on it. Luna covers ~21-37 for under $0.07/task; **6.1 Sol covers 42-52 for $0.13-0.72**; above ~52 only Opus 5.5 (`high` 53.6 at $1.82, `xhigh` 56.0 at $3.46, `max` 57.6 at $5.98).
+- **GPT-6.1 Sol is the value leader in the middle band by a wide margin:** at `xhigh` it matches Opus 5.5 `medium` / Astra `high` / Fable 5.1 `high` (~51) for **$0.39 vs $1.34 / $1.73 / $3.91**.
+- **Claude Sonnet 5.5 is cheap per token, not per task, at high effort.** It gets fast and capable but token-hungry as effort rises: `max` reaches 56.0 but costs **$7.60** - more than Opus 5.5 `xhigh` for the same score ($3.46) - and `high` (46.7, $1.08) costs ~5× GPT-6.1 Sol `medium` (47.8, $0.21). Its case is speed (106-145 tok/s), Claude-specific behavior, and ZDR, at `low`/`medium`/`high`; if you need Sonnet 5.5 at `xhigh`+, price Opus 5.5 at `high`/`xhigh` first.
+- **Effort curves flatten at the top, differently per model.** Fable 5.1 gains only 6.6 points from `low` to `max`, so its `low` (46.8, $2.37) is the value setting; Astra gains 2 points from `high` to `max` for nearly 2× the cost; Opus 5.5 keeps climbing to `max`.
+- **Time frontier (fastest wall-clock per level):** 6.1 Sol `low`/`medium`/`high` (54-203 s) for ~42-50, then Opus 5.5 `medium`/`high` (216-294 s) for 51-54. Fable 5.1 and Sonnet 5.5 `max` are the slowest (720-870 s per task).
+- **Gemini 3.8 Flash is fast but not cheap per task** (40.9 at $1.24 - GPT-6.1 Sol `low` scores 42.1 for $0.13), because it spends tokens on self-verification; its speed (230 tok/s) is its selling point.
+- **Hallucination varies by effort and model, not just intelligence.** GPT-6 Astra (45-51%) and Sonnet 5.5 at `max` (47%) are the most calibrated frontier options; GPT-5.6 Terra (~90%) and Luna (77-85%) guess the most - pair them with retrieval and an explicit "say you don't know" instruction.
+
+AA sub-benchmarks where published: Fable 5.1 max - coding index 81.6, Terminal-Bench 2.1 91%, GPQA 94%; GPT-6 Astra max - coding 76.9, TB 2.1 88%, GPQA 96%; Gemini 3.8 Flash high - coding 76.3, TB 2.1 88%, GPQA 95%; Gemini 3.1 Pro - IFBench 77% (highest published). Other labs' models sit in the same bands (Grok 4.7 ≈ 46, Kimi K3 ≈ 44).
 
 ## What each is good at
 
 - **Claude Opus 5.5** - the **new default flagship and AA #1** (57.6 at max; 51.2 at its `medium` default, already ≈ Opus 5 at max). Anthropic reports Fable-5.1-level work at ~40% lower cost than Opus 5, stronger long-running coding, knowledge work with fewer invented figures, sharper chart/screenshot reading, and the lowest prompt-injection rate it has measured (tied with Fable 5.1). $4/$20, ZDR-eligible. Not yet rated on Arena or BullshitBench.
 - **Claude Fable 5.1** - **#1 on Arena's Agent arena** and top AA coding/agentic sub-scores; still the pick for the longest, most ambiguous multi-hour work. $10/$50 (cache reads now 0.025×, which matters on long agent loops), **not ZDR-eligible**.
 - **GPT-6 Astra** - OpenAI's flagship; **#2 on the Agent arena** and #1 on its "praise vs. complaint" signal; top GPQA (96%); best-in-class computer use and template adherence per OpenAI; fewer output tokens per task than prior GPTs. $10/$50.
-- **Claude Sonnet 5.5** - the new **price-performance standout**: at $2/$10 it scores 56.0 at max (second only to Opus 5.5 on AA) and runs fastest of the frontier band (~145 tok/s at max); Anthropic reports it within 2 points of Opus 5.5 on GDPval-AA and above it on Terminal-Bench 4.0, but Opus 5.5 stays stronger on open-ended work needing sustained judgment. Effort matters a lot: 35.8 at `low` → 46.7 at `high` (default) → 56.0 at `max`. ZDR-eligible.
-- **GPT-6.1 Sol** - OpenAI's new balanced default: "near-Astra" at $2/$10 (cached input $0.10), 51.8 at max / 47.8 at its `medium` default; OpenAI reports Astra-level DeepSWE and near-Astra OSWorld at ~1/7 the cost per task. No `none` effort.
-- **GPT-6 Sol** - the previous Sol: 47.5 at $2/$10 and ~107 tok/s; keep it only if you need `none` effort. OpenAI claims it beats Claude Opus 5 at max on AutomationBench at 9% of the cost per task `[vendor claim]`.
+- **Claude Sonnet 5.5** - the **fastest Claude** (106-145 tok/s) at $2/$10 per token, scoring 56.0 at `max` (tied with Opus 5.5 `xhigh`). But it's **token-hungry at high effort**, so per *task* it isn't cheap there: `max` costs more than Opus 5.5 `xhigh` for the same score, and at `high` it costs ~5× GPT-6.1 Sol `medium` for a similar score. Best at `low`-`high` for speed-sensitive Claude workloads; Anthropic reports it within 2 points of Opus 5.5 on GDPval-AA and above it on Terminal-Bench 4.0, while Opus 5.5 stays stronger on open-ended work needing sustained judgment. ZDR-eligible.
+- **GPT-6.1 Sol** - OpenAI's new balanced default and **the value leader of the 42-52 band on AA** (on the cost frontier at every effort; `xhigh` ≈ Opus 5.5 `medium` for under a third of the cost per task). "Near-Astra" at $2/$10 (cached input $0.10); OpenAI reports Astra-level DeepSWE and near-Astra OSWorld at ~1/7 the cost per task. No `none` effort.
+- **GPT-6 Sol** - the previous Sol, beaten by 6.1 Sol at every effort; keep it only if you need `none` effort.
 - **GPT-6 Luna** - cheapest frontier-family model ($0.10/$0.50) scoring near Sonnet 5 at max. Default choice for cheap GPT volume work.
-- **GPT-5.6 Terra** - still OpenAI's mid tier (no GPT-6 Terra); strong coding (76.7) at $2/$12.
+- **GPT-5.6 Terra** - OpenAI hasn't shipped a GPT-6 Terra, but GPT-6.1 Sol now beats Terra at every effort for similar or lower cost per task, with far lower hallucination - prefer 6.1 Sol.
 - **Claude Opus 5** - previous flagship ($5/$25); still #3-4 on the Agent arena. Prefer Opus 5.5 (cheaper, stronger).
 - **Claude Sonnet 5** - previous balanced Claude ($2/$10), superseded by Sonnet 5.5; strong false-premise pushback (see below) and still the cyber fallback for Sonnet 5.5.
-- **Gemini 3.8 Flash** - the **fastest capable model** (315 tok/s) with coding (76.3) and agentic (88%) near the frontier at $1.50 blended (intro; doubles Jan 1 2027); uses more tokens by design. #13 on the Agent arena.
+- **Gemini 3.8 Flash** - the **fastest capable model** (highest tok/s in the 40+ band) with coding (76.3) and agentic (88%) near the frontier at $1.50 blended per token (intro; doubles Jan 1 2027) - but it uses more tokens by design, so per *task* it costs more than GPT-6.1 Sol `low` for a lower score. Pick it for speed and multimodality, not cost. #13 on the Agent arena.
 - **Gemini 3.7 Flash** - same price, more compute-efficient than 3.8.
-- **Gemini 3.5 Flash-Lite** - cheapest Gemini ($0.85) and fastest (350 tok/s) for classification/routing/extraction; low intelligence.
+- **Gemini 3.5 Flash-Lite** - cheapest Gemini ($0.85) and fastest in the table for classification/routing/extraction; low intelligence.
 - **Gemini 3.1 Pro** (preview) - still top **instruction-following** (IFBench 77%, highest among models with a published IFBench score - AA hasn't published it for most Sept releases) and science (GPQA 94%), but no longer competitive on general intelligence; Gemini 3.5 Pro still unreleased.
 - **Claude Haiku 4.5** - cheapest Claude for bounded high-volume work; far below the new cheap frontier tiers (GPT-6 Luna, Gemini Flash) on AA. Haiku 5.5 is announced.
 
@@ -64,9 +99,9 @@ A capability AA/Arena miss: **does the model call out a nonsensical or false pre
 ## Picking a model - decision rules
 
 - **Highest ceiling** → **Claude Opus 5.5** (AA #1, $4/$20, ZDR) as the default top pick; **Fable 5.1** for the longest, most ambiguous multi-hour work (Agent-arena #1, but 2.5× the price and no ZDR); **GPT-6 Astra** when you want OpenAI's stack, computer use, or template-faithful documents.
-- **Default agentic coding** → **Opus 5.5** at `medium` (its default already matches Opus 5 at max); for the best capability-per-dollar, **Sonnet 5.5** (medium for well-specified tasks, high for harder) or **GPT-6.1 Sol**.
-- **Everyday business / support / internal tools** → **Sonnet 5.5**, **GPT-6.1 Sol**, or **GPT-5.6 Terra**.
-- **Fast multimodal / agentic work at scale** → **Gemini 3.8 Flash** (or 3.7 Flash when token efficiency matters); budget for the Jan 2027 price step-up.
+- **Default agentic coding** → **Opus 5.5** at `medium` (its default already matches Opus 5 at max); for the best capability-per-dollar, **GPT-6.1 Sol** (`high`/`xhigh`); on Claude, Sonnet 5.5 at `medium` for well-specified tasks (fast) - above that, Opus 5.5 is usually cheaper per task.
+- **Everyday business / support / internal tools** → **GPT-6.1 Sol** (`low`/`medium`) or **Sonnet 5.5** (`low`/`medium`) - GPT-5.6 Terra is now dominated by 6.1 Sol on AA.
+- **Fast multimodal / agentic work at scale** → **Gemini 3.8 Flash** (or 3.7 Flash when token efficiency matters) when throughput is the constraint; if cost per task is, GPT-6.1 Sol `low` beats both. Budget for the Jan 2027 price step-up.
 - **High-volume classification / routing / extraction** → **GPT-6 Luna** or **Gemini 3.5 Flash-Lite**; **Haiku 4.5** only if you must stay on Claude.
 - **Strict instruction-following / adherence** → Gemini 3.1 Pro still leads IFBench, but weigh its preview status and low general score; otherwise Claude 4.7+ (literal following) or GPT-6.
 - **Must not build on false premises** → Anthropic models lead (Opus 4.8 > Sonnet 5 > Opus 5 / Fable 5.1); GPT-6 Astra is now competitive; Gemini Flash lags.
@@ -77,22 +112,15 @@ A capability AA/Arena miss: **does the model call out a nonsensical or false pre
 
 ## Cost-per-task ≠ per-token price
 
-AA also measures what it actually costs to run its Intelligence Index - blended price × tokens *really used*, including cache reads/writes and reasoning. Snapshot 2026-09-23, **at each model's headline (max) effort** (not published per effort level on the page); "time/task" is wall-clock per eval task; "halluc." is AA-Omniscience's hallucination rate (how often the model answers wrong instead of abstaining on knowledge questions it doesn't know - lower is better):
-
-| Model | Intel | Cost per task | Time/task | Halluc. |
-|---|:---:|:---:|:---:|:---:|
-| Claude Opus 5.5 | 57.6 | $5.98 | 525 s | 59% |
-| Claude Fable 5.1 | 53.4 | $7.63 | 724 s | 73% |
-| GPT-6 Astra | 52.7 | $3.26 | 525 s | 51% |
-| GPT-6 Sol | 47.5 | **$1.06** | 269 s | 60% |
-| Gemini 3.8 Flash | 40.9 | $1.24 | 240 s | 55% |
-| GPT-6 Luna | 37.3 | **$0.07** | 353 s | 77% |
-| Gemini 3.5 Flash-Lite | 22.2 | $0.12 | 48 s | 34% |
-
-What it shows: **GPT-6 Astra costs less than half of Fable 5.1 per task at the same per-token price** (token efficiency), **Gemini 3.8 Flash costs *more* per task than GPT-6 Sol despite a per-token price ~8× lower** (its deliberate token appetite), and GPT-6 Luna is in a class of its own for cheap volume. Max-effort cost overstates what you'll pay at defaults (e.g. Opus 5.5 at `medium` already scores 51.2). Hallucination rate is a separate axis from intelligence - Flash-Lite's low rate comes from abstaining more, not knowing more. Source: the per-model records embedded in artificialanalysis.ai/models (`intelligenceIndexCostPerTask`, `intelligenceIndexTimePerTask`, `omniscienceHallucinationRate`); the v2 API returns intelligence and per-token prices but not cost per task.
-
 Compare **cost per task at your effort setting**, not headline $/1M. Token efficiency now varies a lot: Opus 5.5 finishes tasks in fewer tokens than Opus 5, GPT-6 Astra uses substantially fewer output tokens than prior GPTs despite a higher per-token price, while Gemini 3.8 Flash deliberately spends *more* tokens (self-verification) - its low per-token price overstates its advantage on long agentic tasks. Cache-read pricing is now a first-order cost on agent loops: 0.025× input on Fable 5.1, 0.05× on Opus 5.5, 0.1× on GPT-6 and most others. And watch scheduled price changes (Gemini Flash doubles Jan 1 2027).
 
 ## Methodology notes
 
 AA's Intelligence Index aggregates many evals (τ-Banking, Terminal-Bench, SciCode, HLE, GPQA, AA-LCR, and others); it was re-based between July and September 2026, and sub-benchmarks for the Sept 22 releases were still pending at capture. Arena's Agent arena scores "net improvement" from human votes on real agent sessions. BullshitBench uses a 0/1/2 rubric (accepted nonsense / buried challenge / clear pushback) from a 3-judge panel over 100 prompts × 5 domains. All three are one evaluator's methodology - directional. A model's rank on a public benchmark rarely predicts its rank on *your* task (SKILL.md Section H: build your own evals).
+
+## Refreshing the AA data
+
+- **Full per-effort data (cost per task, time per task, hallucination, intelligence):** embedded in every AA **model page** (e.g. `artificialanalysis.ai/models/claude-opus-5-5`) as Next.js flight data - decode the `self.__next_f.push([1,"…"])` strings and JSON-decode each `{"id":…,"slug":…}` object; fields `name`, `effort.label`, `intelligenceIndex`, `intelligenceIndexCostPerTask.cost.total`, `intelligenceIndexTimePerTask`, `omniscienceHallucinationRate`. One page carries all ~170 variants AA prices, not just that model's.
+- **Speed and the complete variant list:** `GET https://artificialanalysis.ai/api/v2/data/llms/models` (header `x-api-key`) - intelligence, per-token prices, `median_output_tokens_per_second`, TTFT, for every model and effort, but **no cost per task**.
+- **Cost per task via API:** `GET https://artificialanalysis.ai/api/v2/language/models/free` (same key) adds `artificial_analysis_intelligence_index_cost.cost_per_task.total_cost` and a `performance` block, but it's **capped at 200 variants** and omitted 21 of the 34 current effort variants on 2026-09-29 - use it to cross-check (its values matched the page data exactly), not as the source.
+
