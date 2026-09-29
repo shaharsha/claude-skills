@@ -288,11 +288,17 @@ def derived_misses(entries) -> list[tuple[str, str]]:
     return out
 
 
+def derived_hits(entries) -> list[tuple[str, str]]:
+    """A member derived from each directory-prefix entry, with a non-Python name in a subdirectory, so every
+    prefix entry (every product included) has a positive fixture and none is Python-only."""
+    return [(pat + "sub/x.txt", f"a non-Python member of {pat}") for kind, pat, _ in entries if kind == "prefix"]
+
+
 def run_controls(entries) -> bool:
     ok = True
     print("  MUST-HIT controls:")
     hits = 0
-    for p, why in MUST_HIT:
+    for p, why in MUST_HIT + derived_hits(entries):
         lab = classify(p, entries)
         mark = "HIT " if lab else "MISS"
         if lab:
@@ -300,7 +306,7 @@ def run_controls(entries) -> bool:
         else:
             ok = False
         print(f"    {mark}  {p:<48} [{why}]")
-    print(f"    -> MUST-HIT {hits}/{len(MUST_HIT)}")
+    print(f"    -> MUST-HIT {hits}/{len(MUST_HIT) + len(derived_hits(entries))}")
 
     print("  MUST-MISS controls:")
     misses = 0
@@ -363,7 +369,7 @@ def liveness_control(entries) -> bool:
         if entry_liveness(None, "", [e], tracked=misses, quiet=True):
             print(f"    🔴 liveness: {e[2]} is LIVE on a tree of only must-miss paths")
             ok = False
-        for h in (p for p, _ in MUST_HIT if classify(p, [e])):
+        for h in (p for p, _ in MUST_HIT + derived_hits(entries) if classify(p, [e])):
             if not entry_liveness(None, "", [e], tracked=[h], quiet=True):
                 print(f"    🔴 liveness: {e[2]} is DEAD on a tree holding its own must-hit {h}")
                 ok = False
