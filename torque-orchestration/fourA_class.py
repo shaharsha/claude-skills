@@ -315,9 +315,10 @@ def _resolved(tracked, kind: str, pat) -> int:
 
 def liveness_control(entries) -> bool:
     """Negative control for entry liveness (§4A.10): on a tree that holds the stem entry's directory and
-    its register but NO `rendered_text_*.py` script, the stem entry must resolve to nothing."""
+    its register, and matching basenames in other directories, but NO `scripts/rendered_text_*.py` script, the
+    stem entry must resolve to nothing."""
     tracked = ["scripts/rendered_text_expected_differences.yml", "scripts/rendered_text_sub/x.py",
-               "scripts/build_page.py"]
+               "scripts/sub/rendered_text_y.py", "helpers/rendered_text_x.py", "scripts/build_page.py"]
     stems = [(k, p) for k, p, _ in entries if k == "stem"]
     bad = [p for k, p in stems if _resolved(tracked, k, p) != 0]
     ok = bool(stems) and not bad
