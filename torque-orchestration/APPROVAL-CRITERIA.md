@@ -185,6 +185,10 @@ scripts/rendered_text_expected_differences.yml     FILE  the register of accepte
 api/services/control_plane/artifacts.py            FILE  the publish wiring
 ```
 
+[Every fact about torque in this section (paths, the workflow header and path filter, `artifacts.py`'s history,
+PR #1409's file list) was read from a torque checkout at `origin/develop` `8fd16403` on 2026-09-29; this
+repository holds none of them, so a reader here cannot re-check them without one.]
+
 ⚠️ **`artifacts.py` is the expensive one, and it is stated so the cost is visible.** It is the shared
 artifact door, not a text-check file, and it changes often for other reasons. Measured 2026-09-29 on
 `origin/develop` `8fd16403`, first-parent merge commits since 2026-09-22T20:39Z (per-merge
@@ -235,8 +239,9 @@ merge on route B.
 join. **The rest of `api/services/control_plane/**` stays UNRULED** (§4A.6) and outside the class. The
 shared matcher (`fourA_class.py`) carries both entries as must-hit controls, and keeps must-miss controls
 on the name-prefix neighbours
-`control_plane/provenance_gate_helpers.py` and `chart_width_legacy.py`, so a change that widened either
-entry to a prefix or to the directory turns its self-test red. (2026-09-29: `control_plane/artifacts.py`
+`control_plane/provenance_gate_helpers.py` and `chart_width_legacy.py` (and, from 2026-09-29, on
+`provenance_gate.py.bak` and `chart_width.py.bak`), so a change that widened either entry to a prefix or to
+the directory turns its self-test red. (2026-09-29: `control_plane/artifacts.py`
 was a must-miss control here and is now a must-hit, see §4A.10.)
 
 ⚠️ **`api/services/chart_width.py` is created by #1239 and is NOT on develop until #1239 merges.**
