@@ -294,7 +294,9 @@ def run_controls(entries) -> bool:
 
     print("  MUST-MISS controls:")
     misses = 0
-    for p, why in MUST_MISS:
+    # Every must-hit path relocated under backup/ is a miss too: no entry may admit a copy of a member.
+    relocated = [("backup/" + p, f"a relocated copy of {why}") for p, why in MUST_HIT]
+    for p, why in MUST_MISS + relocated:
         lab = classify(p, entries)
         if lab is None:
             misses += 1
@@ -302,7 +304,7 @@ def run_controls(entries) -> bool:
         else:
             ok = False
             print(f"    🔴 HIT (SHOULD MISS) {p} -> {lab}   [{why}]")
-    print(f"    -> MUST-MISS {misses}/{len(MUST_MISS)}")
+    print(f"    -> MUST-MISS {misses}/{len(MUST_MISS) + len(relocated)}")
     return ok
 
 
