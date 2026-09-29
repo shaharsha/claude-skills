@@ -143,7 +143,38 @@ api/services/publishing.py              CORRECTED 2026-09-18 — see §4A.6
 authored_pages/** EXCEPT **/README.md   ADDED 2026-09-15 — see the amendment directly below
 api/services/projector/**               ADDED 2026-09-16 — see §4A.2
 api/services/slots.py                   ADDED 2026-09-24 — see §4A.8
+api/services/control_plane/provenance_gate.py   ADDED 2026-09-26 — see §4A.9
+api/services/chart_width.py             ADDED 2026-09-26 — see §4A.9
 ```
+
+### ⚠️ AMENDMENT 2026-09-26 · §4A.9 — `provenance_gate.py` AND `chart_width.py` JOIN THE MANDATORY CLASS (approved by Shahar)
+
+**Shahar, verbatim, about 2026-09-26T23:1xZ: "2. lets go as you recommend"**, answering the Torque
+dispatcher seat's recommendation (item 2) that these two files join the class. The reasoning is the
+recommending seat's and TOR-1995's, not his. TOR-1995 was filed by the PR #1239 `/adjudicate` seat
+(ruling https://github.com/Torque-Capital/torque/pull/1239#issuecomment-5850478740). Its done-when 3
+asked for exactly this ruling, recorded here with `fourA_class.py`'s must-hit updated.
+
+The reason: before #1239 (P3 Task 6), `refuse_published_sql_until_the_r22_gate` ran first on every
+artifact door, so a regression in the gate was harmless. Once #1239 lifts that interim refusal,
+`api/services/control_plane/provenance_gate.py` and `api/services/chart_width.py` are the only guard
+between a wrong number and an immutable `published_sql` page. Until now a PR that weakened them could
+merge on route B.
+
+⚠️ **Both are FILE entries, like `publishing.py` and `slots.py`, and must stay files.** Only these two
+join. **The rest of `api/services/control_plane/**` stays UNRULED** (§4A.6) and outside the class. The
+shared matcher (`fourA_class.py`) carries both entries as must-hit controls, and keeps must-miss controls
+on the sibling `control_plane/artifacts.py` and on the name-prefix neighbours
+`control_plane/provenance_gate_helpers.py` and `chart_width_legacy.py`, so a change that widened either
+entry to a prefix or to the directory turns its self-test red.
+
+⚠️ **`api/services/chart_width.py` is created by #1239 and is NOT on develop until #1239 merges.**
+Measured 2026-09-27: absent at develop `b1f697ef`, present at #1239's head `e155f9a6`. Until then the
+matcher's entry-liveness check reports it DEAD on any develop-based ref, and its self-test FAILS there.
+That is the true reading, not a defect: the entry is ruled, and the file does not exist yet. On
+#1239's own delta (`15db6d1f..e155f9a6`) the matcher now counts 4 MANDATORY rows, up from 2: both
+files, plus `projector/publish.py` and `publishing.py`. Whether an existing round covers them is the
+adjudicator's call under §4A.4 and §4A.5, not this section's.
 
 ### ⚠️ AMENDMENT 2026-09-24 · §4A.8 — `api/services/slots.py` JOINS THE MANDATORY CLASS (approved by Shahar)
 
@@ -703,6 +734,12 @@ api/services/control_plane/**       TOR-1123's OWN second named instance (`pages
                              ever had, bigger than the projector's 33. Do not bundle it in on alarm;
                              it needs its own cost ruling.
 ```
+
+🔵 **UPDATED 2026-09-26 — §4A.9. Two `control_plane/` files are now RULED:**
+`api/services/control_plane/provenance_gate.py` (plus `api/services/chart_width.py`, which is outside
+`control_plane/`) joined the class as FILE entries, approved by Shahar. **The rest of
+`api/services/control_plane/**` is still UNRULED and still Shahar's call**, including `pages.py`,
+`pins.py` and `silver.py` above. The fence above is the 2026-09-18 measurement and is left as written.
 
 ⚠️ **Clause 2 of the principle argues AGAINST route A for `publishing.py`, and that is stated because it
 is the unflattering direction.** 19 test files exercise `api.services.publishing` against live Postgres
