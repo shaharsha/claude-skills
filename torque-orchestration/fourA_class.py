@@ -340,12 +340,13 @@ def liveness_control(entries) -> bool:
     the stem entry's directory, its register, and matching basenames in other directories, but NO
     `scripts/rendered_text_*.py` script, the stem entry must be reported dead; with any one such script added, live."""
     tracked = ["scripts/rendered_text_expected_differences.yml", "scripts/rendered_text_sub/x.py",
-               "scripts/sub/rendered_text_y.py", "helpers/rendered_text_x.py", "scripts/build_page.py"]
+               "scripts/sub/rendered_text_y.py", "helpers/rendered_text_x.py", "helpers/scripts/rendered_text_x.py",
+               "scripts/build_page.py"]
     stems = [e for e in entries if e[0] == "stem"]
     dead = not entry_liveness(None, "", stems, tracked=tracked, quiet=True)
     # ...and live on a tree holding any ONE matching script, whichever one (a narrowed stem would miss some).
     live = all(entry_liveness(None, "", stems, tracked=tracked + [f"scripts/rendered_text_{n}.py"], quiet=True)
-               for n in ("differential", "canaries", "corpus", "real_pages", "a_later_script"))
+               for n in ("differential", "canaries", "corpus", "real_pages", "a_later_script", ""))
     ok = bool(stems) and dead and live
     print(f"  LIVENESS control (stem entry must be DEAD with no matching script): {'ok' if ok else '🔴 FAILED'}")
     return ok
@@ -365,9 +366,10 @@ def main() -> int:
     print(f"CLASS ENTRIES: {len(entries)}   products from COMPANY_ROW: {codes}")
     print("CONTROLS")
     controls_ok = run_controls(entries)
+    # The liveness control tests the matcher itself (not the ref), so its failure blocks range mode too.
+    controls_ok = liveness_control(entries) and controls_ok
     print("ENTRY LIVENESS")
-    live_ok = liveness_control(entries)
-    live_ok = entry_liveness(repo, a.ref, entries) and live_ok
+    live_ok = entry_liveness(repo, a.ref, entries)
     if a.self_test:
         print(f"\nSELF-TEST {'PASS' if controls_ok and live_ok else 'FAIL'}")
         return 0 if (controls_ok and live_ok) else 1
