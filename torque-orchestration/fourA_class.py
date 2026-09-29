@@ -283,7 +283,7 @@ def derived_misses(entries) -> list[tuple[str, str]]:
     backup/, and, for every directory-prefix entry, a sibling directory that merely starts with its name."""
     out = [("backup/" + p, f"a relocated copy of {why}") for p, why in MUST_HIT]
     for kind, pat, label in entries:
-        if kind == "prefix" and pat.endswith("/"):
+        if kind == "prefix":   # whatever its spelling: an entry that lost its slash must still be caught
             out.append((pat.rstrip("/") + "_legacy/x.py", f"a sibling directory that starts with {pat}"))
     return out
 
