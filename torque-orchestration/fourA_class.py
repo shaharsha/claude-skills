@@ -313,32 +313,36 @@ def _resolved(tracked, kind: str, pat) -> int:
     return sum(1 for t in tracked if t.startswith(pat))
 
 
-def liveness_control(entries) -> bool:
-    """Negative control for entry liveness (§4A.10): on a tree that holds the stem entry's directory and
-    its register, and matching basenames in other directories, but NO `scripts/rendered_text_*.py` script, the
-    stem entry must resolve to nothing."""
-    tracked = ["scripts/rendered_text_expected_differences.yml", "scripts/rendered_text_sub/x.py",
-               "scripts/sub/rendered_text_y.py", "helpers/rendered_text_x.py", "scripts/build_page.py"]
-    stems = [(k, p) for k, p, _ in entries if k == "stem"]
-    bad = [p for k, p in stems if _resolved(tracked, k, p) != 0]
-    ok = bool(stems) and not bad
-    print(f"  LIVENESS control (stem entry must be DEAD with no matching script): {'ok' if ok else '🔴 FAILED'}")
-    return ok
+def entry_liveness(repo, ref: str, entries, *, tracked=None, quiet: bool = False) -> bool:
+    """§4A.6's owed structural half: every class entry must resolve to >=1 tracked path.
 
-
-def entry_liveness(repo: Path, ref: str, entries) -> bool:
-    """§4A.6's owed structural half: every class entry must resolve to >=1 tracked path."""
-    tracked = tracked_at(repo, ref)
-    ok = liveness_control(entries)
+    `tracked` replaces the git listing (used by `liveness_control`, which exercises THIS verdict)."""
+    if tracked is None:
+        tracked = tracked_at(repo, ref)
+    ok = True
     live = 0
     for kind, pat, label in entries:
         n = _resolved(tracked, kind, pat)
         if n == 0:
             ok = False
-            print(f"    🔴 DEAD ENTRY (0 tracked paths): {label}")
+            if not quiet:
+                print(f"    🔴 DEAD ENTRY (0 tracked paths): {label}")
         else:
             live += 1
-    print(f"    -> ENTRY LIVENESS {live}/{len(entries)}  (ref {ref[:8]})")
+    if not quiet:
+        print(f"    -> ENTRY LIVENESS {live}/{len(entries)}  (ref {ref[:8]})")
+    return ok
+
+
+def liveness_control(entries) -> bool:
+    """Negative control for entry liveness (§4A.10), run through `entry_liveness` itself: on a tree that holds
+    the stem entry's directory, its register, and matching basenames in other directories, but NO
+    `scripts/rendered_text_*.py` script, the stem entry must be reported dead."""
+    tracked = ["scripts/rendered_text_expected_differences.yml", "scripts/rendered_text_sub/x.py",
+               "scripts/sub/rendered_text_y.py", "helpers/rendered_text_x.py", "scripts/build_page.py"]
+    stems = [e for e in entries if e[0] == "stem"]
+    ok = bool(stems) and not entry_liveness(None, "", stems, tracked=tracked, quiet=True)
+    print(f"  LIVENESS control (stem entry must be DEAD with no matching script): {'ok' if ok else '🔴 FAILED'}")
     return ok
 
 
@@ -357,7 +361,8 @@ def main() -> int:
     print("CONTROLS")
     controls_ok = run_controls(entries)
     print("ENTRY LIVENESS")
-    live_ok = entry_liveness(repo, a.ref, entries)
+    live_ok = liveness_control(entries)
+    live_ok = entry_liveness(repo, a.ref, entries) and live_ok
     if a.self_test:
         print(f"\nSELF-TEST {'PASS' if controls_ok and live_ok else 'FAIL'}")
         return 0 if (controls_ok and live_ok) else 1
