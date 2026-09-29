@@ -162,14 +162,15 @@ dispatcher; this lane did not see Shahar's message itself.] The reasoning is the
 
 The reason is §4A.9's, one layer up. `provenance_gate.py` and `chart_width.py` guard the numbers on a
 published page; the text-presence check (TOR-1724 Part 1) guards the words. Its verdict is what a publish
-either accepts or refuses, and it is recorded beside the page as `verifier_sha256`, which the spec
-(`docs/superpowers/specs/2026-09-27-tor1724-part1-text-presence-design.md` §5.5) computes over "every
-module whose code decides the verdict": `rendered_text.py`, `as_of_edge.py`, `drawn_text.py`,
+either accepts or refuses. The record kept beside the page carries that verdict (`"verdict": "pass"`) and,
+separately, `verifier_sha256`, which the spec
+(`docs/superpowers/specs/2026-09-27-tor1724-part1-text-presence-design.md` §5.5) computes over the sources of
+"every module whose code decides the verdict": `rendered_text.py`, `as_of_edge.py`, `drawn_text.py`,
 `provenance_gate.py` and `chart_width.py`. The last two were already in the class; this amendment adds the
 first three. Its Chrome job (`text-presence.yml`) is deliberately NOT a required check: its workflow header
 says D55 keeps the required jobs fast, and its comment measures 3m43s. So a PR that weakened the check was
-not stopped by a required Chrome job. (TOR-2078, a torque PR opened with this one, adds one fast hermetic
-test to the required selection; it is separate and is not what this section rules.)
+not stopped by a required Chrome job. (TOR-2078 is the separate torque ticket for one fast hermetic test in
+the required selection; it is not what this section rules.)
 
 New members, all verified present on torque `origin/develop` `8fd16403` on 2026-09-29:
 
@@ -199,7 +200,8 @@ the ruling, not of a call that exists.]
 Each must stay so.** `control_plane/artifacts.py` joining does NOT widen `api/services/control_plane/**`,
 which stays UNRULED (§4A.6, §4A.9). The matcher keeps must-miss controls on the `control_plane/` neighbours
 and on name-prefix twins of each member (`rendered_text_helpers.py`, `as_of_edge_legacy.py`,
-`drawn_text_utils.py`, `artifacts_helpers.py`), on the near-stem names `scripts/rendered_text.py`,
+`drawn_text_utils.py`, `artifacts_helpers.py`), on each FILE entry's own name plus a suffix (`.py.bak`,
+`.yml.bak`; a prefix entry would admit these, an exact-file entry does not), on the near-stem names `scripts/rendered_text.py`,
 `rendered_textual.py`, `rendered_text_readme.md`, a `scripts/sub/` file and the register's `.yaml` spelling,
 and on a neighbouring workflow, so a change that widened any entry turns the self-test red.
 
@@ -808,8 +810,9 @@ api/services/control_plane/**       TOR-1123's OWN second named instance (`pages
 `pins.py` and `silver.py` above. The fence above is the 2026-09-18 measurement and is left as written.
 
 🔵 **UPDATED 2026-09-29 — §4A.10. `api/services/control_plane/artifacts.py` is now RULED** as a FILE entry
-(the text-presence check's publish wiring), approved by Shahar. **Everything else under
-`api/services/control_plane/**` is still UNRULED**, including `pages.py`, `pins.py` and `silver.py` above.
+(the text-presence check's publish wiring), approved by Shahar. **Every other file under
+`api/services/control_plane/**` except `provenance_gate.py` (§4A.9) is still UNRULED**, including `pages.py`,
+`pins.py` and `silver.py` above.
 
 ⚠️ **Clause 2 of the principle argues AGAINST route A for `publishing.py`, and that is stated because it
 is the unflattering direction.** 19 test files exercise `api.services.publishing` against live Postgres
