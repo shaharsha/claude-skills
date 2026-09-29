@@ -337,15 +337,20 @@ def entry_liveness(repo, ref: str, entries, *, tracked=None, quiet: bool = False
 
 def liveness_control(entries) -> bool:
     """Negative and positive control for entry liveness (§4A.10), run through `entry_liveness` itself and
-    DERIVED from the classification controls so the two cannot drift apart: a tree holding every MUST_MISS
-    path must leave each stem entry dead, and a tree holding any ONE stem must-hit path must leave it live."""
-    stems = [e for e in entries if e[0] == "stem"]
+    DERIVED from the classification controls so the two cannot drift apart, for EVERY kind of entry: a tree
+    holding every MUST_MISS path must leave each entry dead, and a tree holding any ONE must-hit path that
+    the entry classifies must leave that entry live."""
     misses = [p for p, _ in MUST_MISS]
-    hits = [p for p, _ in MUST_HIT if classify(p, stems)]
-    dead = not entry_liveness(None, "", stems, tracked=misses, quiet=True)
-    live = bool(hits) and all(entry_liveness(None, "", stems, tracked=[h], quiet=True) for h in hits)
-    ok = bool(stems) and dead and live
-    print(f"  LIVENESS control (stem dead on every must-miss path, live on each stem must-hit alone): "
+    ok = bool(entries)
+    for e in entries:
+        if entry_liveness(None, "", [e], tracked=misses, quiet=True):
+            print(f"    🔴 liveness: {e[2]} is LIVE on a tree of only must-miss paths")
+            ok = False
+        for h in (p for p, _ in MUST_HIT if classify(p, [e])):
+            if not entry_liveness(None, "", [e], tracked=[h], quiet=True):
+                print(f"    🔴 liveness: {e[2]} is DEAD on a tree holding its own must-hit {h}")
+                ok = False
+    print(f"  LIVENESS control (each entry dead on every must-miss path, live on each of its must-hits alone): "
           f"{'ok' if ok else '🔴 FAILED'}")
     return ok
 

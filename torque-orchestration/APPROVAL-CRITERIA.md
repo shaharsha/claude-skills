@@ -198,7 +198,7 @@ touched it (and 0 of the 100 non-merge first-parent commits in the same window).
 `8fd16403` and a window opening at 2026-09-22T20:39Z, the same method gave 11 of 170; the twelfth is PR #1409,
 the wiring itself. Each such PR is now route-A mandatory. The ruling's own words include "the ones that wire it
 into publishing". That wiring is now real: `artifacts.py` at `8ff3b68c0` imports `rendered_text` and calls
-`rendered_text.check(` (line 1060), which it did not at `8fd16403`.
+`rendered_text.check(`, which it did not at `8fd16403`.
 
 ⚠️ **Every entry is an exact FILE entry, or (for `scripts/rendered_text_*.py`) a stem under one directory.
 Each must stay so.** `control_plane/artifacts.py` joining does NOT widen `api/services/control_plane/**`,
