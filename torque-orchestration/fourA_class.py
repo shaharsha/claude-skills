@@ -10,8 +10,8 @@ orchestration-local; that is TOR-1160's remaining ask, not this file's claim.
 
 Class entries are transcribed from APPROVAL-CRITERIA.md §4A as amended by
 §4A.1 (authored_pages, README carve-out), §4A.2 (projector), §4A.8 (slots.py),
-§4A.9 (provenance_gate.py, chart_width.py) and corrected by §4A.6 (publishing is
-a FILE, not a package).
+§4A.9 (provenance_gate.py, chart_width.py), §4A.10 (the text-presence check and
+its publish wiring) and corrected by §4A.6 (publishing is a FILE, not a package).
 
 Usage:
     fourA_class.py --repo <path> --range <base>..<head>
@@ -55,6 +55,22 @@ STATIC_FILE_ENTRIES = [
     # ⚠️ Created by torque #1239; until that merges, entry liveness reports it
     # DEAD on any ref that lacks it.  That is the truthful reading, not a bug.
     "api/services/chart_width.py",
+    # §4A.10 (2026-09-29, Shahar): the rendered text-presence check.  The three
+    # modules whose code decides the verdict (TOR-1724 Part 1 spec §5.5 lists them
+    # with provenance_gate.py and chart_width.py, already above), its register, its
+    # CI workflow, and the one publish door that calls it.  ALL FILE entries:
+    # publishing.py's control_plane neighbours stay unruled.
+    "api/services/rendered_text.py",
+    "api/services/as_of_edge.py",
+    "api/services/drawn_text.py",
+    "scripts/rendered_text_expected_differences.yml",
+    ".github/workflows/text-presence.yml",
+    "api/services/control_plane/artifacts.py",
+]
+# §4A.10: scripts/rendered_text_*.py, directly under scripts/ (no subdirectory).
+# (directory prefix, name prefix, suffix) -- a name-stem entry, not a directory.
+STEM_ENTRIES = [
+    ("scripts/", "rendered_text_", ".py"),
 ]
 # §4A.1: authored_pages/** is in the class EXCEPT **/README.md
 AUTHORED_PREFIX = "authored_pages/"
@@ -119,6 +135,8 @@ def build_entries(repo: Path) -> list[tuple[str, str, str]]:
         entries.append(("prefix", p, f"{p}**"))
     for f in STATIC_FILE_ENTRIES:
         entries.append(("file", f, f))
+    for d, stem, suf in STEM_ENTRIES:
+        entries.append(("stem", (d, stem, suf), f"{d}{stem}*{suf}"))
     entries.append(("authored", AUTHORED_PREFIX, "authored_pages/** (except **/README.md)"))
     # ⚠️ all seven codes are UPPERCASE against lowercase directories:
     # case-normalisation is load-bearing.
@@ -128,12 +146,23 @@ def build_entries(repo: Path) -> list[tuple[str, str, str]]:
     return entries
 
 
+def _stem_match(path: str, pat: tuple[str, str, str]) -> bool:
+    """`<dir><stem>*<suffix>`, with nothing after `<dir>` but the file name."""
+    d, stem, suf = pat
+    if not path.startswith(d):
+        return False
+    name = path[len(d):]
+    return "/" not in name and name.startswith(stem) and name.endswith(suf)
+
+
 def classify(path: str, entries) -> str | None:
     """Return the label of the first class entry `path` matches, else None."""
     for kind, pat, label in entries:
         if kind == "prefix" and path.startswith(pat):
             return label
         if kind == "file" and path == pat:
+            return label
+        if kind == "stem" and _stem_match(path, pat):
             return label
         if kind == "authored" and path.startswith(pat):
             # §4A.1 carve-out: README.md at any depth is NOT a trigger.
@@ -180,6 +209,14 @@ MUST_HIT = [
     ("api/services/slots.py", "slots.py (§4A.8)"),
     ("api/services/control_plane/provenance_gate.py", "provenance_gate.py (§4A.9)"),
     ("api/services/chart_width.py", "chart_width.py (§4A.9)"),
+    ("api/services/rendered_text.py", "rendered_text.py (§4A.10)"),
+    ("api/services/as_of_edge.py", "as_of_edge.py (§4A.10)"),
+    ("api/services/drawn_text.py", "drawn_text.py (§4A.10)"),
+    ("scripts/rendered_text_differential.py", "scripts/rendered_text_*.py (§4A.10)"),
+    ("scripts/rendered_text_canaries.py", "scripts/rendered_text_*.py (§4A.10)"),
+    ("scripts/rendered_text_expected_differences.yml", "the register (§4A.10)"),
+    (".github/workflows/text-presence.yml", "text-presence.yml (§4A.10)"),
+    ("api/services/control_plane/artifacts.py", "artifacts.py, the publish wiring (§4A.10)"),
     ("authored_pages/lr_historical/body.html", "authored_pages non-README"),
     ("api/services/lr/forecast.py", "PRODUCT branch (§4A product control)"),
 ]
@@ -190,11 +227,23 @@ MUST_MISS = [
     ("api/services/control_plane/pages.py", "control_plane is not in the class"),
     ("api/services/control_plane/pins.py", "control_plane is not in the class"),
     ("api/services/control_plane/descriptors.py", "control_plane is not in the class"),
-    ("api/services/control_plane/artifacts.py",
-     "§4A.9 added two FILES, not control_plane/**"),
+    ("api/services/control_plane/publishing_helpers.py",
+     "§4A.10 added artifacts.py as a FILE, not control_plane/**"),
+    ("api/services/control_plane/artifacts_helpers.py",
+     "§4A.10 is an exact FILE entry, not a prefix"),
     ("api/services/control_plane/provenance_gate_helpers.py",
      "§4A.9 is an exact FILE entry, not a prefix"),
     ("api/services/chart_width_legacy.py", "§4A.9 is an exact FILE entry, not a prefix"),
+    ("api/services/rendered_text_helpers.py", "§4A.10 is an exact FILE entry, not a prefix"),
+    ("api/services/as_of_edge_legacy.py", "§4A.10 is an exact FILE entry, not a prefix"),
+    ("api/services/drawn_text_utils.py", "§4A.10 is an exact FILE entry, not a prefix"),
+    ("scripts/rendered_text_readme.md", "§4A.10 stem entry needs the .py suffix"),
+    ("scripts/rendered_text.py", "§4A.10 stem is `rendered_text_`, with the underscore"),
+    ("scripts/rendered_textual.py", "§4A.10 stem is `rendered_text_`, not `rendered_text`"),
+    ("scripts/sub/rendered_text_x.py", "§4A.10 stem entry matches directly under scripts/ only"),
+    ("scripts/rendered_text_expected_differences.yaml", "§4A.10 register is the exact .yml path"),
+    (".github/workflows/text-presence-notes.yml", "§4A.10 workflow is an exact FILE entry"),
+    (".github/workflows/browser-sweep.yml", "a neighbouring workflow is not in the class"),
     ("api/routers/publishing.py", "routers/publishing.py is NOT in any entry"),
     ("api/services/manifest_controls.py", "TOR-1123's instance, still uncovered"),
     ("api/schemas/version_descriptor.py", "schemas are not in the class"),
@@ -243,6 +292,8 @@ def entry_liveness(repo: Path, ref: str, entries) -> bool:
     for kind, pat, label in entries:
         if kind == "file":
             n = sum(1 for t in tracked if t == pat)
+        elif kind == "stem":
+            n = sum(1 for t in tracked if _stem_match(t, pat))
         elif kind == "authored":
             n = sum(1 for t in tracked if t.startswith(pat) and Path(t).name != "README.md")
         else:
