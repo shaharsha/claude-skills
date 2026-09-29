@@ -2,7 +2,7 @@
 
 > **Scope - read this when *choosing* a model, not when *prompting* one.** Which tier for a task, at what budget, good at what. For *how to write the prompt* once you've picked, use `claude.md` / `gpt.md` / `gemini.md`. Keep this file **out of the prompt-authoring context** - benchmark tables are low-signal noise while writing a prompt (the "context rot" caution in SKILL.md Section A applies to the skill itself).
 >
-> **Staleness - the numbers are a dated snapshot, the *relationships* are the durable part.** Sources: Artificial Analysis Intelligence Index (API pull **2026-09-23**), Arena (formerly LMArena) Agent arena (**2026-09-15**), BullshitBench (repo pulled **2026-09-23**). **AA re-based its index between July and September** - scores dropped ~10 points across the board (Opus 5 at max: 60.7 in July, 50.8 now), so **never compare against the July numbers**. Releases now land weekly (Opus 5.5 and GPT-6 Sol/Luna shipped Sept 22 and have only a headline AA score so far). Trust the **bands, gaps, and "good at what" shape**; re-pull before relying on a figure. AA API: `GET https://artificialanalysis.ai/api/v2/data/llms/models` with header `x-api-key` (fields: `evaluations.*`, `pricing.*`, `median_output_tokens_per_second`). Arena: arena.ai/leaderboard/<arena>.
+> **Staleness - the numbers are a dated snapshot, the *relationships* are the durable part.** Sources: Artificial Analysis Intelligence Index (API pull **2026-09-23**; Sonnet 5.5 and GPT-6.1 Sol rows added **2026-09-29**), Arena (formerly LMArena) Agent arena (**2026-09-15**), BullshitBench (repo pulled **2026-09-23**). **AA re-based its index between July and September** - scores dropped ~10 points across the board (Opus 5 at max: 60.7 in July, 50.8 now), so **never compare against the July numbers**. Releases now land weekly (Opus 5.5 and GPT-6 Sol/Luna shipped Sept 22 and have only a headline AA score so far). Trust the **bands, gaps, and "good at what" shape**; re-pull before relying on a figure. AA API: `GET https://artificialanalysis.ai/api/v2/data/llms/models` with header `x-api-key` (fields: `evaluations.*`, `pricing.*`, `median_output_tokens_per_second`). Arena: arena.ai/leaderboard/<arena>.
 
 ## Snapshot - AA Intelligence Index (2026-09-23)
 
@@ -12,10 +12,12 @@ Best available effort per model unless noted. Coding = AA Coding Index; Agentic 
 |-------|:-----:|:------:|:-------:|:------------:|:-----:|
 | **Claude Opus 5.5** (max) - new Sept 22 | 57.6 | - | - | $8.00 | - |
 | **Claude Opus 5.5** (xhigh / *medium, default*) | 56.0 / *51.2* | - | - | $8.00 | 84 / 75 |
+| **Claude Sonnet 5.5** (max / xhigh / *high, default*) - new Sept 28 | 56.0 / 51.9 / *46.7* | - | - | $4.00 | 145 |
 | **Claude Fable 5.1** (max) | 53.4 | 81.6 | 91% | $20.00 | 63 |
 | **GPT-6 Astra** (max) | 52.7 | 76.9 | 88% | $20.00 | 55 |
 | **Claude Opus 5** (max) | 50.8 | 78.0 | 89% | $10.00 | 53 |
-| **GPT-6 Sol** (max) - new Sept 22 | 47.5 | - | - | $4.00 | 107 |
+| **GPT-6.1 Sol** (max / *medium, default*) - new Sept 29 | 51.8 / *47.8* | - | - | $4.00 | 87 |
+| **GPT-6 Sol** (max) | 47.5 | - | - | $4.00 | 107 |
 | **GPT-5.6 Sol** (max) | 47.0 | 77.4 | 88% | $8.00 | 58 |
 | **GPT-5.6 Terra** (max) | 42.1 | 76.7 | 88% | $4.50 | 84 |
 | **Claude Opus 4.8** (max) | 41.8 | 74.3 | 85% | $10.00 | - |
@@ -34,11 +36,13 @@ Best available effort per model unless noted. Coding = AA Coding Index; Agentic 
 - **Claude Opus 5.5** - the **new default flagship and AA #1** (57.6 at max; 51.2 at its `medium` default, already ≈ Opus 5 at max). Anthropic reports Fable-5.1-level work at ~40% lower cost than Opus 5, stronger long-running coding, knowledge work with fewer invented figures, sharper chart/screenshot reading, and the lowest prompt-injection rate it has measured (tied with Fable 5.1). $4/$20, ZDR-eligible. Not yet rated on Arena or BullshitBench.
 - **Claude Fable 5.1** - **#1 on Arena's Agent arena** and top AA coding/agentic sub-scores; still the pick for the longest, most ambiguous multi-hour work. $10/$50 (cache reads now 0.025×, which matters on long agent loops), **not ZDR-eligible**.
 - **GPT-6 Astra** - OpenAI's flagship; **#2 on the Agent arena** and #1 on its "praise vs. complaint" signal; top GPQA (96%); best-in-class computer use and template adherence per OpenAI; fewer output tokens per task than prior GPTs. $10/$50.
-- **GPT-6 Sol** - the **value pick in the frontier band**: 47.5 at $2/$10 (half GPT-5.6 Sol's price, ~same score) and ~107 tok/s. OpenAI claims it beats Claude Opus 5 at max on AutomationBench at 9% of the cost per task `[vendor claim]`.
+- **Claude Sonnet 5.5** - the new **price-performance standout**: at $2/$10 it scores 56.0 at max (second only to Opus 5.5 on AA) and runs fastest of the frontier band (~145 tok/s at max); Anthropic reports it within 2 points of Opus 5.5 on GDPval-AA and above it on Terminal-Bench 4.0, but Opus 5.5 stays stronger on open-ended work needing sustained judgment. Effort matters a lot: 35.8 at `low` → 46.7 at `high` (default) → 56.0 at `max`. ZDR-eligible.
+- **GPT-6.1 Sol** - OpenAI's new balanced default: "near-Astra" at $2/$10 (cached input $0.10), 51.8 at max / 47.8 at its `medium` default; OpenAI reports Astra-level DeepSWE and near-Astra OSWorld at ~1/7 the cost per task. No `none` effort.
+- **GPT-6 Sol** - the previous Sol: 47.5 at $2/$10 and ~107 tok/s; keep it only if you need `none` effort. OpenAI claims it beats Claude Opus 5 at max on AutomationBench at 9% of the cost per task `[vendor claim]`.
 - **GPT-6 Luna** - cheapest frontier-family model ($0.10/$0.50) scoring near Sonnet 5 at max. Default choice for cheap GPT volume work.
 - **GPT-5.6 Terra** - still OpenAI's mid tier (no GPT-6 Terra); strong coding (76.7) at $2/$12.
 - **Claude Opus 5** - previous flagship ($5/$25); still #3-4 on the Agent arena. Prefer Opus 5.5 (cheaper, stronger).
-- **Claude Sonnet 5** - balanced Claude at **$2/$10 (made permanent Aug 10)**; strong false-premise pushback (see below).
+- **Claude Sonnet 5** - previous balanced Claude ($2/$10), superseded by Sonnet 5.5; strong false-premise pushback (see below) and still the cyber fallback for Sonnet 5.5.
 - **Gemini 3.8 Flash** - the **fastest capable model** (315 tok/s) with coding (76.3) and agentic (88%) near the frontier at $1.50 blended (intro; doubles Jan 1 2027); uses more tokens by design. #13 on the Agent arena.
 - **Gemini 3.7 Flash** - same price, more compute-efficient than 3.8.
 - **Gemini 3.5 Flash-Lite** - cheapest Gemini ($0.85) and fastest (350 tok/s) for classification/routing/extraction; low intelligence.
@@ -55,13 +59,13 @@ Arena runs a **separate human-vote leaderboard per task** (Agent, Text/chat, Web
 
 ## Beyond intelligence - false-premise detection (BullshitBench)
 
-A capability AA/Arena miss: **does the model call out a nonsensical or false premise instead of building on it?** On [BullshitBench](https://petergpt.github.io/bullshit-benchmark/) (v2: 100 nonsense prompts, 13 techniques, 5 domains, models run with no system prompt; clear-pushback rate over **all attempts** from `leaderboard.csv`, repo pulled 2026-09-23 - the dashboard's headline instead **excludes refusals** from the denominator, so heavy refusers such as Fable 5.x read ~10 points higher there): **Claude Opus 4.8 is still #1 at ~95%**; the Claude 5 generation is lower - **Sonnet 5 ~80%, Fable 5.1 64-77%, Opus 5 70-73%**; **GPT-6 Astra jumped to 64-69%** (GPT-5.6 Sol ~47%, Terra ~47-54%, Luna ~37-41%); **Gemini 3.7 Flash ~31-35%**. The durable lessons hold: **raising effort doesn't help and often hurts** (Fable 5.1: 77% at `low` vs 64% at `max`), and **refusal ≠ pushback** (Fable 5.x declines 11-36% of prompts instead of naming the flaw). Not yet benchmarked: Opus 5.5, GPT-6 Sol/Luna, Gemini 3.8 Flash. If your app must not act on broken user premises, weight this - and fix it with explicit prompting + model choice, not the effort knob.
+A capability AA/Arena miss: **does the model call out a nonsensical or false premise instead of building on it?** On [BullshitBench](https://petergpt.github.io/bullshit-benchmark/) (v2: 100 nonsense prompts, 13 techniques, 5 domains, models run with no system prompt; clear-pushback rate over **all attempts** from `leaderboard.csv`, repo pulled 2026-09-23 - the dashboard's headline instead **excludes refusals** from the denominator, so heavy refusers such as Fable 5.x read ~10 points higher there): **Claude Opus 4.8 is still #1 at ~95%**; the Claude 5 generation is lower - **Sonnet 5 ~80%, Fable 5.1 64-77%, Opus 5 70-73%**; **GPT-6 Astra jumped to 64-69%** (GPT-5.6 Sol ~47%, Terra ~47-54%, Luna ~37-41%); **Gemini 3.7 Flash ~31-35%**. The durable lessons hold: **raising effort doesn't help and often hurts** (Fable 5.1: 77% at `low` vs 64% at `max`), and **refusal ≠ pushback** (Fable 5.x declines 11-36% of prompts instead of naming the flaw). Not yet benchmarked: Opus 5.5, Sonnet 5.5, GPT-6 / 6.1 Sol, GPT-6 Luna, Gemini 3.8 Flash. If your app must not act on broken user premises, weight this - and fix it with explicit prompting + model choice, not the effort knob.
 
 ## Picking a model - decision rules
 
 - **Highest ceiling** → **Claude Opus 5.5** (AA #1, $4/$20, ZDR) as the default top pick; **Fable 5.1** for the longest, most ambiguous multi-hour work (Agent-arena #1, but 2.5× the price and no ZDR); **GPT-6 Astra** when you want OpenAI's stack, computer use, or template-faithful documents.
-- **Default agentic coding** → **Opus 5.5** at `medium` (its default already matches Opus 5 at max), or **GPT-6 Sol** at high/max for the best capability-per-dollar.
-- **Everyday business / support / internal tools** → **GPT-6 Sol**, **Sonnet 5**, or **GPT-5.6 Terra**.
+- **Default agentic coding** → **Opus 5.5** at `medium` (its default already matches Opus 5 at max); for the best capability-per-dollar, **Sonnet 5.5** (medium for well-specified tasks, high for harder) or **GPT-6.1 Sol**.
+- **Everyday business / support / internal tools** → **Sonnet 5.5**, **GPT-6.1 Sol**, or **GPT-5.6 Terra**.
 - **Fast multimodal / agentic work at scale** → **Gemini 3.8 Flash** (or 3.7 Flash when token efficiency matters); budget for the Jan 2027 price step-up.
 - **High-volume classification / routing / extraction** → **GPT-6 Luna** or **Gemini 3.5 Flash-Lite**; **Haiku 4.5** only if you must stay on Claude.
 - **Strict instruction-following / adherence** → Gemini 3.1 Pro still leads IFBench, but weigh its preview status and low general score; otherwise Claude 4.7+ (literal following) or GPT-6.

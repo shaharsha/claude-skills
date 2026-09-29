@@ -2,15 +2,16 @@
 
 Applies to the **GPT model family** wherever it runs: the OpenAI API, Azure OpenAI / Microsoft Foundry, and AWS Bedrock. The platform does not change prompt engineering - the model version does - but Azure/Foundry has real API and deployment differences worth knowing (see *Azure Foundry and AWS Bedrock* below).
 
-**Current models (September 2026):** **GPT-6** is the current generation. The naming scheme introduced with GPT-5.6 holds - the number is the generation; **Astra / Sol / Luna** are capability tiers that advance on their own cadence - and GPT-6 adds **Astra** as a new top tier above Sol.
+**Current models (late September 2026):** **GPT-6** is the current generation, and **GPT-6.1 Sol** is its first point release (the tiers now advance independently: Astra and Luna are still 6.0). The naming scheme introduced with GPT-5.6 holds - the number is the generation; **Astra / Sol / Luna** are capability tiers that advance on their own cadence - and GPT-6 adds **Astra** as a new top tier above Sol.
 
-- **GPT-6 Astra** (`gpt-6-astra`, GA Sept 4 2026) - flagship "for the hardest end-to-end work"; state of the art on computer use, browsing, SWE, science, professional work; uses substantially fewer output tokens per task than earlier models. **$10 / $50** per 1M (cached input $1, cache writes $12.50). Effort `low`-`max` - **no `none`** (400). Apr 30 2026 cutoff. ZDR-eligible. OpenAI's default recommendation when unsure.
-- **GPT-6 Sol** (`gpt-6-sol`, Sept 22 2026) - complex coding and agentic workflows, trained with Astra's methods; ~half GPT-5.6 Sol's factual mistakes on OpenAI's internal eval. **$2 / $10** (cached $0.20). Effort `none`-`max`, default `medium`. Apr 20 2026 cutoff.
+- **GPT-6 Astra** (`gpt-6-astra`, GA Sept 4 2026) - flagship "for the hardest end-to-end work"; state of the art on computer use, browsing, SWE, science, professional work; uses substantially fewer output tokens per task than earlier models. **$10 / $50** per 1M (cached input $1, cache writes $12.50). Effort `low`-`max` - **no `none`** (400). Apr 30 2026 cutoff. ZDR-eligible. OpenAI's default recommendation when cost and latency don't matter.
+- **GPT-6.1 Sol** (`gpt-6.1-sol`, Sept 29 2026, DevDay) - OpenAI's new **balanced** pick: "near-Astra performance for complex work at a lower cost" on agentic coding, computer use, and professional work. **$2 / $10** (cached input **$0.10 - 5% of input**, cache writes $2.50), a fifth of Astra's token prices. Effort `low`-`max`, default `medium` - **no `none` or `minimal`** (unlike GPT-6 Sol), so it's a reasoning-only model: tools need the Responses API (Chat Completions only without tools) and sampling params are always rejected. Apr 30 2026 cutoff; US and EU data residency. OpenAI-reported: matches Astra on DeepSWE, within ~2 points on OSWorld 2.0 at ~1/7 the cost per task, factual-error rate within ~2 points of Astra. Its prompting guidance is the shared GPT-6 (Astra-derived) set below. An "Ultrafast" variant (up to ~8× faster generation) is announced; GPT-6.1 Astra has not shipped.
+- **GPT-6 Sol** (`gpt-6-sol`, Sept 22 2026) - superseded as the default Sol by 6.1 but still served, and the Sol to keep if you need `none` effort; complex coding and agentic workflows, trained with Astra's methods; ~half GPT-5.6 Sol's factual mistakes on OpenAI's internal eval. **$2 / $10** (cached $0.20). Effort `none`-`max`, default `medium`. Apr 20 2026 cutoff.
 - **GPT-6 Luna** (`gpt-6-luna`, Sept 22 2026) - the efficient tier "for focused, high-volume tasks with a clear goal" (summarization, extraction, quick answers). **$0.10 / $0.50** (cached $0.01). Effort `none`-`max`, default `medium`. May 18 2026 cutoff.
 - **There is no GPT-6 Terra.** For the mid tier OpenAI still points to **GPT-5.6 Terra** (`gpt-5.6-terra`, $2 / $12, Feb 2026 cutoff). GPT-5.6 Sol ($4 / $20) and Luna ($0.20 / $1.20) remain available at their reduced prices. Watch for a GPT-6 Terra before assuming the tier map.
 - **Small models:** `gpt-5.4-mini` / `gpt-5.4-nano` are still active, but GPT-6 Luna now undercuts nano on price with far more capability, and OpenAI's deprecation notices name 5.6 Terra / Luna as the replacements for older mini/nano snapshots. Default to Luna for the cheap tier; keep the mini/nano guidance below for existing workloads.
 
-GPT-6 shares a **1.05M context window (922K max input) and 128K max output**. Input above ~272K tokens is billed at 2× input/cache and 1.5× output **for the whole request** - chunk or cache rather than stuffing. Batch and Flex are 50% of standard; fast mode is 2× the price (Astra fast mode: up to 2× speed, no latency SLA, not with EU data residency). Treat each new generation as a family to re-tune for, not a drop-in swap.
+The GPT-6 family (incl. 6.1 Sol) shares a **1.05M context window (922K max input) and 128K max output**. Input above ~272K tokens is billed at 2× input/cache and 1.5× output **for the whole request** - chunk or cache rather than stuffing. Batch and Flex are 50% of standard; fast mode is 2× the price (Astra fast mode: up to 2× speed, no latency SLA, not with EU data residency). Treat each new generation as a family to re-tune for, not a drop-in swap.
 
 ## Contents
 - GPT-6: what's new in the API
@@ -40,11 +41,12 @@ GPT-6 shares a **1.05M context window (922K max input) and 128K max output**. In
 ## GPT-6: what's new in the API
 
 - **Async tool calling:** set `async:true` on a function or custom tool; the model keeps reasoning, calls other tools, or answers independent parts of the request while your app runs it; return the result later with the original `call_id`. Your app still executes the tool and tracks pending work (OpenAI documents a developer-defined wait-tool pattern).
+- **Service tiers for speed:** Fast mode (~2× speed at 2× price) and the new **Ultrafast** tier (`service_tier:"ultrafast"`) - broadly available on Astra at low rate limits, preview for GPT-5.6 Sol, 6.1 Sol Ultrafast announced. Use a persistent WebSocket for agent loops or network overhead eats the gain; US/global processing only (no EU).
 - **Mid-turn steering:** over a WebSocket Responses connection, send new user instructions (a correction, a changed requirement) while the model is working; completed work is preserved and the update joins a continuation.
 - **Change effort without breaking the cache:** add a `{"type":"configuration_update","reasoning":{"effort":"high"}}` input item before the next user message and **leave request-level `reasoning.effort` unchanged**; it holds until another update. GPT-6 family, standard single-agent mode, effort only. Tools can likewise be enabled/disabled without breaking the cache.
 - **Misalignment monitoring** runs asynchronously on Astra-class traffic; safety checks can **stop the task in the API** (ChatGPT/Codex ask the user to review instead) - see *Safeguards*.
 - Carries over from GPT-5.6: computer use, Structured Outputs, streaming, programmatic tool calling, multi-agent orchestration, prompt caching, persisted reasoning, compaction, pro mode.
-- **Endpoint limits:** Astra supports Chat Completions but its **tool calling requires the Responses API**; Sol and Luna support function calling in Chat Completions **only at `reasoning_effort:"none"`**. Use Responses for any reasoning-with-tools work.
+- **Endpoint limits:** Astra and **GPT-6.1 Sol** support Chat Completions but their **tool calling requires the Responses API**; GPT-6 Sol and Luna support function calling in Chat Completions **only at `reasoning_effort:"none"`**. Use Responses for any reasoning-with-tools work.
 
 ## Prompting GPT-6 (Astra behaviors - the starting point for Sol and Luna too)
 
@@ -94,6 +96,7 @@ Prefer **decision rules over absolutes** for judgment calls. Replace ALWAYS/NEVE
 | Model | Supported | Default |
 |---|---|---|
 | GPT-6 Astra | `low`-`max` (`none` → 400) | not documented - **pin it explicitly** |
+| GPT-6.1 Sol | `low`-`max` (`none`/`minimal` → unsupported) | `medium` |
 | GPT-6 Sol / Luna | `none`-`max` | `medium` |
 | GPT-5.6 Sol / Terra / Luna | `none`-`max` | `medium` (standard and pro mode) |
 | GPT-5.5 | `none`-`xhigh` | `medium` |
@@ -182,6 +185,8 @@ For customer-facing work, also specify the channel (Slack, email, memo, PRD), em
 
 ## Small models (Luna, Mini / Nano)
 
+OpenAI's own model ladder (cheapest first): Luna `low` (fine-grained edits, simple extraction) → Luna `xhigh` (cross-app context, prioritizing) → **6.1 Sol `medium`** (complex technical work, deliverables you'll revise) → 6.1 Sol `xhigh` (polished deliverables, decisions from conflicting evidence) → Astra `low`/`medium`/`xhigh` (ambitious or exacting work).
+
 **GPT-6 Luna** is now the default cheap tier - frontier-family methods at $0.10/$0.50, and at higher effort it matches GPT-5.6 Sol on OpenAI's factuality eval at ~1/100th the cost. It supports `none` for latency-critical paths. `gpt-5.4-mini` ($0.75/$4.50) and `gpt-5.4-nano` ($0.20/$1.25, default effort `none`) remain active for existing workloads. Smaller/cheaper models are more literal and make fewer assumptions:
 - Put the most critical rules first.
 - Specify the full execution order for tool use and side effects.
@@ -222,9 +227,9 @@ GPT runs on the OpenAI API, Azure / Microsoft Foundry, and AWS Bedrock (GPT-6 As
 ## Migration to GPT-6 (and the GPT-5.6 "stop doing" list)
 
 **To GPT-6 (from GPT-5.6 or earlier):**
-1. Set `model` to `gpt-6-astra`, `gpt-6-sol`, or `gpt-6-luna` (no Terra - stay on `gpt-5.6-terra` for that tier). Use the Responses API for tools.
-2. **Pin effort.** Preserve your effective effort; on Astra, `none`/`minimal` → `low`. If you vary effort per turn, switch to `configuration_update` items and keep request-level effort fixed.
-3. **Remove `temperature`, `top_p`, `top_logprobs`** (and `logprobs` / `output_text.logprobs`) unless you run Sol/Luna at `none`.
+1. Set `model` to `gpt-6-astra`, `gpt-6.1-sol`, or `gpt-6-luna` (OpenAI's current trio; no Terra - stay on `gpt-5.6-terra` for that tier). Use the Responses API for tools. Moving `gpt-6-sol` → `gpt-6.1-sol`: move any `none` effort to `low`, move Chat Completions tool calls to Responses, drop sampling params, and re-check cost - cached input got 50% cheaper.
+2. **Pin effort.** Preserve your effective effort; on Astra and 6.1 Sol, `none`/`minimal` → `low`. If you vary effort per turn, switch to `configuration_update` items and keep request-level effort fixed.
+3. **Remove `temperature`, `top_p`, `top_logprobs`** (and `logprobs` / `output_text.logprobs`) unless you run GPT-6 Sol or Luna at `none` (6.1 Sol has no `none`).
 4. From GPT-5.5 or earlier: `prompt_cache_retention` → `prompt_cache_options.ttl:"30m"`; budget for 1.25× cache writes; replay encrypted reasoning with `store:false`.
 5. Handle safety stops (Astra misalignment monitoring, cyber refusals) and send `safety_identifier`.
 6. **Re-tune behavior, mostly by subtracting:** audit skills/AGENTS.md (short descriptions, contextual doc pointers, no recipes, precedence line), soften "ask first" boundary language, remove "run the tests / check your work" prodding, then add follow-through prompts if it pauses for approval, prose/anti-slop prompts if formatting is heavy, a delegation prompt if you run multi-agent, and a testing-calibration line if it over-tests.
