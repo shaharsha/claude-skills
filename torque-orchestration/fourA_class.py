@@ -343,7 +343,9 @@ def liveness_control(entries) -> bool:
     DERIVED from the classification controls so the two cannot drift apart, for EVERY kind of entry: a tree
     holding every MUST_MISS path must leave each entry dead, and a tree holding any ONE must-hit path that
     the entry classifies must leave that entry live."""
-    misses = [p for p, _ in MUST_MISS]
+    # Every must-hit path, relocated under a `backup/` directory, is also a miss: no entry may resolve a copy
+    # of one of its own members that lives somewhere else (catches `in`, `endswith` and slash-less resolvers).
+    misses = [p for p, _ in MUST_MISS] + ["backup/" + p for p, _ in MUST_HIT]
     ok = bool(entries)
     for e in entries:
         if entry_liveness(None, "", [e], tracked=misses, quiet=True):
