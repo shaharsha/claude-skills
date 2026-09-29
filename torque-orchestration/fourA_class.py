@@ -258,6 +258,7 @@ MUST_MISS = [
     ("scripts/rendered_textual.py", "§4A.10 stem is `rendered_text_`, not `rendered_text`"),
     ("scripts/sub/rendered_text_x.py", "§4A.10 stem entry matches directly under scripts/ only"),
     ("helpers/rendered_text_x.py", "§4A.10 stem is under scripts/ only, not any directory"),
+    ("helpers/scripts/rendered_text_x.py", "§4A.10 stem is the top-level scripts/, not any scripts/ directory"),
     ("scripts/rendered_text_sub/x.py", "§4A.10 stem matches a file name, not a directory named like one"),
     ("scripts/rendered_text_expected_differences.yaml", "§4A.10 register is the exact .yml path"),
     (".github/workflows/text-presence-notes.yml", "§4A.10 workflow is an exact FILE entry"),
@@ -337,11 +338,15 @@ def entry_liveness(repo, ref: str, entries, *, tracked=None, quiet: bool = False
 def liveness_control(entries) -> bool:
     """Negative control for entry liveness (§4A.10), run through `entry_liveness` itself: on a tree that holds
     the stem entry's directory, its register, and matching basenames in other directories, but NO
-    `scripts/rendered_text_*.py` script, the stem entry must be reported dead."""
+    `scripts/rendered_text_*.py` script, the stem entry must be reported dead; with any one such script added, live."""
     tracked = ["scripts/rendered_text_expected_differences.yml", "scripts/rendered_text_sub/x.py",
                "scripts/sub/rendered_text_y.py", "helpers/rendered_text_x.py", "scripts/build_page.py"]
     stems = [e for e in entries if e[0] == "stem"]
-    ok = bool(stems) and not entry_liveness(None, "", stems, tracked=tracked, quiet=True)
+    dead = not entry_liveness(None, "", stems, tracked=tracked, quiet=True)
+    # ...and live on a tree holding any ONE matching script, whichever one (a narrowed stem would miss some).
+    live = all(entry_liveness(None, "", stems, tracked=tracked + [f"scripts/rendered_text_{n}.py"], quiet=True)
+               for n in ("differential", "canaries", "corpus", "real_pages", "a_later_script"))
+    ok = bool(stems) and dead and live
     print(f"  LIVENESS control (stem entry must be DEAD with no matching script): {'ok' if ok else '🔴 FAILED'}")
     return ok
 

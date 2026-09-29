@@ -172,7 +172,7 @@ says D55 keeps the required jobs fast, and its comment measures 3m43s. So a PR t
 not stopped by a required Chrome job. (TOR-2078 is the separate torque ticket for one fast hermetic test in
 the required selection; it is not what this section rules.)
 
-New members, all verified present on torque `origin/develop` `8fd16403` on 2026-09-29:
+New members, all verified present on torque `origin/develop` `8ff3b68c0` on 2026-09-29:
 
 ```
 api/services/rendered_text.py                      FILE  the harness JS and the Python that reads, splices, compares
@@ -185,37 +185,37 @@ scripts/rendered_text_expected_differences.yml     FILE  the register of accepte
 api/services/control_plane/artifacts.py            FILE  the publish wiring
 ```
 
-[Every fact about torque in this section (paths, the workflow header and path filter, `artifacts.py`'s history,
-PR #1409's file list) was read from a torque checkout at `origin/develop` `8fd16403` on 2026-09-29; this
-repository holds none of them, so a reader here cannot re-check them without one.]
+[Every fact about torque in this section (paths, the workflow header and path filter, `artifacts.py`'s history and
+contents) was read from a torque checkout at `origin/develop` `8ff3b68c0` on 2026-09-29, except where a section
+names `8fd16403` (the tip an hour earlier); this repository holds none of them, so a reader here cannot re-check
+them without one.]
 
 ⚠️ **`artifacts.py` is the expensive one, and it is stated so the cost is visible.** It is the shared
 artifact door, not a text-check file, and it changes often for other reasons. Measured 2026-09-29 on
-`origin/develop` `8fd16403`, first-parent merge commits since 2026-09-22T20:39Z (per-merge
-`git diff M^1 M`, not `git log -- path`, which over-reports through merges): **11 of 170** merge commits
-touched it (and 0 of the 100 non-merge first-parent commits in the same window). Each such PR is now
-route-A mandatory. The ruling's own words include "the ones that wire it into publishing".
-[The 11 are counted; that the text check's caller lives in this file is NOT yet true on develop: `artifacts.py`
-does not import `rendered_text` at `8fd16403`. The caller is added by the open PR #1409 (TOR-1724 1B-ii),
-whose file list includes `artifacts.py`. Until that merges, `artifacts.py` is in the class on the strength of
-the ruling, not of a call that exists.]
+`origin/develop` `8ff3b68c0`, first-parent merge commits since 2026-09-22T21:30Z (per-merge
+`git diff M^1 M`, not `git log -- path`, which over-reports through merges): **12 of 170** merge commits
+touched it (and 0 of the 100 non-merge first-parent commits in the same window). One hour earlier, at
+`8fd16403` and a window opening at 2026-09-22T20:39Z, the same method gave 11 of 170; the twelfth is PR #1409,
+the wiring itself. Each such PR is now route-A mandatory. The ruling's own words include "the ones that wire it
+into publishing". That wiring is now real: `artifacts.py` at `8ff3b68c0` imports `rendered_text` and calls
+`rendered_text.check(` (line 1060), which it did not at `8fd16403`.
 
 ⚠️ **Every entry is an exact FILE entry, or (for `scripts/rendered_text_*.py`) a stem under one directory.
 Each must stay so.** `control_plane/artifacts.py` joining does NOT widen `api/services/control_plane/**`,
 which stays UNRULED (§4A.6, §4A.9). The matcher keeps must-miss controls on the `control_plane/` neighbours
 and on name-prefix twins of each member (`rendered_text_helpers.py`, `as_of_edge_legacy.py`,
 `drawn_text_utils.py`, `artifacts_helpers.py`), on each FILE entry's own name plus a suffix (`.py.bak`,
-`.yml.bak`; a prefix entry would admit these, an exact-file entry does not), on the near-stem names `scripts/rendered_text.py`,
-`rendered_textual.py`, `rendered_text_readme.md`, a `scripts/sub/` file, a `scripts/rendered_text_sub/` directory and the
-register's `.yaml` spelling,
-and on a neighbouring workflow, so a change that widened any entry turns the self-test red. The stem entry also
+`.yml.bak`; a prefix entry would admit these, an exact-file entry does not), on the near-stem names
+`scripts/rendered_text.py`, `rendered_textual.py`, `rendered_text_readme.md`, a `scripts/sub/` file, a `scripts/rendered_text_sub/` directory, a `helpers/` and a
+`helpers/scripts/` copy of the name, and the register's `.yaml` spelling, and on a neighbouring workflow, so a change that widened any entry turns the self-test red. The stem entry also
 has must-hit controls for all four existing `scripts/rendered_text_*.py` files and for a name not yet written, so
 narrowing it to a list of files turns the self-test red as well.
 
 ⚠️ **Named and NOT added, so the next reader does not assume they are covered.** `text-presence.yml`'s own
-PR path filter (24 paths at `8fd16403`) also lists `api/services/page_kit_identity.py`,
-`scripts/ci_chrome_no_lcd.sh`, the two page-kit assets `torque-runtime.js` and `torque-page.css`, and nine
-test files (`tests/test_provenance_gate.py`, `test_as_of_edge.py`, `test_chart_width.py`,
+PR path filter (27 paths at `8ff3b68c0`, the workflow file itself among them) also lists
+`api/services/page_kit_identity.py`, `api/schemas/version_descriptor.py`, `scripts/ci_chrome_no_lcd.sh`, the two
+page-kit assets `torque-runtime.js` and `torque-page.css`, and ten test files (`tests/test_provenance_gate.py`,
+`test_as_of_edge.py`, `test_chart_width.py`, `test_artifact_lane.py`,
 `tests/structure/test_text_presence_path_filter.py`, `test_rendered_text_oracle.py`,
 `test_rendered_text_controls.py`, `test_rendered_text_differential.py`, `test_rendered_text_properties.py`,
 `test_rendered_text_check.py`). They run or feed the rows; they were not in the ruling, and this section adds
