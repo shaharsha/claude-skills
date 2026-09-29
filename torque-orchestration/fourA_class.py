@@ -336,19 +336,17 @@ def entry_liveness(repo, ref: str, entries, *, tracked=None, quiet: bool = False
 
 
 def liveness_control(entries) -> bool:
-    """Negative control for entry liveness (§4A.10), run through `entry_liveness` itself: on a tree that holds
-    the stem entry's directory, its register, and matching basenames in other directories, but NO
-    `scripts/rendered_text_*.py` script, the stem entry must be reported dead; with any one such script added, live."""
-    tracked = ["scripts/rendered_text_expected_differences.yml", "scripts/rendered_text_sub/x.py",
-               "scripts/sub/rendered_text_y.py", "helpers/rendered_text_x.py", "helpers/scripts/rendered_text_x.py",
-               "scripts/rendered_text.py", "scripts/rendered_textual.py", "scripts/build_page.py"]
+    """Negative and positive control for entry liveness (§4A.10), run through `entry_liveness` itself and
+    DERIVED from the classification controls so the two cannot drift apart: a tree holding every MUST_MISS
+    path must leave each stem entry dead, and a tree holding any ONE stem must-hit path must leave it live."""
     stems = [e for e in entries if e[0] == "stem"]
-    dead = not entry_liveness(None, "", stems, tracked=tracked, quiet=True)
-    # ...and live on a tree holding any ONE matching script, whichever one (a narrowed stem would miss some).
-    live = all(entry_liveness(None, "", stems, tracked=tracked + [f"scripts/rendered_text_{n}.py"], quiet=True)
-               for n in ("differential", "canaries", "corpus", "real_pages", "a_later_script", ""))
+    misses = [p for p, _ in MUST_MISS]
+    hits = [p for p, _ in MUST_HIT if classify(p, stems)]
+    dead = not entry_liveness(None, "", stems, tracked=misses, quiet=True)
+    live = bool(hits) and all(entry_liveness(None, "", stems, tracked=[h], quiet=True) for h in hits)
     ok = bool(stems) and dead and live
-    print(f"  LIVENESS control (stem entry must be DEAD with no matching script): {'ok' if ok else '🔴 FAILED'}")
+    print(f"  LIVENESS control (stem dead on every must-miss path, live on each stem must-hit alone): "
+          f"{'ok' if ok else '🔴 FAILED'}")
     return ok
 
 
