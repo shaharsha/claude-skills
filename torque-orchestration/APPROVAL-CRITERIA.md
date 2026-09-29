@@ -168,7 +168,7 @@ separately, `verifier_sha256`, which the spec
 "every module whose code decides the verdict": `rendered_text.py`, `as_of_edge.py`, `drawn_text.py`,
 `provenance_gate.py` and `chart_width.py`. The last two were already in the class; this amendment adds the
 first three. Its Chrome job (`text-presence.yml`) is deliberately NOT a required check: its workflow header
-says D55 keeps the required jobs fast, and its comment measures 3m43s. So a PR that weakened the check was
+says D55 keeps the required jobs fast, and its own comment puts the Chrome rows at about four minutes. So a PR that weakened the check was
 not stopped by a required Chrome job. (TOR-2078 is the separate torque ticket for one fast hermetic test in
 the required selection; it is not what this section rules.)
 

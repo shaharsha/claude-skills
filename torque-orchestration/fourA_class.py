@@ -341,7 +341,7 @@ def liveness_control(entries) -> bool:
     `scripts/rendered_text_*.py` script, the stem entry must be reported dead; with any one such script added, live."""
     tracked = ["scripts/rendered_text_expected_differences.yml", "scripts/rendered_text_sub/x.py",
                "scripts/sub/rendered_text_y.py", "helpers/rendered_text_x.py", "helpers/scripts/rendered_text_x.py",
-               "scripts/build_page.py"]
+               "scripts/rendered_text.py", "scripts/rendered_textual.py", "scripts/build_page.py"]
     stems = [e for e in entries if e[0] == "stem"]
     dead = not entry_liveness(None, "", stems, tracked=tracked, quiet=True)
     # ...and live on a tree holding any ONE matching script, whichever one (a narrowed stem would miss some).
