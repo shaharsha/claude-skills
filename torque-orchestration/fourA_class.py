@@ -278,6 +278,16 @@ MUST_MISS = [
 ]
 
 
+def derived_misses(entries) -> list[tuple[str, str]]:
+    """Paths derived from the entries themselves that no entry may admit: every must-hit relocated under
+    backup/, and, for every directory-prefix entry, a sibling directory that merely starts with its name."""
+    out = [("backup/" + p, f"a relocated copy of {why}") for p, why in MUST_HIT]
+    for kind, pat, label in entries:
+        if kind == "prefix" and pat.endswith("/"):
+            out.append((pat.rstrip("/") + "_legacy/x.py", f"a sibling directory that starts with {pat}"))
+    return out
+
+
 def run_controls(entries) -> bool:
     ok = True
     print("  MUST-HIT controls:")
@@ -295,7 +305,7 @@ def run_controls(entries) -> bool:
     print("  MUST-MISS controls:")
     misses = 0
     # Every must-hit path relocated under backup/ is a miss too: no entry may admit a copy of a member.
-    relocated = [("backup/" + p, f"a relocated copy of {why}") for p, why in MUST_HIT]
+    relocated = derived_misses(entries)
     for p, why in MUST_MISS + relocated:
         lab = classify(p, entries)
         if lab is None:
@@ -347,7 +357,7 @@ def liveness_control(entries) -> bool:
     the entry classifies must leave that entry live."""
     # Every must-hit path, relocated under a `backup/` directory, is also a miss: no entry may resolve a copy
     # of one of its own members that lives somewhere else (catches `in`, `endswith` and slash-less resolvers).
-    misses = [p for p, _ in MUST_MISS] + ["backup/" + p for p, _ in MUST_HIT]
+    misses = [p for p, _ in MUST_MISS] + [p for p, _ in derived_misses(entries)]
     ok = bool(entries)
     for e in entries:
         if entry_liveness(None, "", [e], tracked=misses, quiet=True):
