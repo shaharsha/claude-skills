@@ -350,6 +350,16 @@ def liveness_control(entries) -> bool:
             if not entry_liveness(None, "", [e], tracked=[h], quiet=True):
                 print(f"    🔴 liveness: {e[2]} is DEAD on a tree holding its own must-hit {h}")
                 ok = False
+    # A mixed tree: every must-hit EXCEPT the stem's, so the stem entry is dead while the others are live.  The
+    # verdict over all entries together must be "not all live" (a later live entry must not hide an earlier dead one).
+    mixed = misses + [p for p, _ in MUST_HIT if not any(classify(p, [e]) for e in entries if e[0] == "stem")]
+    stems = [e for e in entries if e[0] == "stem"]
+    # The stem FIRST (dead), then only entries that a must-hit can make live, so a later live entry is the last
+    # word: an accumulator that lets it overwrite the earlier failure would report all-live.
+    liveable = [e for e in entries if e[0] != "stem" and any(classify(p, [e]) for p, _ in MUST_HIT)]
+    if stems and entry_liveness(None, "", stems + liveable, tracked=mixed, quiet=True):
+        print("    🔴 liveness: a tree with the stem dead and the other entries live was reported all-live")
+        ok = False
     print(f"  LIVENESS control (each entry dead on every must-miss path, live on each of its must-hits alone): "
           f"{'ok' if ok else '🔴 FAILED'}")
     return ok
