@@ -202,8 +202,11 @@ which stays UNRULED (§4A.6, §4A.9). The matcher keeps must-miss controls on th
 and on name-prefix twins of each member (`rendered_text_helpers.py`, `as_of_edge_legacy.py`,
 `drawn_text_utils.py`, `artifacts_helpers.py`), on each FILE entry's own name plus a suffix (`.py.bak`,
 `.yml.bak`; a prefix entry would admit these, an exact-file entry does not), on the near-stem names `scripts/rendered_text.py`,
-`rendered_textual.py`, `rendered_text_readme.md`, a `scripts/sub/` file and the register's `.yaml` spelling,
-and on a neighbouring workflow, so a change that widened any entry turns the self-test red.
+`rendered_textual.py`, `rendered_text_readme.md`, a `scripts/sub/` file, a `scripts/rendered_text_sub/` directory and the
+register's `.yaml` spelling,
+and on a neighbouring workflow, so a change that widened any entry turns the self-test red. The stem entry also
+has must-hit controls for all four existing `scripts/rendered_text_*.py` files and for a name not yet written, so
+narrowing it to a list of files turns the self-test red as well.
 
 ⚠️ **Named and NOT added, so the next reader does not assume they are covered.** `text-presence.yml`'s own
 PR path filter (24 paths at `8fd16403`) also lists `api/services/page_kit_identity.py`,
