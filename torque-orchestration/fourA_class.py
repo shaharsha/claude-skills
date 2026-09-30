@@ -10,8 +10,8 @@ orchestration-local; that is TOR-1160's remaining ask, not this file's claim.
 
 Class entries are transcribed from APPROVAL-CRITERIA.md §4A as amended by
 §4A.1 (authored_pages, README carve-out), §4A.2 (projector), §4A.8 (slots.py),
-§4A.9 (provenance_gate.py, chart_width.py) and corrected by §4A.6 (publishing is
-a FILE, not a package).
+§4A.9 (provenance_gate.py, chart_width.py), §4A.10 (the text-presence check and
+its publish wiring) and corrected by §4A.6 (publishing is a FILE, not a package).
 
 Usage:
     fourA_class.py --repo <path> --range <base>..<head>
@@ -55,6 +55,22 @@ STATIC_FILE_ENTRIES = [
     # ⚠️ Created by torque #1239; until that merges, entry liveness reports it
     # DEAD on any ref that lacks it.  That is the truthful reading, not a bug.
     "api/services/chart_width.py",
+    # §4A.10 (2026-09-29, Shahar): the rendered text-presence check.  The three
+    # modules whose code decides the verdict (TOR-1724 Part 1 spec §5.5 lists them
+    # with provenance_gate.py and chart_width.py, already above), its register, its
+    # CI workflow, and the one publish door that calls it.  ALL FILE entries:
+    # publishing.py's control_plane neighbours stay unruled.
+    "api/services/rendered_text.py",
+    "api/services/as_of_edge.py",
+    "api/services/drawn_text.py",
+    "scripts/rendered_text_expected_differences.yml",
+    ".github/workflows/text-presence.yml",
+    "api/services/control_plane/artifacts.py",
+]
+# §4A.10: scripts/rendered_text_*.py, directly under scripts/ (no subdirectory).
+# (directory prefix, name prefix, suffix) -- a name-stem entry, not a directory.
+STEM_ENTRIES = [
+    ("scripts/", "rendered_text_", ".py"),
 ]
 # §4A.1: authored_pages/** is in the class EXCEPT **/README.md
 AUTHORED_PREFIX = "authored_pages/"
@@ -119,6 +135,8 @@ def build_entries(repo: Path) -> list[tuple[str, str, str]]:
         entries.append(("prefix", p, f"{p}**"))
     for f in STATIC_FILE_ENTRIES:
         entries.append(("file", f, f))
+    for d, stem, suf in STEM_ENTRIES:
+        entries.append(("stem", (d, stem, suf), f"{d}{stem}*{suf}"))
     entries.append(("authored", AUTHORED_PREFIX, "authored_pages/** (except **/README.md)"))
     # ⚠️ all seven codes are UPPERCASE against lowercase directories:
     # case-normalisation is load-bearing.
@@ -128,12 +146,23 @@ def build_entries(repo: Path) -> list[tuple[str, str, str]]:
     return entries
 
 
+def _stem_match(path: str, pat: tuple[str, str, str]) -> bool:
+    """`<dir><stem>*<suffix>`, with nothing after `<dir>` but the file name."""
+    d, stem, suf = pat
+    if not path.startswith(d):
+        return False
+    name = path[len(d):]
+    return "/" not in name and name.startswith(stem) and name.endswith(suf)
+
+
 def classify(path: str, entries) -> str | None:
     """Return the label of the first class entry `path` matches, else None."""
     for kind, pat, label in entries:
         if kind == "prefix" and path.startswith(pat):
             return label
         if kind == "file" and path == pat:
+            return label
+        if kind == "stem" and _stem_match(path, pat):
             return label
         if kind == "authored" and path.startswith(pat):
             # §4A.1 carve-out: README.md at any depth is NOT a trigger.
@@ -180,6 +209,18 @@ MUST_HIT = [
     ("api/services/slots.py", "slots.py (§4A.8)"),
     ("api/services/control_plane/provenance_gate.py", "provenance_gate.py (§4A.9)"),
     ("api/services/chart_width.py", "chart_width.py (§4A.9)"),
+    ("api/services/rendered_text.py", "rendered_text.py (§4A.10)"),
+    ("api/services/as_of_edge.py", "as_of_edge.py (§4A.10)"),
+    ("api/services/drawn_text.py", "drawn_text.py (§4A.10)"),
+    ("scripts/rendered_text_differential.py", "scripts/rendered_text_*.py (§4A.10)"),
+    ("scripts/rendered_text_canaries.py", "scripts/rendered_text_*.py (§4A.10)"),
+    ("scripts/rendered_text_.py", "the stem's `*` may match nothing (§4A.10)"),
+    ("scripts/rendered_text_corpus.py", "scripts/rendered_text_*.py (§4A.10)"),
+    ("scripts/rendered_text_real_pages.py", "scripts/rendered_text_*.py (§4A.10)"),
+    ("scripts/rendered_text_a_script_not_written_yet.py", "the stem covers scripts added later (§4A.10)"),
+    ("scripts/rendered_text_expected_differences.yml", "the register (§4A.10)"),
+    (".github/workflows/text-presence.yml", "text-presence.yml (§4A.10)"),
+    ("api/services/control_plane/artifacts.py", "artifacts.py, the publish wiring (§4A.10)"),
     ("authored_pages/lr_historical/body.html", "authored_pages non-README"),
     ("api/services/lr/forecast.py", "PRODUCT branch (§4A product control)"),
 ]
@@ -190,11 +231,41 @@ MUST_MISS = [
     ("api/services/control_plane/pages.py", "control_plane is not in the class"),
     ("api/services/control_plane/pins.py", "control_plane is not in the class"),
     ("api/services/control_plane/descriptors.py", "control_plane is not in the class"),
-    ("api/services/control_plane/artifacts.py",
-     "§4A.9 added two FILES, not control_plane/**"),
+    ("api/services/control_plane/publishing_helpers.py",
+     "§4A.10 added artifacts.py as a FILE, not control_plane/**"),
+    ("api/services/control_plane/artifacts_helpers.py",
+     "§4A.10 is an exact FILE entry, not a prefix"),
     ("api/services/control_plane/provenance_gate_helpers.py",
      "§4A.9 is an exact FILE entry, not a prefix"),
     ("api/services/chart_width_legacy.py", "§4A.9 is an exact FILE entry, not a prefix"),
+    ("api/services/control_plane/provenance_gate.py.bak", "§4A.9 exact FILE entry: a prefix entry would admit this"),
+    ("api/services/chart_width.py.bak", "§4A.9 exact FILE entry: a prefix entry would admit this"),
+    ("api/services/lr_legacy/forecast.py", "a prefix entry ends at its slash: lr_legacy/ is not lr/"),
+    ("backup/api/services/as_of_edge.py", "an exact FILE entry is the whole path, not a suffix"),
+    ("backup/api/services/publishing.py", "an exact FILE entry is the whole path, not a suffix"),
+    ("api/services/rendered_text_helpers.py", "§4A.10 is an exact FILE entry, not a prefix"),
+    ("api/services/as_of_edge_legacy.py", "§4A.10 is an exact FILE entry, not a prefix"),
+    ("api/services/drawn_text_utils.py", "§4A.10 is an exact FILE entry, not a prefix"),
+    ("api/services/rendered_text.py.bak", "§4A.10 exact FILE entry: a prefix entry would admit this"),
+    ("api/services/as_of_edge.py.bak", "§4A.10 exact FILE entry: a prefix entry would admit this"),
+    ("api/services/drawn_text.py.bak", "§4A.10 exact FILE entry: a prefix entry would admit this"),
+    ("api/services/control_plane/artifacts.py.bak",
+     "§4A.10 exact FILE entry: a prefix entry would admit this"),
+    ("scripts/rendered_text_expected_differences.yml.bak",
+     "§4A.10 exact FILE entry: a prefix entry would admit this"),
+    (".github/workflows/text-presence.yml.bak",
+     "§4A.10 exact FILE entry: a prefix entry would admit this"),
+    ("scripts/rendered_text_x.py.bak", "§4A.10 stem entry needs the .py suffix at the end"),
+    ("scripts/rendered_text_readme.md", "§4A.10 stem entry needs the .py suffix"),
+    ("scripts/rendered_text.py", "§4A.10 stem is `rendered_text_`, with the underscore"),
+    ("scripts/rendered_textual.py", "§4A.10 stem is `rendered_text_`, not `rendered_text`"),
+    ("scripts/sub/rendered_text_x.py", "§4A.10 stem entry matches directly under scripts/ only"),
+    ("helpers/rendered_text_x.py", "§4A.10 stem is under scripts/ only, not any directory"),
+    ("helpers/scripts/rendered_text_x.py", "§4A.10 stem is the top-level scripts/, not any scripts/ directory"),
+    ("scripts/rendered_text_sub/x.py", "§4A.10 stem matches a file name, not a directory named like one"),
+    ("scripts/rendered_text_expected_differences.yaml", "§4A.10 register is the exact .yml path"),
+    (".github/workflows/text-presence-notes.yml", "§4A.10 workflow is an exact FILE entry"),
+    (".github/workflows/browser-sweep.yml", "a neighbouring workflow is not in the class"),
     ("api/routers/publishing.py", "routers/publishing.py is NOT in any entry"),
     ("api/services/manifest_controls.py", "TOR-1123's instance, still uncovered"),
     ("api/schemas/version_descriptor.py", "schemas are not in the class"),
@@ -207,11 +278,27 @@ MUST_MISS = [
 ]
 
 
+def derived_misses(entries) -> list[tuple[str, str]]:
+    """Paths derived from the entries themselves that no entry may admit: every must-hit relocated under
+    backup/, and, for every directory-prefix entry, a sibling directory that merely starts with its name."""
+    out = [("backup/" + p, f"a relocated copy of {why}") for p, why in MUST_HIT]
+    for kind, pat, label in entries:
+        if kind == "prefix":   # whatever its spelling: an entry that lost its slash must still be caught
+            out.append((pat.rstrip("/") + "_legacy/x.py", f"a sibling directory that starts with {pat}"))
+    return out
+
+
+def derived_hits(entries) -> list[tuple[str, str]]:
+    """A member derived from each directory-prefix entry, with a non-Python name in a subdirectory, so every
+    prefix entry (every product included) has a positive fixture and none is Python-only."""
+    return [(pat + "sub/x.txt", f"a non-Python member of {pat}") for kind, pat, _ in entries if kind == "prefix"]
+
+
 def run_controls(entries) -> bool:
     ok = True
     print("  MUST-HIT controls:")
     hits = 0
-    for p, why in MUST_HIT:
+    for p, why in MUST_HIT + derived_hits(entries):
         lab = classify(p, entries)
         mark = "HIT " if lab else "MISS"
         if lab:
@@ -219,11 +306,13 @@ def run_controls(entries) -> bool:
         else:
             ok = False
         print(f"    {mark}  {p:<48} [{why}]")
-    print(f"    -> MUST-HIT {hits}/{len(MUST_HIT)}")
+    print(f"    -> MUST-HIT {hits}/{len(MUST_HIT) + len(derived_hits(entries))}")
 
     print("  MUST-MISS controls:")
     misses = 0
-    for p, why in MUST_MISS:
+    # Every must-hit path relocated under backup/ is a miss too: no entry may admit a copy of a member.
+    relocated = derived_misses(entries)
+    for p, why in MUST_MISS + relocated:
         lab = classify(p, entries)
         if lab is None:
             misses += 1
@@ -231,28 +320,71 @@ def run_controls(entries) -> bool:
         else:
             ok = False
             print(f"    🔴 HIT (SHOULD MISS) {p} -> {lab}   [{why}]")
-    print(f"    -> MUST-MISS {misses}/{len(MUST_MISS)}")
+    print(f"    -> MUST-MISS {misses}/{len(MUST_MISS) + len(relocated)}")
     return ok
 
 
-def entry_liveness(repo: Path, ref: str, entries) -> bool:
-    """§4A.6's owed structural half: every class entry must resolve to >=1 tracked path."""
-    tracked = tracked_at(repo, ref)
+def _resolved(tracked, kind: str, pat) -> int:
+    """How many tracked paths one class entry resolves to."""
+    if kind == "file":
+        return sum(1 for t in tracked if t == pat)
+    if kind == "stem":
+        return sum(1 for t in tracked if _stem_match(t, pat))
+    if kind == "authored":
+        return sum(1 for t in tracked if t.startswith(pat) and Path(t).name != "README.md")
+    return sum(1 for t in tracked if t.startswith(pat))
+
+
+def entry_liveness(repo, ref: str, entries, *, tracked=None, quiet: bool = False) -> bool:
+    """§4A.6's owed structural half: every class entry must resolve to >=1 tracked path.
+
+    `tracked` replaces the git listing (used by `liveness_control`, which exercises THIS verdict)."""
+    if tracked is None:
+        tracked = tracked_at(repo, ref)
     ok = True
     live = 0
     for kind, pat, label in entries:
-        if kind == "file":
-            n = sum(1 for t in tracked if t == pat)
-        elif kind == "authored":
-            n = sum(1 for t in tracked if t.startswith(pat) and Path(t).name != "README.md")
-        else:
-            n = sum(1 for t in tracked if t.startswith(pat))
+        n = _resolved(tracked, kind, pat)
         if n == 0:
             ok = False
-            print(f"    🔴 DEAD ENTRY (0 tracked paths): {label}")
+            if not quiet:
+                print(f"    🔴 DEAD ENTRY (0 tracked paths): {label}")
         else:
             live += 1
-    print(f"    -> ENTRY LIVENESS {live}/{len(entries)}  (ref {ref[:8]})")
+    if not quiet:
+        print(f"    -> ENTRY LIVENESS {live}/{len(entries)}  (ref {ref[:8]})")
+    return ok
+
+
+def liveness_control(entries) -> bool:
+    """Negative and positive control for entry liveness (§4A.10), run through `entry_liveness` itself and
+    DERIVED from the classification controls so the two cannot drift apart, for EVERY kind of entry: a tree
+    holding every MUST_MISS path must leave each entry dead, and a tree holding any ONE must-hit path that
+    the entry classifies must leave that entry live."""
+    # Every must-hit path, relocated under a `backup/` directory, is also a miss: no entry may resolve a copy
+    # of one of its own members that lives somewhere else (catches `in`, `endswith` and slash-less resolvers).
+    misses = [p for p, _ in MUST_MISS] + [p for p, _ in derived_misses(entries)]
+    ok = bool(entries)
+    for e in entries:
+        if entry_liveness(None, "", [e], tracked=misses, quiet=True):
+            print(f"    🔴 liveness: {e[2]} is LIVE on a tree of only must-miss paths")
+            ok = False
+        for h in (p for p, _ in MUST_HIT + derived_hits(entries) if classify(p, [e])):
+            if not entry_liveness(None, "", [e], tracked=[h], quiet=True):
+                print(f"    🔴 liveness: {e[2]} is DEAD on a tree holding its own must-hit {h}")
+                ok = False
+    # A mixed tree: every must-hit EXCEPT the stem's, so the stem entry is dead while the others are live.  The
+    # verdict over all entries together must be "not all live" (a later live entry must not hide an earlier dead one).
+    mixed = misses + [p for p, _ in MUST_HIT if not any(classify(p, [e]) for e in entries if e[0] == "stem")]
+    stems = [e for e in entries if e[0] == "stem"]
+    # The stem FIRST (dead), then only entries that a must-hit can make live, so a later live entry is the last
+    # word: an accumulator that lets it overwrite the earlier failure would report all-live.
+    liveable = [e for e in entries if e[0] != "stem" and any(classify(p, [e]) for p, _ in MUST_HIT)]
+    if stems and entry_liveness(None, "", stems + liveable, tracked=mixed, quiet=True):
+        print("    🔴 liveness: a tree with the stem dead and the other entries live was reported all-live")
+        ok = False
+    print(f"  LIVENESS control (each entry dead on every must-miss path, live on each of its must-hits alone): "
+          f"{'ok' if ok else '🔴 FAILED'}")
     return ok
 
 
@@ -270,6 +402,8 @@ def main() -> int:
     print(f"CLASS ENTRIES: {len(entries)}   products from COMPANY_ROW: {codes}")
     print("CONTROLS")
     controls_ok = run_controls(entries)
+    # The liveness control tests the matcher itself (not the ref), so its failure blocks range mode too.
+    controls_ok = liveness_control(entries) and controls_ok
     print("ENTRY LIVENESS")
     live_ok = entry_liveness(repo, a.ref, entries)
     if a.self_test:

@@ -145,7 +145,81 @@ api/services/projector/**               ADDED 2026-09-16 — see §4A.2
 api/services/slots.py                   ADDED 2026-09-24 — see §4A.8
 api/services/control_plane/provenance_gate.py   ADDED 2026-09-26 — see §4A.9
 api/services/chart_width.py             ADDED 2026-09-26 — see §4A.9
+api/services/{rendered_text,as_of_edge,drawn_text}.py   ADDED 2026-09-29 — see §4A.10
+scripts/rendered_text_*.py · scripts/rendered_text_expected_differences.yml   ADDED 2026-09-29 — see §4A.10
+.github/workflows/text-presence.yml     ADDED 2026-09-29 — see §4A.10
+api/services/control_plane/artifacts.py ADDED 2026-09-29 — see §4A.10
 ```
+
+### ⚠️ AMENDMENT 2026-09-29 · §4A.10 — THE TEXT-PRESENCE CHECK, AND THE PUBLISH DOOR THAT CALLS IT, JOIN THE MANDATORY CLASS (approved by Shahar)
+
+**Shahar, verbatim, 2026-09-29 (evening): "yes to all four as you recommended. go"**, answering a
+dispatcher message whose item 4 read: "Stricter review for the page-text check: should its files, and the
+ones that wire it into publishing, get the mandatory second (Codex) review, like the two gate files you
+already approved? I recommend yes. Keep its 4-minute browser job non-required, and add one fast test to
+the required checks instead." [The words of item 4 and the date are as relayed to this lane by the
+dispatcher; this lane did not see Shahar's message itself.] The reasoning is the dispatcher's, not his.
+
+The reason is §4A.9's, one layer up. `provenance_gate.py` and `chart_width.py` guard the numbers on a
+published page; the text-presence check (TOR-1724 Part 1) guards the words. Its verdict is what a publish
+either accepts or refuses. The record kept beside the page carries that verdict (`"verdict": "pass"`) and,
+separately, `verifier_sha256`, which the spec
+(`docs/superpowers/specs/2026-09-27-tor1724-part1-text-presence-design.md` §5.5) computes over the sources of
+"every module whose code decides the verdict": `rendered_text.py`, `as_of_edge.py`, `drawn_text.py`,
+`provenance_gate.py` and `chart_width.py`. The last two were already in the class; this amendment adds the
+first three. Its Chrome job (`text-presence.yml`) is deliberately NOT a required check: its workflow header
+says D55 keeps the required jobs fast, and its own comment puts the Chrome rows at about four minutes. So a PR that weakened the check was
+not stopped by a required Chrome job. (TOR-2078 is the separate torque ticket for one fast hermetic test in
+the required selection; it is not what this section rules.)
+
+New members, all verified present on torque `origin/develop` `8ff3b68c0` on 2026-09-29:
+
+```
+api/services/rendered_text.py                      FILE  the harness JS and the Python that reads, splices, compares
+api/services/as_of_edge.py                         FILE  in the hashed set (spec §5.5)
+api/services/drawn_text.py                         FILE  in the hashed set (spec §5.5)
+scripts/rendered_text_*.py                         STEM  directly under scripts/, .py only: 4 files at that ref
+                                                         (canaries, corpus, differential, real_pages)
+scripts/rendered_text_expected_differences.yml     FILE  the register of accepted differences
+.github/workflows/text-presence.yml                FILE  the job that runs the Chrome rows and sweep
+api/services/control_plane/artifacts.py            FILE  the publish wiring
+```
+
+[Every fact about torque in this section (paths, the workflow header and path filter, `artifacts.py`'s history and
+contents) was read from a torque checkout at `origin/develop` `8ff3b68c0` on 2026-09-29, except where a section
+names `8fd16403` (the tip an hour earlier); this repository holds none of them, so a reader here cannot re-check
+them without one.]
+
+⚠️ **`artifacts.py` is the expensive one, and it is stated so the cost is visible.** It is the shared
+artifact door, not a text-check file, and it changes often for other reasons. Measured 2026-09-29 on
+`origin/develop` `8ff3b68c0`, first-parent merge commits since 2026-09-22T21:30Z (per-merge
+`git diff M^1 M`, not `git log -- path`, which over-reports through merges): **12 of 170** merge commits
+touched it (and 0 of the 100 non-merge first-parent commits in the same window). One hour earlier, at
+`8fd16403` and a window opening at 2026-09-22T20:39Z, the same method gave 11 of 170; the twelfth is PR #1409,
+the wiring itself. Each such PR is now route-A mandatory. The ruling's own words include "the ones that wire it
+into publishing". That wiring is now real: `artifacts.py` at `8ff3b68c0` imports `rendered_text` and calls
+`rendered_text.check(`, which it did not at `8fd16403`.
+
+⚠️ **Every entry is an exact FILE entry, or (for `scripts/rendered_text_*.py`) a stem under one directory.
+Each must stay so.** `control_plane/artifacts.py` joining does NOT widen `api/services/control_plane/**`,
+which stays UNRULED (§4A.6, §4A.9). The matcher keeps must-miss controls on the `control_plane/` neighbours
+and on name-prefix twins of each member (`rendered_text_helpers.py`, `as_of_edge_legacy.py`,
+`drawn_text_utils.py`, `artifacts_helpers.py`), on each FILE entry's own name plus a suffix (`.py.bak`,
+`.yml.bak`; a prefix entry would admit these, an exact-file entry does not), on the near-stem names
+`scripts/rendered_text.py`, `rendered_textual.py`, `rendered_text_readme.md`, a `scripts/sub/` file, a `scripts/rendered_text_sub/` directory, a `helpers/` and a
+`helpers/scripts/` copy of the name, and the register's `.yaml` spelling, and on a neighbouring workflow, so a change that widened any entry turns the self-test red. The stem entry also
+has must-hit controls for all four existing `scripts/rendered_text_*.py` files and for a name not yet written, so
+narrowing it to a list of files turns the self-test red as well.
+
+⚠️ **Named and NOT added, so the next reader does not assume they are covered.** `text-presence.yml`'s own
+PR path filter (27 paths at `8ff3b68c0`, the workflow file itself among them) also lists
+`api/services/page_kit_identity.py`, `api/schemas/version_descriptor.py`, `scripts/ci_chrome_no_lcd.sh`, the two
+page-kit assets `torque-runtime.js` and `torque-page.css`, and ten test files (`tests/test_provenance_gate.py`,
+`test_as_of_edge.py`, `test_chart_width.py`, `test_artifact_lane.py`,
+`tests/structure/test_text_presence_path_filter.py`, `test_rendered_text_oracle.py`,
+`test_rendered_text_controls.py`, `test_rendered_text_differential.py`, `test_rendered_text_properties.py`,
+`test_rendered_text_check.py`). They run or feed the rows; they were not in the ruling, and this section adds
+none of them. Whether any should join is Shahar's call.
 
 ### ⚠️ AMENDMENT 2026-09-26 · §4A.9 — `provenance_gate.py` AND `chart_width.py` JOIN THE MANDATORY CLASS (approved by Shahar)
 
@@ -164,9 +238,11 @@ merge on route B.
 ⚠️ **Both are FILE entries, like `publishing.py` and `slots.py`, and must stay files.** Only these two
 join. **The rest of `api/services/control_plane/**` stays UNRULED** (§4A.6) and outside the class. The
 shared matcher (`fourA_class.py`) carries both entries as must-hit controls, and keeps must-miss controls
-on the sibling `control_plane/artifacts.py` and on the name-prefix neighbours
-`control_plane/provenance_gate_helpers.py` and `chart_width_legacy.py`, so a change that widened either
-entry to a prefix or to the directory turns its self-test red.
+on the name-prefix neighbours
+`control_plane/provenance_gate_helpers.py` and `chart_width_legacy.py` (and, from 2026-09-29, on
+`provenance_gate.py.bak` and `chart_width.py.bak`), so a change that widened either entry to a prefix or to
+the directory turns its self-test red. (2026-09-29: `control_plane/artifacts.py`
+was a must-miss control here and is now a must-hit, see §4A.10.)
 
 ⚠️ **`api/services/chart_width.py` is created by #1239 and is NOT on develop until #1239 merges.**
 Measured 2026-09-27: absent at develop `b1f697ef`, present at #1239's head `e155f9a6`. Until then the
@@ -740,6 +816,11 @@ api/services/control_plane/**       TOR-1123's OWN second named instance (`pages
 `control_plane/`) joined the class as FILE entries, approved by Shahar. **The rest of
 `api/services/control_plane/**` is still UNRULED and still Shahar's call**, including `pages.py`,
 `pins.py` and `silver.py` above. The fence above is the 2026-09-18 measurement and is left as written.
+
+🔵 **UPDATED 2026-09-29 — §4A.10. `api/services/control_plane/artifacts.py` is now RULED** as a FILE entry
+(the text-presence check's publish wiring), approved by Shahar. **Every other file under
+`api/services/control_plane/**` except `provenance_gate.py` (§4A.9) is still UNRULED**, including `pages.py`,
+`pins.py` and `silver.py` above.
 
 ⚠️ **Clause 2 of the principle argues AGAINST route A for `publishing.py`, and that is stated because it
 is the unflattering direction.** 19 test files exercise `api.services.publishing` against live Postgres
