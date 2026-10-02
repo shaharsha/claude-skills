@@ -60,7 +60,7 @@ Each links to its own README — what it does, why it exists, install, and the g
 |---|---|
 | [brand-system](skills/brand-system) | A production-grade brand book: 20-section `BRAND.md`, printable PDF sibling, and matched `tokens.css` (Tailwind v4) + `tokens.json` (W3C DTCG). WCAG 2.2 AA audited at authoring time. |
 | [brand-assets](skills/brand-assets) | The mechanical-pixel sibling: vectorize, finalize-svg, rasterize, icon-pack, colour-audit. Bash + Python stdlib. |
-| [image-generation](skills/image-generation) | Logos, icons, mockups, and product shots via OpenAI gpt-image-2 or Gemini Nano Banana 2 / Pro — each prompted in its provider's native grammar. |
+| [image-generation](skills/image-generation) | Logos, icons, mockups, and product shots via OpenAI GPT Image 2.5 (Sunburst for finals, Flare for drafts) or Gemini Nano Banana — each prompted in its provider's native grammar, with native transparent PNGs. |
 | [excalidraw-diagrams](skills/excalidraw-diagrams) | Architecture and flow diagrams on an Excalidraw+ canvas with real tech icons, plus the MCP quirks that silently break a diagram. |
 
 ### Engineering decisions

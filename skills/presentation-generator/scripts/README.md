@@ -142,5 +142,5 @@ Get the key from `~/.claude/projects/-Users-shaharshavit/memory/api-keys.md` →
 For slides with `model: gemini`:
 
 ```bash
-export GEMINI_IMAGE_API_KEY='AQ.Ab8RN...'
+export GEMINI_IMAGE_API_KEY='...'
 ```
