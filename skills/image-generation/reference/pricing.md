@@ -1,102 +1,78 @@
-# Pricing reference (April 2026)
+# Pricing reference (October 2026)
 
-Per-image cost matters because iteration discipline depends on it. Numbers below are list price; batch APIs and tier discounts may apply separately.
+Per-image cost matters because iteration discipline depends on it. List prices; date-sensitive items are marked.
 
-## Per-image cost — head-to-head
+## OpenAI: tokens, not a price list
 
-| Model | 0.5K | 1K / 1024² | 2K | 4K |
-|---|---|---|---|---|
-| Gemini Flash 3.1 | $0.045 | $0.067 | $0.101 | $0.151 |
-| Gemini Pro 3 | n/a | $0.134 | $0.134 | $0.24 |
-| OpenAI gpt-image-2 (low) | n/a | $0.006 | ~$0.021 | ~$0.078 |
-| OpenAI gpt-image-2 (medium) | n/a | $0.053 | ~$0.19 | ~$0.73 |
-| OpenAI gpt-image-2 (high) | n/a | $0.211 | ~$0.75 | ~$2.90 |
+GPT Image 2, 2.5 Flare and 2.5 Sunburst share the same token rates:
 
-`gpt-image-2` pricing scales with pixel count (roughly linearly above 1024²). Constraint: each edge ≤ 3840px, multiples of 16, ratio ≤ 3:1, total pixels 655,360–8,294,400.
+| Token type | Standard | Batch API |
+|---|---|---|
+| Image output | $30 / 1M | $15 / 1M |
+| Image input (references) | $8 / 1M | $4 / 1M |
+| Text input | $5 / 1M | $2.50 / 1M |
 
-At the common fixed sizes, gpt-image-2 pricing:
+Cached input ($2/1M image, $1.25/1M text) applies only through the Responses API image tool. **Per-image cost = output tokens × rate, and output tokens depend on model, quality and size** — OpenAI publishes no per-image table for 2.5 and its calculator doesn't cover 2.5. `scripts/openai-image.sh` prints the real cost of every call from the response's `usage`; sum those lines.
 
-| Quality | 1024×1024 | 1024×1536 (portrait) | 1536×1024 (landscape) |
+Measured 2026-10-02 (1024×1536 unless noted):
+
+| Model + quality | Output tokens | Cost | Latency |
 |---|---|---|---|
-| `low` | $0.006 | $0.005 | $0.005 |
-| `medium` | $0.053 | $0.041 | $0.041 |
-| `high` | $0.211 | $0.165 | $0.165 |
+| Flare `medium` (`--draft`) | 343 | ≈ $0.010 | ~15 s |
+| Flare `medium` 1024×1024 | 439 | ≈ $0.013 | ~10 s |
+| Sunburst `high` | 1,372 | ≈ $0.041 | ~35 s |
+| Sunburst `max` | 5,488 | ≈ $0.165 | ~87 s |
+| Sunburst `max` edit with 1 reference (draft promotion) | 5,488 | ≈ $0.178 | ~85 s |
+| Sunburst `high`, transparent, 1024×1024 | 1,756 | ≈ $0.053 | ~35 s |
+
+Third-party reference points: Artificial Analysis lists Sunburst/Flare at `max` at ~$0.21 per 1024×1024 (the same as gpt-image-2 `high`). The token ladder at 2048×1152 is low 157 · medium 367 · high 1,413 · xhigh 2,511 · max 5,650 — larger sizes scale up roughly with pixel count.
+
+## Gemini: per image
+
+| Model | 512 | 1K | 2K | 4K |
+|---|---|---|---|---|
+| `gemini-3.1-flash-lite-image` | — | $0.034 | — | — |
+| `gemini-3.1-flash-image` | $0.045 | $0.067 | $0.101 | $0.151 |
+| `gemini-3-pro-image` | — | $0.134 | $0.134 | $0.24 |
+
+Batch halves these. `gemini-2.5-flash-image` reached its shutdown date 2026-10-02; Imagen models shut down 2026-08-17.
 
 ## Common scenarios — total cost calculator
 
-### Logo project (exploration → final)
+### Logo project (explore → promote)
 
 | Step | Calls | Model | Cost each | Subtotal |
 |---|---|---|---|---|
-| Initial exploration | 8 | Gemini Flash 1K | $0.067 | $0.54 |
-| Refinement (3 directions × 3 variants) | 9 | Gemini Flash 1K | $0.067 | $0.60 |
-| Final delivery with wordmark text | 3 | gpt-image-2 high 1024² | $0.211 | $0.63 |
-| Transparent PNG post-process (local rembg) | 3 | rembg | $0 | $0 |
-| **Total** | 20 | | | **$1.77** |
+| Explore directions | 6 | Flare `--draft` 1024² | $0.013 | $0.08 |
+| Second round on the favourite | 3 | Flare `--draft` | $0.013 | $0.04 |
+| Promote the pick | 1-2 | Sunburst `max` edit | ~$0.20 | $0.20-0.40 |
+| Transparent version | 1 | Sunburst `max` edit, `--background transparent` | ~$0.20 | $0.20 |
+| **Total** | | | | **≈ $0.50-0.75** |
 
-Why this routing: exploration on Flash is cheap; gpt-image-2 wins on text fidelity for the wordmark; rembg handles transparency locally.
+### UI mockup (5 mobile screens)
 
-### UI mockup project (mobile + desktop, 5 screens)
+| Step | Calls | Model | Subtotal |
+|---|---|---|---|
+| Layout drafts | 5-10 | Flare `--draft` 1024×1536 | $0.05-0.10 |
+| Finals | 5 | Sunburst `max` 1024×1536 | ~$0.85 |
+| Fix-up edits | 2-3 | Sunburst `max` edit | ~$0.55 |
+| **Total** | | | **≈ $1.50** |
 
-| Step | Calls | Model | Cost each | Subtotal |
-|---|---|---|---|---|
-| Wireframe sketches | 5 | Gemini Flash 1K | $0.067 | $0.34 |
-| Hi-fi 5 mobile screens (1024×1536 portrait) | 5 | gpt-image-2 high | $0.165 | $0.83 |
-| Hi-fi 1 desktop dashboard (2560×1440) | 1 | gpt-image-2 high | ~$0.40 | $0.40 |
-| 1 device-framed marketing shot | 1 | gpt-image-2 high 1536×1024 | $0.165 | $0.17 |
-| **Total** | 12 | | | **$1.74** |
+### Marketing hero set (3 images, 2048×1152)
 
-gpt-image-2's small-text fidelity at 2K+ is the main reason to use it for hi-fi UI over Gemini Pro 4K — same quality on composition, better on button labels / table cells.
+| Step | Calls | Model | Subtotal |
+|---|---|---|---|
+| Drafts | 6 | Flare `--draft` | ~$0.10 |
+| Finals | 3 | Sunburst `max` (~5,650 tokens each) | ~$0.51 |
+| **Total** | | | **≈ $0.60** |
 
-### Marketing hero set (3 hero images for landing page, no prominent human face)
+### Product catalog cutouts (10 products, transparent)
 
-| Step | Calls | Model | Cost each | Subtotal |
-|---|---|---|---|---|
-| Concept exploration | 6 | Gemini Flash 2K | $0.101 | $0.61 |
-| Final hero × 3 variants (1536×1024) | 3 | gpt-image-2 high | $0.165 | $0.50 |
-| **Total** | 9 | | | **$1.11** |
-
-For a hero with a prominent human face, swap the final to Gemini Pro 4K at $0.24 × 3 = $0.72 (total $1.33).
-
-### Icon set (24 icons, consistent style, transparent)
-
-| Step | Calls | Model | Cost each | Subtotal |
-|---|---|---|---|---|
-| Style locking (3 candidate 3×2 grids) | 3 | Gemini Flash 2K | $0.101 | $0.30 |
-| Final 24 icons as 4 grids of 6 each | 4 | gpt-image-2 high 1024² | $0.211 | $0.84 |
-| Split grids into 24 individual PNGs (local, Pillow) | 24 | local crop | $0 | $0 |
-| rembg (birefnet-general) per icon | 24 | rembg | $0 | $0 |
-| **Total** | 7 API calls + local | | | **$1.14** |
-
-Or: if the icons are pure monochrome line art, skip rembg and use ImageMagick color-key (`magick in.png -fuzz 5% -transparent white out.png`) — instantaneous, mathematically perfect alpha.
-
-### Product photography set (10 product shots)
-
-| Step | Calls | Model | Cost each | Subtotal |
-|---|---|---|---|---|
-| Lighting/angle exploration on 1 product | 5 | Gemini Flash 2K | $0.101 | $0.51 |
-| Final 10 product shots with humans/models | 10 | Gemini Pro 4K | $0.24 | $2.40 |
-| **Total** | 15 | | | **$2.91** |
-
-If the products are objects only (no human model), swap the final to gpt-image-2 high 1536×1024 at $0.165: 10 × $0.165 = $1.65 (total $2.16).
-
-### Transparent catalog cutout set (10 products)
-
-| Step | Calls | Model | Cost each | Subtotal |
-|---|---|---|---|---|
-| Generate on pure-white backdrop | 10 | gpt-image-2 high 1024² | $0.211 | $2.11 |
-| rembg (birefnet-general) per product | 10 | rembg | $0 | $0 |
-| **Total** | 10 | | | **$2.11** |
+10 × Sunburst `max` 1024² with `--background transparent` ≈ $2.10, plus a few re-dos. No rembg step.
 
 ### Portrait / founder headshot (photoreal)
 
-| Step | Calls | Model | Cost each | Subtotal |
-|---|---|---|---|---|
-| Pose / framing exploration | 3 | Gemini Flash 2K | $0.101 | $0.30 |
-| Final 4K portrait | 1 | Gemini Pro 4K | $0.24 | $0.24 |
-| **Total** | 4 | | | **$0.54** |
-
-Don't use gpt-image-2 for a hero portrait unless the image also has prominent in-image text.
+2 × Sunburst `max` + 2 × Gemini Pro 4K for a side-by-side ≈ $0.90.
 
 ## Batch API discounts
 
@@ -107,12 +83,13 @@ For interactive design work (the main use of this skill), batch APIs are useless
 
 ## Cost discipline rules
 
-1. **Default to Flash for first 3 calls** when exploring. Only promote to gpt-image-2 high once you've locked the prompt structure.
-2. **Don't use gpt-image-2 high for exploration.** $0.21/call × 30 explorations = $6.30 vs $2 on Flash.
-3. **Don't use 4K until the final.** For gpt-image-2 the jump from 1024² to 2K costs ~4×; from 2K to 4K another ~4×.
+1. **Explore on Flare `--draft`.** ~1¢ a call: 30 explorations cost ~$0.40, against ~$6 at Sunburst `max`.
+2. **Promote, don't re-roll.** One Sunburst `max` edit of the chosen draft (~$0.18) keeps the look the user picked; re-running the prompt at `max` buys a different image.
+3. **Don't go above 2560×1440 until the final.** Output tokens scale with pixels, and above 2560×1440 is "experimental".
 4. **Don't iterate >3 times on the same image.** Drift compounds, cost compounds. Rewrite the prompt from scratch.
-5. **For transparent PNGs, prefer local post-process.** rembg + birefnet-general is free and produces excellent edges. Only reach for `remove.bg` API ($0.20/image) on premium hero assets with genuinely hard edges (wispy hair, glass, fur).
-6. **For 24+ assets in the same style, prefer grid-based generation** on gpt-image-2 high — its prompt adherence and reasoning lock style consistency across grid cells better than independent calls.
+5. **Transparent PNGs are native on 2.5** — no extra step or cost. rembg stays the free option for Gemini outputs or existing images.
+6. **For 24+ assets in the same style, prefer grid-based generation** on Sunburst `max` (6-8 per grid) — one call locks the style across cells better than independent calls.
+7. **Never `quality=auto`** — identical calls land on different token budgets, so cost becomes unpredictable.
 
 ## Sanity-check budgets per asset type
 

@@ -7,13 +7,16 @@
 # Options:
 #   --prompt "..."             (required) prompt text
 #   --output path.png          (required) output file path
-#   --model flash|pro|<full-id> default: flash
-#                              flash = gemini-3.1-flash-image-preview
-#                              pro   = gemini-3-pro-image-preview
+#   --model flash|pro|lite|<full-id> default: flash
+#                              flash = gemini-3.1-flash-image      (Nano Banana 2)
+#                              pro   = gemini-3-pro-image          (Nano Banana Pro)
+#                              lite  = gemini-3.1-flash-lite-image (Nano Banana 2 Lite, 1K only, ~$0.034)
+#                              The *-preview IDs were shut down 2026-06-25; passing one is an error.
 #   --aspect 1:1|16:9|9:16|4:5|5:4|4:3|3:4|3:2|2:3|21:9|1:4|4:1|1:8|8:1
-#                              default: 1:1
-#   --size 0.5K|1K|2K|4K       default: 1K (Pro doesn't support 0.5K)
-#   --thinking minimal|high    default: minimal (Flash only; Pro thinks by default)
+#                              default: 1:1 (Pro: the 10 standard ratios only, no 1:4/4:1/1:8/8:1)
+#   --size 512|1K|2K|4K        default: 1K ("0.5K" is accepted as an alias for 512; Pro has no 512;
+#                              Lite is 1K only)
+#   --thinking minimal|high    default: minimal (Flash and Lite; Pro always thinks, no level)
 #   --include-thoughts         (flag) include reasoning trace in response
 #   --search                   (flag) enable Google Search grounding
 #   --ref path.png             (repeatable, up to 14)
@@ -57,10 +60,17 @@ done
 
 # Resolve model alias
 case "$MODEL_ALIAS" in
-  flash) MODEL="gemini-3.1-flash-image-preview" ;;
-  pro)   MODEL="gemini-3-pro-image-preview" ;;
+  flash) MODEL="gemini-3.1-flash-image" ;;
+  pro)   MODEL="gemini-3-pro-image" ;;
+  lite)  MODEL="gemini-3.1-flash-lite-image" ;;
   *)     MODEL="$MODEL_ALIAS" ;;
 esac
+if [[ "$MODEL" == *-preview ]]; then
+  echo "Error: $MODEL was shut down on 2026-06-25. Use flash (gemini-3.1-flash-image) or pro (gemini-3-pro-image)." >&2
+  exit 1
+fi
+# The API spells the smallest size "512" ("0.5K" now returns 400).
+[[ "$SIZE" == "0.5K" ]] && SIZE="512"
 
 mkdir -p "$(dirname "$OUTPUT")"
 
@@ -95,7 +105,7 @@ GEN_CONFIG=$(jq -n \
   --arg size "$SIZE" \
   '{responseModalities: ["IMAGE"], imageConfig: {aspectRatio: $aspect, imageSize: $size}}')
 
-if [[ "$MODEL" == "gemini-3.1-flash-image-preview" ]]; then
+if [[ "$MODEL" == gemini-3.1-flash-image || "$MODEL" == gemini-3.1-flash-lite-image ]]; then
   GEN_CONFIG=$(jq \
     --arg level "$THINKING" \
     --argjson include "$INCLUDE_THOUGHTS" \

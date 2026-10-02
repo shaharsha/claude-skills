@@ -1,6 +1,6 @@
 ---
 name: image-generation
-description: Generate logos, icons, UI mockups, hero images, product shots, and other design assets using OpenAI gpt-image-2 or Google Gemini (Nano Banana 2 Flash, Nano Banana Pro). Use whenever the user asks to create, design, generate, mock up, render, or illustrate a visual asset, or asks for image prompt engineering. Picks the right model for the job, writes a model-specific prompt following the official prompting rules of each provider, calls the API, and saves the PNG to disk.
+description: Generate logos, icons, UI mockups, hero images, product shots, and other design assets using OpenAI GPT Image 2.5 (Sunburst, Flare) or Google Gemini (Nano Banana 2, Nano Banana Pro, Nano Banana 2 Lite). Use whenever the user asks to create, design, generate, mock up, render, or illustrate a visual asset, needs a transparent PNG, or asks for image prompt engineering. Picks the right model and quality for the job, writes a model-specific prompt following the official prompting rules of each provider, calls the API, and saves the image to disk.
 allowed-tools: Read, Write, Bash, WebFetch
 ---
 
@@ -10,56 +10,73 @@ Two model families, three jobs.
 
 ## Models covered
 
-| Model ID | Family | Strengths | Default cost |
+| Model ID | Family | Use for | Cost (1024×1536, measured 2026-10-02) |
 |---|---|---|---|
-| `gpt-image-2` | OpenAI (ChatGPT Images 2.0) | **New default.** Best-in-class text in any language, near-total prompt adherence, agentic layout reasoning, neutral color accuracy, fast | $0.006 / $0.053 / $0.211 per 1024² at low/medium/high |
-| `gemini-3.1-flash-image-preview` | Google (Nano Banana 2 Flash) | Cheap throwaway exploration; strongest 0.5K preview tier | ~$0.07 / image (1K) |
-| `gemini-3-pro-image-preview` | Google (Nano Banana Pro) | Hyper-realistic portraiture & cinematic lifestyle; character-lock across up to 14 reference images; multi-turn chat editing | ~$0.13 / image (2K), ~$0.24 / image (4K) |
+| `gpt-image-2.5-sunburst` | OpenAI (Images 2.5, 2026-09-08) | **Default.** Anything that may ship. #1 on every major leaderboard (generation, editing, text rendering, portraits) | `max` ≈ $0.165, ~90 s · `high` ≈ $0.041, ~35 s |
+| `gpt-image-2.5-flare` | OpenAI (Images 2.5) | **Quick drafts** — exploring directions, testing a prompt. Same prompts as Sunburst, ~2× faster | `medium` ≈ $0.01, ~15 s |
+| `gemini-3-pro-image` | Google (Nano Banana Pro) | Close-up natural skin/hair when votes and reviewers disagree; up to 14 references | $0.134 (1K/2K) · $0.24 (4K) |
+| `gemini-3.1-flash-image` | Google (Nano Banana 2) | Extreme aspect ratios (1:4…8:1), image-search grounding | $0.067 (1K) |
+| `gemini-3.1-flash-lite-image` | Google (Nano Banana 2 Lite) | Cheapest Gemini exploration; 1K only, returns JPEG | $0.034 |
 
-**Released 2026-04-21:** `gpt-image-2` took #1 across every Image Arena category by +242 points over Nano Banana 2 — the largest gap in Arena history. It dethrones `gpt-image-1.5` everywhere except native transparent backgrounds, which we now handle via `scripts/rembg.sh`.
+`gpt-image-2` still works (not deprecated) but is a step below both 2.5 models. The Gemini `*-preview` IDs and all Imagen models are **shut down** — the scripts refuse them.
 
 ## The three jobs of this skill
 
-1. **Pick the model** for the asset and brief. See [reference/model-selection.md](reference/model-selection.md).
-2. **Write the prompt** following the model's house rules. **The two providers have OPPOSITE prompt structures** — get this wrong and outputs degrade badly:
-   - **OpenAI gpt-image-2** wants labeled segments / line breaks, accepts negative prompts, and rewards explicit constraints. Read [reference/openai-gpt-image-2.md](reference/openai-gpt-image-2.md).
-   - **Gemini** wants narrative paragraphs, **negative phrasing actively backfires** (rewrite "no people" as "empty street"), aspect ratio goes in `imageConfig` not in the prompt text. Read [reference/gemini-image.md](reference/gemini-image.md).
+1. **Pick the model and the quality** for the asset. See [reference/model-selection.md](reference/model-selection.md).
+2. **Write the prompt** following the model's house rules. **The two providers want opposite things:**
+   - **OpenAI GPT Image 2.5** wants labeled sections (scene / subject / details / constraints), exact text in quotes, and accepts inline exclusions ("no extra text, no watermarks"). Read [reference/openai-gpt-image.md](reference/openai-gpt-image.md).
+   - **Gemini** wants narrative paragraphs, **negative phrasing backfires** (rewrite "no people" as "empty street"), aspect ratio goes in `imageConfig`. Read [reference/gemini-image.md](reference/gemini-image.md).
 3. **Run the API** via the bundled scripts. See [scripts/README.md](scripts/README.md).
+
+## Quality on 2.5 — the trap
+
+**The 2.5 quality ladder was re-cut.** At the same size, 2.5 `high` buys about the output tokens of gpt-image-2 `medium`; 2.5 `max` buys what gpt-image-2 `high` did (measured: Sunburst 1024×1536 `high` = 1,372 output tokens, `max` = 5,488). Copying "quality=high" from old habits silently ships a medium-detail image.
+
+**Promote drafts with an edit, not a re-roll.** Every fresh generation composes a new image, so re-running an approved draft's prompt at `max` gives you a *different* picture. Instead, pass the chosen draft as a reference to a Sunburst `max` edit that changes only rendering quality and preserves everything else. Verified 2026-10-02: a Flare `medium` poster promoted this way kept its composition, people, poses, colors and Hebrew text, and gained texture and detail ($0.18, 85 s).
+
+| Stage | Model + quality | Why |
+|---|---|---|
+| Explore directions, test a prompt | Flare `medium` (`--draft`) | ~1¢ and ~15 s, so 6 directions cost less than one final |
+| Promote the chosen draft | Sunburst `max` edit with `--ref <draft>` and the promote prompt in `reference/openai-gpt-image.md` | Keeps the look the user picked, adds full detail |
+| A final straight from a locked prompt | Sunburst `max` (the script default) | Full detail; ~90 s, ~$0.17 |
+| Sunburst when time matters more than fine detail | Sunburst `high` | A quarter of the tokens, ~35 s |
+
+Never use `auto` — it lands on different budgets for identical calls.
 
 ## Default model selection — the 30-second rule
 
 ```
-Hyper-realistic human face or cinematic portrait?
-  YES → Gemini Pro 4K.
+Exploring directions / "a few quick options" / testing whether a prompt works?
+  YES → Flare medium (--draft). Promote the user's pick with a Sunburst max edit (--ref <draft>).
   NO  ↓
 
-Need 5+ reference images for character-lock / brand-consistent variants?
-  YES → Gemini Pro (up to 14 refs with role-assignment).
+Close-up photoreal human face where skin texture is the point?
+  YES → Sunburst max first (it leads the portrait votes); if skin reads over-sharpened on zoom,
+        compare with gemini-3-pro-image 4K and let the human pick.
   NO  ↓
 
-Throwaway exploration where you'll discard half the outputs?
-  YES → Gemini Flash 1K or 2K. Promote the keeper to gpt-image-2 high.
+Ultra-wide/tall banner beyond 3:1 (1:4, 4:1, 1:8, 8:1)?
+  YES → gemini-3.1-flash-image (GPT Image caps at 3:1).
   NO  ↓
 
-Everything else → gpt-image-2 at quality=high.
-  └── Transparent PNG needed? Generate on flat-white backdrop + scripts/rembg.sh.
-       See reference/transparent-backgrounds.md.
+Everything else → Sunburst at quality=max.
+  └── Transparent PNG? Native: --background transparent (png/webp). No rembg needed.
 ```
 
 Full decision tree per asset type: [reference/model-selection.md](reference/model-selection.md).
 
 ## Workflow per request
 
-1. **Confirm scope.** Ask the user for: asset type, brand context, color/style direction, target aspect ratio + size, and where to save. If the user gave you all of this in the request, skip and proceed.
-2. **Pick the model.** Use the rule above; explain your choice in one sentence.
-3. **Read the model-specific reference** — `reference/openai-gpt-image-2.md` or `reference/gemini-image.md`. Do not skip this. The two models have opposite prompt structures and you will get it wrong from memory.
-4. **If the final asset needs a transparent background, read [reference/transparent-backgrounds.md](reference/transparent-backgrounds.md).** The two-step generate + `rembg` pipeline replaces native transparent mode.
-5. **Open the matching template** in `templates/` for the asset type. Fill in the placeholders.
-6. **For Hebrew or RTL text in the image, read [reference/hebrew-rtl.md](reference/hebrew-rtl.md) FIRST.** Defaults changed with gpt-image-2 — most Hebrew work no longer needs the two-stage composite workflow.
-7. **Show the prompt to the user before calling the API** unless they explicitly asked you to "just do it." One round of prompt review prevents most expensive re-generations.
-8. **Run the script.** Save to `./generated-images/<descriptive-name>.png` in the cwd unless told otherwise. Create the directory if needed.
-9. **Read the saved image with the Read tool — Claude is multimodal and will actually see the pixels.** This is the most important step in the loop. Critique the result against the brief: did the composition land? Is text legible? Are colors accurate? Did anything mangle (extra fingers, broken letterforms, wrong product geometry)? Spot the issues *before* the user has to.
-10. **Show the user.** Use `open <path>` on macOS to surface the file, summarize what you see (good and bad), and propose either (a) ship it, (b) iterate with a specific change, or (c) regenerate from a revised prompt.
+1. **Confirm scope.** Asset type, brand context, color/style direction, target aspect ratio + size, where to save. If the request already says, proceed.
+2. **Pick model and quality.** Use the rule above; explain the choice in one sentence.
+3. **Read the model-specific reference** — `reference/openai-gpt-image.md` or `reference/gemini-image.md`. Don't write from memory: the two providers want opposite prompt structures, and the 2.5 guidance changed several gpt-image-2 habits.
+4. **Transparent background?** On GPT Image 2.5 it's native. Read [reference/transparent-backgrounds.md](reference/transparent-backgrounds.md) only for Gemini outputs or for cutting an existing image.
+5. **Open the matching template** in `templates/` and fill in the placeholders.
+6. **Hebrew or RTL text in the image?** Read [reference/hebrew-rtl.md](reference/hebrew-rtl.md) first.
+7. **Show the prompt to the user before calling the API** unless they said "just do it." One prompt review prevents most expensive regenerations.
+8. **Run the script.** Save to `./generated-images/<descriptive-name>.png` in the cwd unless told otherwise. The OpenAI script prints latency, output tokens and cost per call — keep the running total.
+9. **Read the saved image with the Read tool — Claude is multimodal and will actually see the pixels.** Critique against the brief: composition, text spelled exactly as quoted and appearing once, colors, defects (mangled letters, extra fingers, broken geometry), grain in smooth areas. Spot issues before the user has to.
+10. **Show the user.** `open <path>`, summarize what you see (good and bad), and propose ship / iterate with a specific change / rewrite.
 
 ## Templates by asset type
 
@@ -76,90 +93,64 @@ For verbatim worked examples, see [examples.md](examples.md).
 
 ## API keys and dependencies
 
-**API keys** live in `~/.claude/projects/-Users-shaharshavit/memory/api-keys.md`. Sections:
+**API keys** live in `~/.claude/projects/-Users-shaharshavit/memory/api-keys.md`:
 
 - **OpenAI (image generation)** → export as `OPENAI_IMAGE_API_KEY` before calling `scripts/openai-image.sh`
 - **Google AI Studio (image generation)** → export as `GEMINI_IMAGE_API_KEY` before calling `scripts/gemini-image.sh`
 
-These keys are *image-gen scoped*. Do not reuse them for chat completions or embeddings.
+These keys are image-gen scoped. Don't reuse them for chat or embeddings, and never print them — load them into a variable, don't echo.
 
-**Local tools** (for the transparent-bg pipeline):
-
-- `rembg` CLI — install once: `pip install "rembg[cli]" onnxruntime`. First run of each model downloads weights (~200-400MB) to `~/.u2net/`.
-- `ImageMagick` (optional but recommended for pure line art) — `brew install imagemagick`.
+**Local tools** (only for cutting Gemini outputs or existing images): `rembg` (`pip install "rembg[cli]" onnxruntime`), optionally ImageMagick.
 
 ## Output convention
 
 - Default save location: `./generated-images/<descriptive-name>.png` in the current working directory.
-- Filename: descriptive kebab-case based on the brief (e.g., `logo-agentleh-monochrome-v1.png`, `hero-saas-landing-blue-v2.png`).
-- Versioning: append `-v1`, `-v2`, etc. when iterating. Never overwrite a previous generation without asking.
-- Transparent outputs: append `-transparent` after the version (e.g., `logo-agentleh-v1-transparent.png`).
-- Use `open <path>` on macOS to show the user immediately after generation.
+- Filename: descriptive kebab-case (`logo-agentleh-monochrome-v1.png`); drafts get `-draft-N` (`logo-agentleh-draft-3.png`).
+- Versioning: append `-v1`, `-v2`, … when iterating. Never overwrite a previous generation without asking.
+- Transparent outputs: append `-transparent` after the version.
+- `open <path>` on macOS to show the user right after generation.
 
 ## Iteration patterns — autonomous "iterate until perfect" loop
 
-The agent's job is to drive the image to "good enough to ship" *before* asking the user. Run this loop:
+The agent's job is to drive the image to "good enough to ship" *before* asking the user:
 
 ```
 1. Generate (script call)
-2. Read the saved file with the Read tool — Claude is multimodal and SEES the pixels
-3. Self-critique against the brief. Score yourself honestly:
-   - Did the composition land? (subject placement, framing, balance)
-   - Is text legible and spelled correctly? (especially logos/UI labels)
-   - Are colors right? (hex match, palette adherence)
-   - Any defects? (mangled letterforms, extra fingers, broken geometry,
-     wrong product details, drifted style)
-   - Is the brief actually satisfied?
+2. Read the saved file with the Read tool — Claude SEES the pixels
+3. Self-critique against the brief:
+   - Composition landed? (placement, framing, balance, hierarchy, negative space)
+   - Text spelled exactly as quoted, each string appearing once, legible?
+   - Colors right? (hex match, palette adherence)
+   - Defects? (mangled letterforms, extra fingers, broken geometry, grain in skies/backdrops)
+   - Brief actually satisfied?
 4. Decide:
-   - SHIP → it meets the brief; show the user, summarize, suggest next steps
-   - EDIT → specific localized fix needed; call the script again with --ref
-            and a "change X, keep Y" prompt (Gemini) or /edits (OpenAI).
-            Re-enter the loop.
-   - REWRITE → fundamental prompt issue; rewrite the prompt from scratch
-              (don't tweak). Re-enter the loop.
-5. Stop conditions (one or both must be checked every iteration):
-   - 5 iterations consumed → stop and consult the user before continuing
-   - $3 spent on this single asset → stop and consult the user
-   - The result is shippable → stop, present, await user verdict
+   - SHIP    → meets the brief; show the user
+   - EDIT    → one localized fix; edit with --ref <previous> and a prompt that says
+               "change only X" and RESTATES every earlier fix and preserved detail
+   - REWRITE → fundamental prompt issue; rewrite from scratch, don't tweak
+5. Stop when: 5 iterations used, or $3 spent on this asset (sum the script's cost lines),
+   or it's shippable.
 ```
 
-**The user is the final judge — but Claude is the first judge.** Don't show the user a flawed result and ask "is this good?" Show them after you've already verified it meets the brief, OR show them with an explicit critique ("the wordmark is off, I'm about to fix it — here's the plan") so they know you saw what they'd see.
+**The user is the final judge — but Claude is the first judge.** Don't show a flawed result and ask "is this good?" Show it after you've verified it meets the brief, or with your critique attached ("the wordmark kerning is off; fixing it next").
 
 ### Mechanics by model
 
-- **gpt-image-2 iteration** uses `/v1/images/edits` via `scripts/openai-image.sh --ref <previous>.png`. Every reference is processed at high fidelity automatically — no flag needed. For multi-reference brand work, pass logo + color swatch + typography + moodboard simultaneously. Repeat the preserve-list on every iteration to prevent drift.
-- **Gemini multi-turn editing** is the workhorse for refinement when you're already on Gemini. `scripts/gemini-image.sh --ref <previous-output> --prompt "change X, keep Y"`. Always include the explicit preservation clause: *"Keep everything else in the image exactly the same — composition, lighting, colors, all other elements."*
-- **Drift discipline.** After 3 unsuccessful iterations on the *same* image, switch strategy — don't keep tweaking. Either rewrite the base prompt or change models (Flash → gpt-image-2 for quality lift; gpt-image-2 → Gemini Pro for photoreal portraiture).
-- **Budget tracking.** Roughly track spend in your head (see [reference/pricing.md](reference/pricing.md)). 5 gpt-image-2 high calls at 1024² = $1.05. If you blow past the asset's reasonable budget, surface it to the user before continuing.
+- **GPT Image 2.5 edits** go through `/v1/images/edits` via `scripts/openai-image.sh --ref <image>` (up to 16 references). Without a mask the whole canvas is regenerated each turn, so drift accumulates — **restate every earlier change and every preserved detail on each turn**, not just the new request. If a region must stay pixel-identical, composite the approved edit into the original instead of hoping the prompt holds it.
+- **Gemini multi-turn editing:** `scripts/gemini-image.sh --ref <previous-output> --prompt "change X, keep Y"`, always ending with "Keep everything else in the image exactly the same — composition, lighting, colors, all other elements."
+- **Drift discipline.** After 3 unsuccessful iterations on the same image, switch strategy: rewrite the base prompt, or change models.
 
 ## Pricing
 
-Per-image cost matters for iteration discipline. Quick reference:
+GPT Image 2, 2.5 Flare and 2.5 Sunburst share token rates ($30/1M image output, $8/1M image input, $5/1M text input; Batch API halves them), but tokens per image differ by quality, size and model — so read the cost the script prints rather than assuming. Gemini is priced per image. Full table and worked scenarios: [reference/pricing.md](reference/pricing.md).
 
-- gpt-image-2 at quality=low (1024²): $0.006
-- gpt-image-2 at quality=medium (1024²): $0.053
-- gpt-image-2 at quality=high (1024²): $0.211
-- gpt-image-2 at quality=high (portrait/landscape 1024×1536): $0.165
-- Gemini Flash 1K: $0.067
-- Gemini Pro 2K: $0.134
-- Gemini Pro 4K: $0.24
+## Hebrew / RTL
 
-Full table + worked scenarios: [reference/pricing.md](reference/pricing.md).
-
-## Hebrew / RTL — not a weak spot anymore
-
-gpt-image-2 renders Hebrew, Arabic, CJK, Hindi, and Bengali materially better than any prior model. The two-stage "generate text-free + composite text" workflow is no longer the default — try gpt-image-2 first.
-
-Fall back to the composite workflow only when:
-- Brand requires a specific licensed Hebrew typeface the model can't match.
-- The text block is longer than ~30-40 characters per line.
-- The first attempt shows mangled glyphs (rare, but iterate-or-fallback).
-
-See [reference/hebrew-rtl.md](reference/hebrew-rtl.md) for both paths.
+Sunburst and Flare both rendered a Hebrew headline correctly in a 2026-10-02 test (right letters, right order, right direction, alongside English and a badge). Try direct rendering first; fall back to the composite workflow for long Hebrew lines or a required licensed typeface. Hebrew is **not** on Google's best-performance language list for Gemini image models — prefer GPT Image for Hebrew text. See [reference/hebrew-rtl.md](reference/hebrew-rtl.md).
 
 ## When NOT to use this skill
 
-- The user wants editable vector files (SVG with paths). These models output rasters; "vector-like" is aesthetic only. Use the `brand-assets` skill or Illustrator / Figma for SVG work.
-- The user wants exact pixel-perfect dimensions outside the supported sizes (e.g., 1200×630 OG image). Generate at the closest supported aspect, then crop/resize in post.
-- The user wants a real-world photo of a specific real person. Both providers refuse / produce inaccurate likenesses, and there are policy issues.
-- The user is asking for general "AI art" without a design brief — point them to the consumer Gemini app or ChatGPT instead; this skill is tuned for design work.
+- The user wants editable vector files (SVG with paths). These models output rasters; use the `brand-assets` skill, or Recraft V4.1 Vector (`recraftv4_1_vector`, native SVG, not wired into these scripts).
+- The user wants exact pixel dimensions outside the supported sizes (e.g. 1200×630). Generate at the closest supported aspect, then crop/resize.
+- The user wants a real-world photo of a specific real person. Both providers refuse or produce inaccurate likenesses, and there are policy issues.
+- The user wants general "AI art" without a design brief — point them to ChatGPT or the Gemini app; this skill is tuned for design work.

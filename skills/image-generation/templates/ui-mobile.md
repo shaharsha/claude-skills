@@ -1,6 +1,6 @@
 # Mobile UI mockup template
 
-**Default model:** `gpt-image-2` at `quality=high` for hi-fi — best-in-class small-text rendering keeps button labels, headlines, and status-bar elements legible. Gemini Flash for wireframes/concepts. Gemini Pro only when the UI is anchored by a photoreal human subject (e.g. a photo hero in the top half).
+**Default model:** `gpt-image-2.5-sunburst` at `quality=max` (the script default) for hi-fi - best-in-class small-text rendering keeps button labels, headlines, and status-bar elements legible (on 2.5, `high` is only about old gpt-image-2 `medium` and smears small glyphs). `gpt-image-2.5-flare` at `medium` (`--draft`) for exploring layouts; Gemini Flash or Lite for lo-fi wireframes. Gemini Pro only when the UI is anchored by a photoreal human subject (e.g. a photo hero in the top half).
 
 ## Required inputs
 
@@ -10,9 +10,9 @@
 - Style direction (clean minimal / brutalist / playful / corporate)
 - Color palette (primary + neutral grays, hex codes)
 - Real content for headlines/labels (avoid lorem ipsum — name actual copy)
-- Language — gpt-image-2 handles Hebrew/Arabic/CJK directly; see [../reference/hebrew-rtl.md](../reference/hebrew-rtl.md) for nuances.
+- Language — GPT Image 2.5 handles Hebrew/Arabic/CJK directly; see [../reference/hebrew-rtl.md](../reference/hebrew-rtl.md) for nuances.
 
-## gpt-image-2 variant (labeled, shipped-product language) — DEFAULT
+## GPT Image 2.5 variant (labeled, shipped-product language) — DEFAULT
 
 ```
 BACKGROUND: A realistic, shipped mobile app screen — not a design sketch.
@@ -30,11 +30,12 @@ Style: [SPECIFIC — e.g., "clean minimal, [FONT] typography, 16pt body,
 Device frame: [e.g., "iPhone 15 Pro natural titanium bezel, photographed
 straight on"].
 
-CONSTRAINTS: Realistic content, no Lorem Ipsum. Shipped-product
+CONSTRAINTS: Realistic content, no Lorem Ipsum. Render every quoted
+string verbatim, each exactly once; no other text. Shipped-product
 appearance. No extra graphics outside the device frame. No watermark.
 ```
 
-**Run with:** `--quality high --size 1024x1536` (portrait).
+**Run with:** `--size 1024x1536` (portrait; Sunburst `max` ≈ $0.165). Explore with `--draft` (≈ 1¢), then promote the chosen screen with a Sunburst `max` edit: `--ref screen-draft.png --size 1024x1536` and the promote prompt from [../reference/openai-gpt-image.md](../reference/openai-gpt-image.md), listing every quoted string in its preserve clause.
 
 ## Gemini Flash variant (wireframe / exploration)
 
@@ -46,13 +47,13 @@ No color, no photography, no typography beyond labels. Inside a simple
 unstyled phone outline.
 ```
 
-**Run with:** `--model gemini-3.1-flash-image-preview --aspect 9:16 --size 1K`.
+**Run with:** `--model flash --aspect 9:16 --size 1K` (`gemini-3.1-flash-image`) or `--model lite` (cheapest, 1K only, JPEG).
 
 ## Filled example — onboarding screen
 
 **Brief:** Onboarding screen for "Field & Flour" bakery loyalty app. Hero illustration of a baguette + pastries top half, headline "Welcome to Field & Flour", body "Earn a free pastry with every 5 visits.", primary button "Get Started", "Already a member? Sign in" link below.
 
-**gpt-image-2 prompt:**
+**GPT Image 2.5 prompt:**
 ```
 BACKGROUND: A realistic, shipped mobile app screen — not a design sketch.
 
@@ -74,21 +75,22 @@ Style: warm cream background #F3EAD3, generous whitespace, 16pt body text.
 Device frame: iPhone 15 Pro natural titanium bezel, photographed straight on.
 
 CONSTRAINTS: Realistic content, no Lorem Ipsum. Render all text exactly
-as specified above (verbatim). No extra graphics outside the device frame.
-No watermark.
+as specified above (verbatim), each string exactly once. No other text.
+No extra graphics outside the device frame. No watermark.
 ```
 
-**Run with:** `--quality high --size 1024x1536`.
+**Run with:** `--size 1024x1536` (Sunburst `max`, the default).
 
 ## Hebrew/RTL UI — default is direct now
 
-gpt-image-2 renders Hebrew labels, headlines, and buttons directly in most cases. Write the prompt in English, quote Hebrew strings literally, and add an RTL layout clause:
+Sunburst (`high`/`max`) and Flare `medium` rendered Hebrew correctly in a 2026-10-02 test, so render directly first and still check every string letter by letter (final forms ם ן ץ ף ך especially). Write the prompt in English, quote Hebrew strings literally, and add an RTL layout clause:
 
 ```
-[Standard gpt-image-2 prompt]. The UI is in Hebrew, right-to-left. The
+[Standard GPT Image 2.5 prompt]. The UI is in Hebrew, right-to-left. The
 headline reads "ברוכים הבאים" (Hebrew, RTL, Heebo Bold). The primary
 button reads "התחל כאן" (Hebrew, RTL). Navigation back arrow is on the
-right side. All icons mirrored appropriately for RTL.
+right side. All icons mirrored appropriately for RTL. Each quoted string
+appears exactly once; no other text.
 ```
 
 See [../reference/hebrew-rtl.md](../reference/hebrew-rtl.md) for the full rules + fallback to two-stage composite if the direct approach fails (rare now).

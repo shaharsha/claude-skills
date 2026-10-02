@@ -1,6 +1,6 @@
 # Dashboard / Web UI mockup template
 
-**Default model:** `gpt-image-2` at `quality=high` at custom resolutions up to 2560×1440. Best text rendering for dense tables, KPI cards, chart axis labels; agentic reasoning handles multi-region layouts. For 4K retina masters (3840×2160), gpt-image-2 still works (within the 3:1 ratio cap). Use Gemini Pro 4K only if the dashboard has a prominent photoreal hero image embedded.
+**Default model:** `gpt-image-2.5-sunburst` at `quality=max` (the script default) at custom resolutions up to 2560×1440. Best text rendering for dense tables, KPI cards, chart axis labels, and layout/hierarchy is where 2.5 improved most. Don't drop to `high` for dense text: on 2.5 it is only about old gpt-image-2 `medium`. For 4K retina masters (3840×2160), Sunburst still works, but OpenAI labels everything above 2560×1440 "experimental". Explore layouts with `gpt-image-2.5-flare` at `medium` (`--draft`). Use Gemini Pro 4K only if the dashboard has a prominent photoreal hero image embedded.
 
 ## Required inputs
 
@@ -11,7 +11,7 @@
 - Font family direction (Inter / system sans / etc.)
 - Dark mode or light mode
 
-## gpt-image-2 variant (labeled, shipped-product language) — DEFAULT
+## GPT Image 2.5 variant (labeled, shipped-product language) — DEFAULT
 
 ```
 BACKGROUND: A shipped, production-grade web dashboard UI.
@@ -33,16 +33,17 @@ subtle soft shadows on cards, 8px rounded corners, Inter font family"].
 Color: primary [HEX], neutral grays [HEX] and [HEX], accents [HEX].
 
 CONSTRAINTS: Realistic content, no Lorem Ipsum. Render all text exactly
-as specified above (verbatim). No watermark. [ASPECT RATIO].
+as specified above (verbatim), each string exactly once. No other text.
+No watermark. [ASPECT RATIO].
 ```
 
-**Run with:** `--quality high --size 2560x1440` (standard hi-fi) or `--size 3840x2160` (4K master). For portrait aspect like mobile dashboards, use `1024x1536`.
+**Run with:** `--size 2560x1440` (standard hi-fi) or `--size 3840x2160` (4K master, experimental). For portrait aspect like mobile dashboards, use `1024x1536`. Sunburst `max` is the default, so no `--quality` flag. Draft with `--draft` at the same size, then promote the chosen layout with a Sunburst `max` edit (`--ref dashboard-draft.png`, same `--size`, promote prompt from [../reference/openai-gpt-image.md](../reference/openai-gpt-image.md)). The script prints the actual cost per call.
 
 ## Filled example — analytics dashboard
 
 **Brief:** "MetricsCo" SaaS analytics dashboard. Overview screen with active users / MRR / uptime KPIs, a weekly traffic chart, customer table.
 
-**gpt-image-2 prompt:**
+**GPT Image 2.5 prompt:**
 ```
 BACKGROUND: A shipped, production-grade web dashboard UI.
 
@@ -69,28 +70,30 @@ subtle soft shadows on cards, 8px rounded corners, Inter font family.
 Primary #0B5FFF, neutral grays #F5F7FA and #1A1F36.
 
 CONSTRAINTS: Realistic content, no Lorem Ipsum. Render all text exactly
-as specified above (verbatim). No watermark. 16:9 aspect.
+as specified above (verbatim), each string exactly once. No other text.
+No watermark. 16:9 aspect.
 ```
 
-**Run with:** `--quality high --size 2560x1440`.
+**Run with:** `--size 2560x1440` (Sunburst `max`, the default).
 
 ## Hebrew / RTL dashboard — default is direct
 
-gpt-image-2 handles RTL dashboards directly. Specify RTL layout + quote Hebrew strings:
+GPT Image 2.5 handles RTL dashboards directly (Hebrew rendered correctly on Sunburst `high`/`max` and Flare `medium` in a 2026-10-02 test). Still check every label letter by letter - final forms ם ן ץ ף ך especially. Specify RTL layout + quote Hebrew strings:
 
 ```
 [Standard prompt]. The entire UI is in Hebrew, right-to-left: sidebar on
 the right, content area on the left. Nav item labels quoted:
 "סקירה" (Overview, active), "משתמשים", "הכנסות", "דוחות", "אינטגרציות",
-"הגדרות". Heebo font. All KPI metrics in Hebrew.
+"הגדרות". Heebo font. All KPI metrics in Hebrew. Each quoted label appears
+exactly once; no other text.
 ```
 
 See [../reference/hebrew-rtl.md](../reference/hebrew-rtl.md) for nuances.
 
 ## Tips
 
-- **Don't try to fit too many regions.** A 6-region dashboard (sidebar + header + 3 KPI cards + chart + table + footer) is still the upper limit even on gpt-image-2. More regions, and each label degrades.
+- **Don't try to fit too many regions.** A 6-region dashboard (sidebar + header + 3 KPI cards + chart + table + footer) is still the upper limit even on Sunburst. More regions, and each label degrades.
 - **Real numbers matter.** "12,847" is far more believable than "12,000" or "X,XXX." Specify them.
 - **Specify font family.** "Inter," "system sans-serif," "Helvetica Neue" all render distinctly.
 - **For dark mode**, specify the background hex (e.g., `#0F1419`) and surface hex (e.g., `#1A1F2E`) explicitly.
-- **At 2560×1440 and above**, gpt-image-2 outputs are slightly more variable — if a pass doesn't land, reroll once before rewriting the prompt.
+- **Above 2560×1440** OpenAI calls 2.5 output "experimental" and results are more variable - if a pass doesn't land, reroll once before rewriting the prompt.

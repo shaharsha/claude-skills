@@ -1,8 +1,23 @@
 # Transparent backgrounds
 
-`gpt-image-2` does not support `background=transparent`. `gpt-image-1.5` did — the skill no longer uses it. This file describes the two-step pipeline that replaces native transparent output.
+**On GPT Image 2.5 (Sunburst and Flare), transparency is native.** Pass `--background transparent` with `--output-format png` (or webp) and the API returns an RGBA image — verified 2026-10-02 on Sunburst (alpha 0-254, a real cutout). No backdrop prompt, no post-processing. On `gpt-image-2` the same flag is a preview feature reported to fail intermittently; prefer a 2.5 model.
 
-**The pipeline:** generate on a clean monochrome backdrop → run `rembg` → done. Empirically (see [../examples.md](../examples.md)), this produces cleaner edges than native transparent mode ever did, especially for fine line art.
+```bash
+./scripts/openai-image.sh --background transparent --output-format png --size 1024x1024 \
+  --prompt "...isolated object, no shadow..." --output generated-images/mug-v1-transparent.png
+```
+
+Prompt it as an isolated object ("isolated object, no drop shadow, no contact shadow") so nothing semi-opaque hangs around the subject. Then **check the edges**: composite the result onto a dark and a light backdrop and Read both before shipping.
+
+**App icons:** Apple rejects App Store icons (the 1024×1024 marketing icon) that contain transparency. Ship the transparent PNG for Android/web and a copy flattened onto a solid color for iOS:
+`magick icon-transparent.png -background "#F4EBDD" -alpha remove -alpha off icon-ios.png`
+
+## When the pipeline below still applies
+
+Use generate-on-a-flat-backdrop → cut out only when:
+- the image came from **Gemini** (no transparent output on any Nano Banana model),
+- you're cutting an **existing** image (a photo, an earlier opaque generation),
+- the asset is **pure 2-color line art**, where an ImageMagick color key gives mathematically perfect alpha from any source.
 
 ## The decision tree
 

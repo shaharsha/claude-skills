@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Agent skills by Shahar Shavit for Claude Code, Codex, Cursor, and other Agent-Skills-compatible harnesses",
-    "version": "1.9.0"
+    "version": "1.10.0"
   },
   "plugins": [
     {
@@ -57,7 +57,7 @@
     },
     {
       "name": "brand-and-visuals",
-      "description": "Author production-grade brand books, run logo / favicon / icon-pack pipelines, generate AI imagery via gpt-image-2 and Gemini Nano Banana, and build architecture / flow / system diagrams in Excalidraw",
+      "description": "Author production-grade brand books, run logo / favicon / icon-pack pipelines, generate AI imagery via GPT Image 2.5 (Sunburst, Flare) and Gemini Nano Banana, and build architecture / flow / system diagrams in Excalidraw",
       "source": "./",
       "strict": false,
       "skills": [

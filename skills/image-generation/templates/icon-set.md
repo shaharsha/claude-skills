@@ -1,6 +1,6 @@
 # Icon set prompt template
 
-**Default model:** `gpt-image-2` at `quality=high` for finals (prompt adherence + reasoning keep all icons stylistically locked in a single grid call). Gemini Flash for exploration only.
+**Default model:** `gpt-image-2.5-sunburst` at `quality=max` (the script default) for finals (prompt adherence keeps all icons stylistically locked in a single grid call). `gpt-image-2.5-flare` at `medium` (`--draft`) for exploration; Gemini Lite (`--model lite`) is an alternative cheap tier.
 
 ## Required inputs
 
@@ -15,7 +15,7 @@
 
 Generate the entire set in one image as a grid, then slice client-side.
 
-### gpt-image-2 variant
+### GPT Image 2.5 variant
 
 ```
 BACKGROUND: Plain white background, no texture, no shadow.
@@ -37,7 +37,7 @@ CONSTRAINTS: No overlap between tiles. No text labels. No extra decorative
 elements. Monochrome [COLOR] on plain white. No watermark.
 ```
 
-**Run with:** `--quality high --size 1024x1024` (for ≤6 icons) or `--size 2048x1152` (for a wider grid).
+**Run with:** `--size 1024x1024` (for ≤6 icons) or `--size 2048x1152` (for a wider grid). Sunburst `max` is the default; add `--draft` while exploring styles. Promote the chosen draft grid with a Sunburst `max` edit (`--ref grid-draft.png`, same `--size`, promote prompt from [../reference/openai-gpt-image.md](../reference/openai-gpt-image.md)) rather than re-rolling.
 
 ### Gemini Flash variant (exploration only)
 
@@ -48,13 +48,13 @@ black stroke, rounded caps, no fill, 30% padding, centered, consistent
 optical weight. Flat 2D vector aesthetic.
 ```
 
-**Run with:** `--model gemini-3.1-flash-image-preview --aspect 1:1 --size 1K`.
+**Run with:** `--model flash --aspect 1:1 --size 1K` (`gemini-3.1-flash-image`) or `--model lite` (1K only, JPEG, $0.034).
 
 ## Strategy B — multi-turn, one icon per image
 
 Use when you need clean isolated PNGs (e.g., for an iOS app icon set).
 
-1. Generate the **first icon** with the full style description (gpt-image-2 high).
+1. Generate the **first icon** with the full style description (Sunburst `max`).
 2. For each subsequent icon, attach the first as a reference via `/edits`:
    ```
    In the exact same style as the attached reference icon (same stroke
@@ -62,23 +62,25 @@ Use when you need clean isolated PNGs (e.g., for an iOS app icon set).
    [NEXT SUBJECT]. Isolated on pure white background, centered, 30% padding.
    No text, no watermark.
    ```
-3. gpt-image-2 processes every reference at high fidelity automatically — no flag needed.
+3. GPT Image 2.5 processes every reference at high fidelity automatically - no flag needed.
 
 **Run with:** `--ref path/to/first-icon.png` for each follow-up call.
 
-## Strategy C — transparent PNGs (post-process)
+## Strategy C — transparent PNGs
 
-Generate with Strategy A or B on white background, then transparency-process each icon:
+**Native on GPT Image 2.5 (default):** run Strategy A or B with `--background transparent --output-format png` (or `webp`) and say "Transparent background, no drop shadow" in CONSTRAINTS instead of "plain white". No post-processing needed. Check edges on a dark and a light backdrop before shipping.
 
-**For pure monochrome line art (recommended):** ImageMagick color-key — mathematically perfect alpha, instantaneous.
+**For pure monochrome line art from any source (e.g. an existing white-background grid):** ImageMagick color-key - mathematically perfect alpha, instantaneous.
 ```bash
 magick icon.png -fuzz 5% -transparent white icon-transparent.png
 ```
 
-**For colored or textured icons:** `scripts/rembg.sh`.
+**For colored or textured icons from Gemini, or cutting existing images:** `scripts/rembg.sh`.
 ```bash
 ./scripts/rembg.sh --input icon.png --output icon-transparent.png
 ```
+
+**iOS app icons:** Apple rejects 1024×1024 App Store icons with transparency. Ship a flattened (opaque) copy for iOS, e.g. `magick icon.png -background "#FFFFFF" -alpha remove -alpha off icon-ios.png`.
 
 See [../reference/transparent-backgrounds.md](../reference/transparent-backgrounds.md) for the decision tree.
 
@@ -86,7 +88,7 @@ See [../reference/transparent-backgrounds.md](../reference/transparent-backgroun
 
 **Brief:** Home, user, settings, search, bell, cart. 2px black stroke, rounded caps, 3×2 grid.
 
-**gpt-image-2 prompt:**
+**GPT Image 2.5 prompt:**
 ```
 BACKGROUND: Plain white background, no texture, no shadow.
 
@@ -109,11 +111,11 @@ CONSTRAINTS: No overlap between tiles. No text labels. No extra decorative
 elements. Monochrome black on plain white. No watermark.
 ```
 
-**Run with:** `--quality high --size 1024x1024`.
+**Run with:** `--size 1024x1024` (Sunburst `max`, ≈ $0.21).
 
 ## Tips
 
-- For more than 12 icons, split into multiple grid calls of 6-8 icons each. Density above ~12 icons per grid degrades individual icon quality even on gpt-image-2.
+- For more than 12 icons, split into multiple grid calls of 6-8 icons each. Density above ~12 icons per grid degrades individual icon quality even on Sunburst.
 - For final delivery, vectorize the raster output via the `brand-assets` skill (or Illustrator Image Trace, VectorizerAI) — these models output rasters, "vector-like" is aesthetic only.
 - Slice grids client-side with ImageMagick or Pillow:
   ```bash

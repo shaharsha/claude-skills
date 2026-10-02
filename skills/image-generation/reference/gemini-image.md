@@ -1,14 +1,17 @@
 # Google Gemini image models — operational reference
 
-Read this file before writing any prompt for `gemini-3.1-flash-image-preview` or `gemini-3-pro-image-preview`. Sources: Google AI image-generation docs (primary), Vertex AI docs, Google Cloud "Ultimate prompting guide for Nano Banana," DeepMind model cards.
+Read this file before writing any prompt for a Gemini image model (`gemini-3.1-flash-image`, `gemini-3-pro-image`, `gemini-3.1-flash-lite-image`). Sources: Google AI image-generation docs (primary), Vertex AI docs, Google Cloud "Ultimate prompting guide for Nano Banana," DeepMind model cards.
 
 ## API surface
 
 - **Endpoint:** `POST https://generativelanguage.googleapis.com/v1beta/models/{MODEL_ID}:generateContent`
 - **Auth:** `x-goog-api-key: $GEMINI_IMAGE_API_KEY`
 - **Model IDs:**
-  - `gemini-3.1-flash-image-preview` (Nano Banana 2 Flash)
-  - `gemini-3-pro-image-preview` (Nano Banana Pro)
+  - `gemini-3.1-flash-image` (Nano Banana 2) — GA 2026-05-28
+  - `gemini-3-pro-image` (Nano Banana Pro) — GA 2026-05-28
+  - `gemini-3.1-flash-lite-image` (Nano Banana 2 Lite) — GA 2026-06-30; 1K only, returns JPEG, ~4 s, $0.034; not built for multi-reference or multi-turn editing
+
+  **Status changes (2026):** the `*-preview` IDs were shut down 2026-06-25 (the script refuses them); all Imagen models shut down 2026-08-17; `gemini-2.5-flash-image` reached shutdown 2026-10-02. Google now recommends its Interactions API, but `generateContent` on `v1beta` with `imageConfig` still works (verified 2026-10-02: 16:9 at 1K returned 1376×768). Thinking is always on; Flash and Lite accept `thinkingLevel` minimal/high, Pro has no level.
 
 The bundled `scripts/gemini-image.sh` wraps this. See [../scripts/README.md](../scripts/README.md).
 
@@ -53,7 +56,7 @@ With thinking mode (Flash only — Pro has thinking on by default):
 
 **Critical gotchas:**
 - `imageSize` value uses **uppercase K**: `"2K"` works, `"2k"` is rejected.
-- `aspectRatio` MUST be set in `imageConfig`. **Putting "16:9" in the prompt text is ignored or produces inconsistent results.**
+- `aspectRatio` MUST be set in `imageConfig` — that is what controls the output shape. Google's own examples now also end the prose with "Aspect ratio 16:9."; repeating it in the text is harmless, but never rely on the text alone.
 - Output is always PNG, returned as base64 in `inline_data`. There is no URL-returning mode and no JPEG/WebP output mode.
 - For multi-turn raw REST, you MUST echo `thought_signature` from the previous turn's response into the next turn's parts, or the call fails. The Python SDK's chat object handles this automatically.
 
@@ -64,17 +67,17 @@ With thinking mode (Flash only — Pro has thinking on by default):
 | Knowledge cutoff | Jan 2025 | Jan 2025 |
 | Input token limit | 131,072 | 65,536 |
 | Output token limit | 32,768 | 32,768 |
-| Reference images | up to 14 (10 obj + 4 char) | up to 14 (6 obj + 5 char) |
-| Resolutions | 0.5K, 1K (default), 2K, 4K | 1K (default), 2K, 4K |
+| Reference images | up to 14 (10 objects + 4 characters) | up to 14 (6 objects + 5 characters + 3 style; 5 at high fidelity) |
+| Resolutions | 512, 1K (default), 2K, 4K — the API spells it `512`; `0.5K` now returns 400 | 1K (default), 2K, 4K |
 | Aspect ratios | 1:1, 1:4, 4:1, 1:8, 8:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9 | Same minus extreme (1:4, 4:1, 1:8, 8:1) |
 | Thinking mode | controllable (`minimal`/`high`) | on by default, not user-tunable |
 | Google Search grounding | web + image search | web only |
 | Character consistency | Good | Up to 5 people |
-| Cost / image | $0.045 (0.5K) - $0.151 (4K) | $0.134 (1K-2K) - $0.24 (4K) |
+| Cost / image | $0.045 (512) - $0.151 (4K) | $0.134 (1K-2K) - $0.24 (4K) |
 | SynthID watermark | always on | always on |
 
 **Pick Pro when:** brand-critical final · 4K · text-heavy · multi-character (≤5 people) · reasoning-heavy composition · multi-language (non-RTL).
-**Pick Flash when:** exploration · high volume · 0.5K thumbnails · extreme aspect (1:4, 8:1) · image-search grounding · explicit `thinkingLevel: minimal` cost control.
+**Pick Flash when:** exploration · high volume · 512 thumbnails · extreme aspect (1:4, 8:1) · image-search grounding · explicit `thinkingLevel: minimal` cost control.
 
 ## Prompt structure — house rules
 
@@ -194,7 +197,7 @@ Pro is the best-in-class model for text in images — ~94% character accuracy on
 
 ### Hebrew / Arabic / RTL
 
-**Known weak spot.** See [hebrew-rtl.md](hebrew-rtl.md). Default to a two-stage workflow (text-free image + composite text in post). Don't put Hebrew text in the Gemini prompt for production output.
+**Known weak spot.** Hebrew is not on Google's best-performance language list for these models. Put Hebrew text on GPT Image 2.5 instead; if the image must come from Gemini, use the two-stage workflow (text-free image + composite text). Google's own tip for any in-image text: generate the text first, then ask for the image with that text. See [hebrew-rtl.md](hebrew-rtl.md).
 
 ## Output controls
 
@@ -230,7 +233,7 @@ Pro is the best-in-class model for text in images — ~94% character accuracy on
 
 | Model | Resolution | Per-image cost |
 |---|---|---|
-| Flash 3.1 | 0.5K | $0.045 |
+| Flash 3.1 | 512 | $0.045 |
 | Flash 3.1 | 1K | $0.067 |
 | Flash 3.1 | 2K | $0.101 |
 | Flash 3.1 | 4K | $0.151 |
@@ -242,15 +245,15 @@ Token rates: Flash $0.50/M input · $60/M output. Pro $2/M input · $120/M outpu
 
 **Batch API** ≈ 50% off, 24h turnaround. Use for high-volume non-interactive jobs.
 
-**No free tier** for these preview models.
+**No free tier** for these models. Batch halves the price.
 
 ## Failure modes
 
 1. **No transparent backgrounds.** Generate on white, post-process.
 2. **Negative prompts backfire.** Use positive framing only.
 3. **Small text fidelity degrades** (<16pt rendered). Compose small text in post.
-4. **Arabic/Hebrew RTL shaping is unreliable.** Use Pro + text-free workflow + composite. See [hebrew-rtl.md](hebrew-rtl.md).
-5. **Aspect ratio in prompt text ignored.** Use `imageConfig.aspectRatio` only.
+4. **Arabic/Hebrew RTL shaping is unreliable** (Hebrew isn't on the best-performance list). Put Hebrew text on GPT Image 2.5, or use the text-free + composite workflow. See [hebrew-rtl.md](hebrew-rtl.md).
+5. **Aspect ratio comes from `imageConfig.aspectRatio`.** Text in the prompt doesn't set it.
 6. **Character consistency drifts past 5 people** (Pro's documented limit).
 7. **Grammar in translations can break** on long passages. For translated marketing copy, translate manually and quote the final text.
 8. **Complex blending artifacts** when 14 references are packed with conflicting styles. Choose references that complement.
