@@ -1,6 +1,6 @@
 # claude-skills
 
-Agent skills by [@shaharsha](https://github.com/shaharsha) - 20 production-grade [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills) that work in Claude Code, claude.ai, Codex, Cursor, and any other harness that reads the SKILL.md format.
+Agent skills by [@shaharsha](https://github.com/shaharsha) - 22 production-grade [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills) that work in Claude Code, claude.ai, Codex, Cursor, and any other harness that reads the SKILL.md format.
 
 MIT licensed. Built day-to-day; battle-tested in real projects.
 
@@ -15,10 +15,10 @@ MIT licensed. Built day-to-day; battle-tested in real projects.
 /plugin install shaharsha-skills@shaharsha-skills
 ```
 
-This installs all 20 skills as one plugin. Or pick a subset:
+This installs all 22 skills as one plugin. Or pick a subset:
 
 ```bash
-/plugin install documents-and-decks@shaharsha-skills    # gdoc-sync + gslides-sync + gsheets + presentation-generator + narrating-pptx + deck-to-video + self-presenting-decks
+/plugin install documents-and-decks@shaharsha-skills    # gdoc-sync + gslides-sync + gsheets + presentation-generator + elevenlabs-tts + narrating-pptx + deck-to-video + self-presenting-decks
 /plugin install brand-and-visuals@shaharsha-skills      # brand-system + brand-assets + image-generation + excalidraw-diagrams
 /plugin install engineering-decisions@shaharsha-skills  # tech-design-doc + codex-review
 /plugin install building-agents@shaharsha-skills        # prompt-engineer + writing-project-instructions + working-with-other-sessions
@@ -49,6 +49,7 @@ Each links to its own README — what it does, why it exists, install, and the g
 | [gslides-sync](skills/gslides-sync) | The same shape for `.pptx` → an existing Google Slides: native `pageObjectId` links, scaled images, RTL per text shape. |
 | [gsheets](skills/gsheets) | Full Sheets API v4 CLI — cells, tabs, freeze/resize/merge, header styling, filters, banding, conditional formatting, plus a raw `batchUpdate` escape hatch. |
 | [presentation-generator](skills/presentation-generator) | 16:9 PDF + PPTX decks where every slide is a custom AI-rendered image. Style locks globally; composition varies per slide. |
+| [elevenlabs-tts](skills/elevenlabs-tts) | Speech with ElevenLabs Eleven v4 in any language — v4 audio-tag direction, consistent 429-safe batches, a speech-to-text check that no tag was read aloud, and forced-alignment timings for subtitles. |
 | [narrating-pptx](skills/narrating-pptx) | Per-slide ElevenLabs narration embedded in a pptx, with autoplay authored by real PowerPoint — the one method that doesn't corrupt the file. |
 | [deck-to-video](skills/deck-to-video) | Slides + narration → a self-playing mp4 with a progress bar, countdown, and slide counter, baked with PIL because ffmpeg's animated `drawbox` silently renders full. |
 | [self-presenting-decks](skills/self-presenting-decks) | The orchestration map over the whole chain, plus the update matrix for what to rebuild when something changes. |
@@ -96,9 +97,9 @@ A few of these are designed to work together:
 - `brand-system` (the document) and `brand-assets` (the pixels) are siblings - run both for a complete brand rollout.
 - `gdoc-sync`, `gslides-sync`, and `gsheets` share Google service-account setup; one SA works for all three APIs.
 - `tech-design-doc` calls `gdoc-sync` at the end of the workflow to push the finished TDR to a live Google Doc for stakeholder comments.
-- `narrating-pptx` narrates decks produced by `presentation-generator` (or any pptx) and uses `office-render` for the real-PowerPoint validation step.
-- `deck-to-video` reuses `narrating-pptx`'s per-slide mp3s and `office-render`'s real-PowerPoint PDF — the pptx and the video sound and look identical.
-- `self-presenting-decks` is the map over the whole chain: pptx authoring → `office-render` → `narrating-pptx` → `deck-to-video`.
+- `narrating-pptx` narrates decks produced by `presentation-generator` (or any pptx), generates its audio with `elevenlabs-tts`, and uses `office-render` for the real-PowerPoint validation step.
+- `deck-to-video` reuses the per-slide mp3s (and `elevenlabs-tts`' forced alignment for subtitles) and `office-render`'s real-PowerPoint PDF — the pptx and the video sound and look identical.
+- `self-presenting-decks` is the map over the whole chain: pptx authoring → `office-render` → `narrating-pptx` (+ `elevenlabs-tts`) → `deck-to-video`.
 
 ---
 

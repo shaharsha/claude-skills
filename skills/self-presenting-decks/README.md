@@ -30,7 +30,7 @@ deck (pptx) ──▶ narration (audio + autoplay pptx) ──▶ video (mp4)
 | 0. Intake | — | ElevenLabs voice ID + `ELEVENLABS_API_KEY` (env var, never echoed); language and register choices |
 | 1. Build/edit the deck | Anthropic's `pptx` skill (pptxgenjs or template editing); [presentation-generator](../presentation-generator) for AI-image decks | `deck.pptx` — the clean copy, keep it |
 | 2. Validate rendering | [office-render](../office-render) — real PowerPoint → PDF → images | Layout proof, **and the PDF the video will reuse** |
-| 3. Narrate | [narrating-pptx](../narrating-pptx) — scripts → human approval → TTS → embed → PowerPoint-authored autoplay → validation | `narration/scripts.json`, `narration/slideNN.mp3`, `deck-narrated.pptx` |
+| 3. Narrate | [narrating-pptx](../narrating-pptx) — scripts → human approval → TTS via [elevenlabs-tts](../elevenlabs-tts) → embed → PowerPoint-authored autoplay → validation | `narration/scripts.json`, `narration/slideNN.mp3`, `deck-narrated.pptx` |
 | 4. Video | [deck-to-video](../deck-to-video) — the stage-2 clean PDF + the same mp3s | `deck.mp4` |
 
 Keep `narration/` and every artifact as siblings next to the deck.
@@ -96,7 +96,7 @@ Never ship *only* the mp4 to someone who needs to study the content. Name all th
 
 ## Related skills
 
-- [narrating-pptx](../narrating-pptx) · [deck-to-video](../deck-to-video) · [office-render](../office-render) · [presentation-generator](../presentation-generator)
+- [narrating-pptx](../narrating-pptx) · [elevenlabs-tts](../elevenlabs-tts) · [deck-to-video](../deck-to-video) · [office-render](../office-render) · [presentation-generator](../presentation-generator)
 
 ## License
 

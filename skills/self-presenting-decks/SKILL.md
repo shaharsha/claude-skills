@@ -20,10 +20,10 @@ deck (pptx) ──▶ narration (audio + autoplay pptx) ──▶ video (mp4)
 
 | Stage | Skill to use | Output |
 |---|---|---|
-| 0. Intake | — | ElevenLabs voice ID + `ELEVENLABS_API_KEY` (env var, never echoed); language/register choices (these live in narrating-pptx, not here) |
+| 0. Intake | — | ElevenLabs voice ID + `ELEVENLABS_API_KEY` (env var, never echoed); language/register choices (these live in narrating-pptx; the voice, model and tags in elevenlabs-tts) |
 | 1. Build/edit the deck | **document-skills:pptx** (pptxgenjs or template editing); **presentation-generator** for AI-image decks | `deck.pptx` (the clean copy — keep it) |
 | 2. Validate rendering | **office-render** — real PowerPoint → PDF → images | layout proof + **the PDF the video will reuse — always from the CLEAN pptx** (the narrated copy renders speaker icons onto slides) |
-| 3. Narrate | **narrating-pptx** — scripts → **human approves scripts BEFORE TTS** (it's real credit spend, often in a cloned voice) → TTS → embed → PowerPoint-authored autoplay → its own validation pass proves the narrated file clean | `narration/scripts.json`, `narration/slideNN.mp3`, `deck-narrated.pptx` |
+| 3. Narrate | **narrating-pptx** — scripts → **human approves scripts BEFORE TTS** (it's real credit spend, often in a cloned voice) → TTS via **elevenlabs-tts** (Eleven v4, sample one slide first) → embed → PowerPoint-authored autoplay → its own validation pass proves the narrated file clean | `narration/scripts.json`, `narration/slideNN.mp3`, `deck-narrated.pptx` |
 | 4. Video | **deck-to-video** — the stage-2 clean-deck PDF + the same `narration/` mp3s → mp4 (progress bar + slide counter are defaults; flags turn them off) | `deck.mp4` |
 
 Keep `narration/` and all artifacts as siblings next to the deck.
@@ -51,7 +51,8 @@ Keep all three named as siblings (`Deck.pptx`, `Deck_Narrated.pptx`, `Deck.mp4`)
 |---|---|
 | Slide content/visuals | deck → re-render the **whole** PDF (PDFs aren't patchable per page) → **re-check affected narration scripts** (they reference what's visible) → regenerate only the changed clips → re-embed + autoplay → video |
 | Narration text only | the changed clips → re-embed + autoplay pptx → video → **re-align those clips** if the video highlights elements in time with the voice |
-| Narration voice settings (e.g. stability) | **all** clips, not just the changed ones — mixed settings are audible → re-embed → re-align → video |
+| Narration voice settings (stability, model, voice) | **all** clips, not just the changed ones — mixed settings are audible → re-embed → re-align → video |
+| TTS model upgrade (e.g. Eleven v3 → v4) | v3 scripts and tags run unchanged on v4, but re-sample one slide first (a voice can sound different) → **all** clips → re-embed → re-align → video. Partial upgrades are audible |
 | Narration pace ("too slow") | `ffmpeg -filter:a atempo=1.1` on the mp3s (pitch-preserving, no TTS cost) → re-embed → **re-align if anything is synced to the voice** (atempo shifts every timestamp) → video |
 | Video overlay only (bar, counter) | video only — pptx artifacts untouched |
 | Subtitle form (sidecar ⇄ soft track ⇄ burned in) | video only — re-mux, or re-encode **from the pre-burn master**; pptx artifacts untouched. Keep that master, or a restyle stacks a second generation |

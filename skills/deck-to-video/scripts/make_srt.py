@@ -3,7 +3,7 @@
 
   python3 make_srt.py alignment/ audio/ out.srt [--pad 0.7]
 
-Consumes the alignment produced by narrating-pptx's align_narration.py. Cue
+Consumes the alignment produced by elevenlabs-tts' align_narration.py. Cue
 timings are absolute in the finished video, so --pad must match the pad the
 video was built with or the subtitles drift further out with every slide.
 """

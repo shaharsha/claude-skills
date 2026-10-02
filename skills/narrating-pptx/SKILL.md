@@ -7,11 +7,13 @@ description: Use when adding voice narration, voiceover, or TTS audio to a Power
 
 ## Overview
 
-Turn any pptx into a self-presenting deck: write presenter-style narration scripts (any language), generate speech via ElevenLabs `eleven_v3`, embed one clip per slide, and make each clip autoplay on slide entry.
+Turn any pptx into a self-presenting deck: write presenter-style narration scripts (any language), generate one clip per slide with ElevenLabs, embed the clips, and make each autoplay on slide entry.
+
+**REQUIRED SUB-SKILL: elevenlabs-tts** — owns everything about the voice: model (`eleven_v4`), audio tags, stability, voices, the batch generator, leak checks, and timings. This skill owns what is specific to a deck: what the narration says, and getting the audio into PowerPoint without corrupting the file.
 
 **The iron rule (paid for in blood): NEVER hand-write `<p:timing>` autoplay XML.** Hand-rolled timing XML corrupts the file — PowerPoint shows "found a problem… Repair". The only reliable method is letting **real PowerPoint author the XML itself** via AppleScript play-settings (`scripts/set_autoplay.sh`). If you're tempted to inject timing XML "just this once" — that's the exact failure this skill exists to prevent.
 
-**Requirements:** macOS + Microsoft PowerPoint installed (for the autoplay step), `python-pptx`, `ELEVENLABS_API_KEY` env var, an ElevenLabs voice ID from the user.
+**Requirements:** macOS + Microsoft PowerPoint installed (for the autoplay step), `python-pptx`, `ELEVENLABS_API_KEY` env var, a voice ID (elevenlabs-tts lists the defaults).
 
 ## Pipeline (5 steps, in order)
 
@@ -23,41 +25,22 @@ Turn any pptx into a self-presenting deck: write presenter-style narration scrip
 
 **Depth: the voice IS the presenter, not a caption reader.** Target ~600–900 chars per slide (≈45–75 s). Each script: open with context → work through what the slide actually shows → explain the *why* → bridge to the next slide. **Describe position only when the viewer needs it to follow.** On a diagram, "the dashed box inside" is orientation they cannot get otherwise; over three cards of text, "on the left… in the middle… on the right" is audio-description rather than presenting (see **self-presenting-decks**). Short caption-style scripts (~200 chars) feel like labels, not a presentation — users reject them.
 
-**Audio tags = the "Enhance" feature.** ElevenLabs' UI "Enhance" button just uses an LLM to add tags — there is no Enhance API. You are that LLM: weave tags into the script. Tags stay in **English brackets even inside Hebrew/other-language text**, placed at the emotional beat they modify.
+**Numbers on slides:** the slide shows "9 days → 4 hours"; the script says "nine days… to four hours". Write them as words (elevenlabs-tts explains why); subtitles generated from the alignment will then read as words too, which is fine.
 
-**Tag catalog (Eleven v3)** — pick to match the moment, don't just repeat `[warm]`/`[confident]`:
-- **Tone / emotion:** `[warm]` `[excited]` `[confident]` `[curious]` `[surprised]` `[impressed]` `[amused]` `[thoughtful]` `[serious]` `[reassuring]` `[professional]` `[sympathetic]` `[questioning]` `[sarcastic]` `[mischievously]` `[nervous]` `[frustrated]` `[calm]`
-- **Non-verbal reactions:** `[chuckles]` `[laughs]` `[giggles]` `[sighs]` `[exhales]` `[gasps]` `[whispers]` `[clears throat]`
-- **Punctuation levers (combine with tags):** ellipsis `…` = natural pause (more reliable than `[pause]`); CAPS = emphasis; real question marks / commas set rhythm. Structure matters more than tag count.
+**Direct the delivery with audio tags** — follow elevenlabs-tts ("Write the script"): English bracket tags at the beat they modify, tagging the *shifts* in the performance, descriptive v4 directions (`[Warm, conversational tone]`, `[Pause, dry amusement]`). Default to a clean professional read; go denser only when the user wants an expressive performance.
 
-**Density:** default 2–4 per script for a clean corporate read. Some users explicitly want a *dense, expressive* performance — then go heavier (5–8, varied), matching tag to content (`[excited]`/`[surprised]` on a reveal, `[amused]`/`[chuckles]` on a wry aside, `[serious]`/`[sighs]` on a cost, `[curious]` on a "so what?" pivot). Cap around one tag per sentence — past that, delivery gets jerky and tags start leaking into the audio.
+**Get the scripts approved by the human before generating** — TTS is real credit spend, often in a cloned voice, and every later script change is a regeneration.
 
-**⚠️ Non-English caveat (Hebrew, etc.):** ElevenLabs has **no documented tag support for non-English**. Heavy tagging on Hebrew can (a) make v3 *speak the tag word aloud*, (b) over-act, or (c) insert odd pauses. So when tagging densely or in a non-English language, **generate ONE slide first and ear-check that tags are performed, not spoken**, before spending credits on the whole deck. Sources: [v3 audio tags](https://elevenlabs.io/blog/v3-audiotags), [best practices](https://elevenlabs.io/docs/overview/capabilities/text-to-speech/best-practices).
+### 2. Generate the clips
 
-**Hard limit:** 5,000 chars per script (`eleven_v3` request cap).
-
-### 2. Choose stability, then generate speech (parallel, 429-safe)
-
-**Eleven v3 has three stability modes, and the default is the middle one.** This matters because step 1 tells you to write dense audio tags, and Natural is the conservative reading of them:
-
-| stability | mode | behaviour |
-|---|---|---|
-| `0.0` | **Creative** | most expressive, **responds most strongly to audio tags** — and least predictable |
-| `0.5` | Natural | the script default. Safe, but can under-perform the tags you wrote |
-| `1.0` | Robust | very stable, largely ignores directional prompts |
-
-If a deck sounds monotone despite heavy tagging, the tags are probably fine and the stability is wrong. **A/B one tag-rich slide at 0.0 and 0.5 and let the human pick before spending the batch** — you cannot ear-check this yourself. Then regenerate **all** clips at the chosen value: mixing stabilities across slides is audible.
-
-Creative also runs slightly *shorter* (more dynamic delivery moves faster through flat passages), so expect durations to shift and the video to need a re-render.
-
-**v3 has no `speed` parameter.** Pace is controlled by sentence structure and `…` pauses at write time, or `ffmpeg -filter:a atempo=` afterwards — never by a generation setting.
+Use elevenlabs-tts' generator — it writes exactly the `audio/slideNN.mp3` names the next steps expect:
 
 ```bash
 export ELEVENLABS_API_KEY=...   # env var only — NEVER paste the key into output
-python3 scripts/generate_tts.py scripts.json VOICE_ID audio/ --concurrency 4 --stability 0.5
+python3 <elevenlabs-tts-dir>/scripts/generate_tts.py scripts.json VOICE_ID audio/ --model eleven_v4 --stability 0.5
 ```
 
-The script parallelizes (default 4 — typical plan concurrency is ~5; 16-at-once returns 429 on most), retries 429s with backoff, rejects suspiciously-small responses (a 429/error body saved as `.mp3` is ~600 bytes), and exits non-zero on any failure. Verify durations before embedding: `afinfo audio/slide01.mp3 | grep duration`.
+Sample one tag-rich slide first (and A/B stability if the brief is expressive) — elevenlabs-tts "Generate — sample first". One model, one stability, one voice for every slide; mixing is audible across slide changes. Verify durations before embedding: `afinfo audio/slide01.mp3 | grep duration`.
 
 ### 3. Embed one clip per slide
 
@@ -88,40 +71,9 @@ Expect output `autoplay set on N media shapes` where **N == number of narrated s
 - Re-check N from step 4 equals expected.
 - The human must ear-test autoplay once: slideshow mode (⌘⇧↩), audio should start on slide entry. You cannot verify sound headlessly — say so; never claim you heard it.
 
-## ElevenLabs quick reference
+## Timings, subtitles, highlights
 
-| Item | Value |
-|---|---|
-| Endpoint | `POST https://api.elevenlabs.io/v1/text-to-speech/{voice_id}?output_format=mp3_44100_128` |
-| Auth | header `xi-api-key` (from env var; never echo) |
-| Body | `{"text", "model_id": "eleven_v3", "voice_settings": {"stability": STABILITY, "similarity_boost": 0.75, "use_speaker_boost": true}}` |
-| Languages | 70+ incl. Hebrew; tags like `[pause]` inline |
-| Limits | 5,000 chars/request · ~5 concurrent requests (429 = concurrency, not quota) |
-| Stability | 0.0 Creative / 0.5 Natural / 1.0 Robust — pick per deck, see step 2. No `speed` param on v3 |
-
-## Voices on hand
-
-The skill is voice-agnostic — pass any ElevenLabs `VOICE_ID` to `generate_tts.py`. **Default to Josh** unless the user asks for another voice. Both are Hebrew-capable and tested on `eleven_v3`:
-
-| Name | Voice ID | Notes |
-|---|---|---|
-| **Josh** ⭐ | `ZoiZ8fuDWInAcwPXaVeq` | **default** — warm, slightly faster; good for Hebrew narration |
-| Kevin | `1fz2mW1imKTf5Ryjk5su` | alternative, a little more measured |
-
-## Getting timings back out of finished audio
-
-`POST https://api.elevenlabs.io/v1/forced-alignment` — multipart `file` (audio) + `text` (transcript) → `characters[]` and `words[]` with `start`/`end`, plus a `loss` confidence. Priced at speech-to-text rates.
-
-```bash
-python3 scripts/align_narration.py narration/scripts.json narration/audio/ narration/alignment/
-```
-
-This turns finished clips into timed data **without regenerating anything**, which is what makes subtitles and narration-synced animation cheap (see deck-to-video). The script handles both traps below and exits non-zero on a length mismatch; the traps are spelled out because anything hand-rolling this will hit them:
-
-- **Strip audio tags from the transcript first.** `[confident]` is performed, not spoken; leave it in and the aligner searches for the word, drifting everything after it.
-- **Verify `len(characters) == len(text)`.** They map 1:1 when it works, which is what lets you go from a character offset in the script to a timestamp. A mismatch means the mapping is silently wrong.
-
-`/v1/text-to-speech/{voice}/with-timestamps` returns the same timing at generation time — use it only when you are generating anyway, since it costs a re-record.
+Anything that must follow the voice (subtitles, element highlights in the video) comes from forced alignment of the finished clips — elevenlabs-tts' `scripts/align_narration.py`, consumed by **deck-to-video**. Nothing in the pptx needs it.
 
 ## Progress bar during playback
 
@@ -145,9 +97,9 @@ Avoid AppleScript for geometry (its `top`/`left position` properties fight the c
 |---|---|---|
 | Hand-writing `<p:timing>` autoplay XML | PowerPoint Repair dialog — corrupt deliverable | `set_autoplay.sh` (PowerPoint authors it) |
 | AppleScript `presentation 1` | Edits a stale reopened deck; wrong file saved | Target `presentation "name.pptx"`; verify slide count |
-| Firing all TTS requests at once | HTTP 429 on most; error JSON saved as `.mp3` | `--concurrency 4` + size-integrity check |
+| Hand-rolling the TTS calls | v3-era settings, 429s, error bodies saved as `.mp3` | elevenlabs-tts' `generate_tts.py` |
 | Caption-length scripts (~200 chars) | "It should explain more — it's the presenter" | 600–900 chars, presenter structure (step 1) |
-| Looking for an "Enhance" API | Doesn't exist (UI-only LLM feature) | Author the audio tags yourself |
+| Numbers as digits in the script | "11" read in the wrong language/form | Write numbers as words |
 | `for i in $var` in zsh | No word splitting — loop gets one token | `${=var}` in zsh, or use Python |
 | Fixed `delay 2` after opening big pptx | "object does not exist" AppleScript error | Wait-loop until slide count matches (in script) |
 | Validating with LibreOffice only | Misses PowerPoint-strict corruption | Export via real PowerPoint |
