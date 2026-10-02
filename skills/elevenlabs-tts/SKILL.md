@@ -113,14 +113,14 @@ This calls `POST /v1/forced-alignment` (audio + transcript → per-character and
 
 ## Voices
 
-Pass any voice ID. **Default to Josh** unless the user names another. All four generated cleanly on `eleven_v4` on 2026-10-02 (tags performed, not spoken); the user judged Josh better on v4 than v3 and still recognisably Josh.
+Pass any voice ID. **Default to Shahar** unless the user names another. Shahar is the owner's own clone, so it exists only on the owner's ElevenLabs account: if the first request returns `HTTP 404 voice_not_found` (the generator fails on it immediately, nothing billed), fall back to **Josh** and say so. All four generated cleanly on `eleven_v4` on 2026-10-02 (tags performed, not spoken), and the owner ear-checked Josh, Jarnathan and Shahar on v4.
 
 | Name | Voice ID | Notes |
 |---|---|---|
-| **Josh** ⭐ | `ZoiZ8fuDWInAcwPXaVeq` | default — warm, slightly faster; good for Hebrew narration |
+| **Shahar** ⭐ | `p9D03Ni3gGv3AsJpmpBV` | **default** — the owner's own instant voice clone; **works only with the owner's ElevenLabs account/key** (anyone else: `voice_not_found` → use Josh). Created after v4 launched, so no v4 retraining needed |
+| **Josh** | `ZoiZ8fuDWInAcwPXaVeq` | fallback default — warm, slightly faster; good for Hebrew narration |
 | Kevin | `1fz2mW1imKTf5Ryjk5su` | alternative, a little more measured |
 | Jarnathan | `c6SfcYrb2t09NHXiT80T` | Voice Library, "Confident and Versatile" — middle-aged American English, conversational. On Hebrew text v4 gives it a native Hebrew accent rather than an American one |
-| Shahar | `p9D03Ni3gGv3AsJpmpBV` | the user's own instant voice clone — **works only with the owner's ElevenLabs account/key**; anyone else gets a voice-not-found error. Created after v4 launched, so no v4 retraining needed |
 
 Library voices work on v4 as-is. A user's **own** clones made before v4 should be retrained on v4 in the web app (My Voices → "+" next to Eleven v4) — and a retrained clone can sound different from its v3 self, so re-sample before regenerating anything that must match old audio.
 
