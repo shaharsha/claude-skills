@@ -75,7 +75,7 @@ On success it prints one line per slide — each length **already includes the p
 ## Getting the inputs right
 
 1. **From a pptx? Rasterize with real PowerPoint, not LibreOffice.** Export to PDF via actual PowerPoint (the [office-render](../office-render) skill does this on macOS), then hand the PDF over. LibreOffice substitutes fonts and re-flows layouts, so the video wouldn't match what the deck's author sees. 200 dpi keeps dense slide text crisp at 1080p.
-2. **One audio clip per slide, named `slideNN.mp3`.** If the deck was narrated with [narrating-pptx](../narrating-pptx), its `narration/` directory is already in exactly this shape — reuse it so the pptx and the video sound identical.
+2. **One audio clip per slide, named `slideNN.mp3`.** If the clips came from [elevenlabs-tts](../elevenlabs-tts) (which [narrating-pptx](../narrating-pptx) uses), they are already in exactly this shape — reuse it so the pptx and the video sound identical.
 3. If narration pace was adjusted (`ffmpeg -filter:a atempo=1.1`), build from the *adjusted* files.
 
 ## Encoding choices the script already makes
@@ -128,7 +128,7 @@ You cannot verify audio headlessly. Say so; never claim you heard it.
 ## Related skills
 
 - [self-presenting-decks](../self-presenting-decks) — the orchestration map this is the last stage of.
-- [narrating-pptx](../narrating-pptx) — produces the `narration/` mp3s this consumes.
+- [narrating-pptx](../narrating-pptx) / [elevenlabs-tts](../elevenlabs-tts) — produce the mp3s and the alignment this consumes.
 - [office-render](../office-render) — produces the real-PowerPoint PDF this rasterizes.
 
 ## License

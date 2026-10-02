@@ -23,7 +23,7 @@ On success it prints one line per slide — that per-slide length **already incl
 ## Getting the inputs right
 
 1. **Slides: if starting from a pptx, rasterize from real PowerPoint, not LibreOffice.** Export the pptx to PDF via actual PowerPoint (the **office-render** skill does this on macOS), then hand the PDF to the script — LibreOffice substitutes fonts and re-flows layouts, so the video would not match what the deck's author sees. 200 dpi keeps dense slide text crisp at 1080p. (Already have per-slide images? Use them directly — skip this step.)
-2. **Audio: one clip per slide, named `slideNN.mp3`.** If the deck was narrated with the **narrating-pptx** skill, its `narration/` directory is already in this exact shape — reuse it so the pptx and the video sound identical.
+2. **Audio: one clip per slide, named `slideNN.mp3`.** If the clips came from **elevenlabs-tts**' `generate_tts.py` (which **narrating-pptx** uses), they are already in this exact shape — reuse it so the pptx and the video sound identical.
 3. If narration pace was adjusted (e.g. `ffmpeg -filter:a atempo=1.1`), build the video from the *adjusted* files.
 
 ## Why the overlays are baked with PIL, not drawn by ffmpeg (paid for in blood)
@@ -57,10 +57,10 @@ Pick T1/T2 from the script's printed per-slide lengths (cumulative-sum them for 
 
 Narration that says "on the left… in the middle… on the right" reads like an audio-description track (see self-presenting-decks). The fix is to strip the verbal pointer and glow the element instead — but only if the timing comes from the audio.
 
-**The audio is the master; the animation follows it.** Never write narration to hit a mark, and never estimate when a phrase lands. Generate the clip normally, then use ElevenLabs **forced alignment** (`POST /v1/forced-alignment`, audio + transcript → per-character `start`/`end`) to read back when each thing was *actually* said, and derive the windows from that. Re-record a clip later and re-aligning self-corrects.
+**The audio is the master; the animation follows it.** Never write narration to hit a mark, and never estimate when a phrase lands. Generate the clip normally, then use ElevenLabs **forced alignment** (`POST /v1/forced-alignment`, audio + transcript → per-character `start`/`end`; run it with elevenlabs-tts' `scripts/align_narration.py`) to read back when each thing was *actually* said, and derive the windows from that. Re-record a clip later and re-aligning self-corrects.
 
 - **Anchor on character offsets, not keywords.** Author the script as per-element segments, join them for TTS, and keep each segment's offset into the joined string. Searching for a distinctive word breaks the moment it appears twice — "tags" appears four times on one slide.
-- **Strip audio tags before aligning.** `[confident]` is performed, not spoken. Send it to the aligner and it hunts for the word in the audio and drags every later offset with it. Compute offsets against the same stripped string.
+- **Strip audio tags before aligning — all of them.** `[confident]` is performed, not spoken; send it to the aligner and it hunts for the word in the audio and drags every later offset with it. Eleven v4 tags are free-form (`[Pause, dry amusement]`), so strip anything in brackets, not just letters-and-spaces (elevenlabs-tts' aligner does). Compute offsets against the same stripped string.
 - Check the returned character count equals the text length, and watch `loss` (0.04-0.10 across a healthy 17-clip deck; a clear outlier is the signal, not an absolute threshold). A mismatch means every window on that slide is wrong.
 
 **The `--highlights` JSON**, keyed by zero-padded slide number, boxes in output pixels:
