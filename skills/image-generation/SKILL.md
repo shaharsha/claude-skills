@@ -113,10 +113,10 @@ For comics, storyboards and animated episodes where the same people appear in ma
 
 ## API keys and dependencies
 
-**API keys** live in `~/.claude/projects/-Users-shaharshavit/memory/api-keys.md`:
+**API keys** come from environment variables, set from your own secret store in the shell that runs the script (every fresh shell needs them again):
 
-- **OpenAI (image generation)** → export as `OPENAI_IMAGE_API_KEY` before calling `scripts/openai-image.sh`
-- **Google AI Studio (image generation)** → export as `GEMINI_IMAGE_API_KEY` before calling `scripts/gemini-image.sh`
+- `OPENAI_IMAGE_API_KEY` for `scripts/openai-image.sh`
+- `GEMINI_IMAGE_API_KEY` (or `GEMINI_API_KEY`) for `scripts/gemini-image.sh`; the same Google AI Studio key also works for generating-video-clips
 
 These keys are image-gen scoped. Don't reuse them for chat or embeddings, and never print them — load them into a variable, don't echo.
 

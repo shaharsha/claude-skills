@@ -33,7 +33,7 @@
 # Prints one line to stderr per call with latency, output tokens and the token cost.
 #
 # Env:
-#   OPENAI_IMAGE_API_KEY (required)   Get from ~/.claude/projects/-Users-shaharshavit/memory/api-keys.md
+#   OPENAI_IMAGE_API_KEY (required)   An OpenAI API key with image access
 #                                     → "OpenAI (image generation)" section.
 
 set -euo pipefail
@@ -122,7 +122,7 @@ else
   exit 1
 fi
 
-: "${OPENAI_IMAGE_API_KEY:?Set OPENAI_IMAGE_API_KEY (see ~/.claude/projects/-Users-shaharshavit/memory/api-keys.md → 'OpenAI (image generation)')}"
+: "${OPENAI_IMAGE_API_KEY:?Set OPENAI_IMAGE_API_KEY to an OpenAI API key with image access}"
 
 # Make sure output dir exists
 mkdir -p "$(dirname "$OUTPUT")"

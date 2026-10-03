@@ -22,7 +22,7 @@
 #   --ref path.png             (repeatable, up to 14)
 #
 # Env:
-#   GEMINI_IMAGE_API_KEY (required)  Get from ~/.claude/projects/-Users-shaharshavit/memory/api-keys.md
+#   GEMINI_IMAGE_API_KEY (required)  A Google AI Studio key; GEMINI_API_KEY is used when it is unset
 #                                    → "Google AI Studio (image generation)" section.
 
 set -euo pipefail
@@ -55,7 +55,8 @@ done
 
 [[ -z "$PROMPT" ]] && { echo "Error: --prompt is required" >&2; exit 1; }
 [[ -z "$OUTPUT" ]] && { echo "Error: --output is required" >&2; exit 1; }
-: "${GEMINI_IMAGE_API_KEY:?Set GEMINI_IMAGE_API_KEY (see ~/.claude/projects/-Users-shaharshavit/memory/api-keys.md → 'Google AI Studio (image generation)')}"
+GEMINI_IMAGE_API_KEY="${GEMINI_IMAGE_API_KEY:-${GEMINI_API_KEY:-}}"
+: "${GEMINI_IMAGE_API_KEY:?Set GEMINI_IMAGE_API_KEY (or GEMINI_API_KEY) to a Google AI Studio key}"
 [[ ${#REFS[@]} -gt 14 ]] && { echo "Error: max 14 reference images" >&2; exit 1; }
 
 # Resolve model alias

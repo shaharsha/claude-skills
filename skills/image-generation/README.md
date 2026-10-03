@@ -82,7 +82,7 @@ Quick start (from the skill directory):
 ./scripts/gemini-image.sh --model lite --output out/idea.jpg --prompt "..."
 ```
 
-The skill's [SKILL.md](SKILL.md) references a per-user file at `~/.claude/projects/-Users-shaharshavit/memory/api-keys.md` for key storage — adjust that path to match your own setup.
+Keys are read from those environment variables only; keep them in your own secret store and export them in the shell that runs the scripts.
 
 ## Entry point
 
