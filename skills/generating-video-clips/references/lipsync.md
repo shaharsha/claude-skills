@@ -56,7 +56,7 @@ join looks for `synced/<id>_<k>.mp4`. A non-skip part without that file keeps it
 | The mouth moves before the line | the part starts too early: check `f0` in the plan against the line's start |
 | A part comes back shorter | nothing to do; join holds the last frame |
 | HTTP 401 from fal | the key was shortened; pass it exactly as fal shows it |
-| Upload fails with a 4xx | fal moved its upload endpoint (it did in 2026-10); compare with `storage/auth/token` and `files/upload` in the current `fal_client` source |
+| Upload fails with a 4xx | fal changed its upload path (the older one started failing in 2026-10); compare with `storage/auth/token` and `files/upload` in the current `fal_client` source |
 | `failed: ... no face` | the point is off the face, or the face is too small: crop or zoom the shot first |
 
 ## Cost and time

@@ -72,7 +72,7 @@ python3 scripts/lipsync_parts.py join parts/S05_plan.json synced/ final/S05.mp4
 - **Sheet every take.** Doubled props, new doors and second figures are common, and they are easy to see on a sheet and easy to miss otherwise.
 - **A bad first second is an offset, not a re-roll.**
 - **Lip-sync one speaker per part, with a point on their face.** A two-person shot synced whole animates one mouth for both lines.
-- **fal moved its upload endpoint in 2026-10.** The script uses the current CDN-token flow; the old `storage_type=gcs` path returns 400.
+- **fal's older upload path started failing in 2026-10** (`storage_type=gcs` returns 400). The script uses the CDN-token flow the official client uses today.
 
 ## Related skills
 

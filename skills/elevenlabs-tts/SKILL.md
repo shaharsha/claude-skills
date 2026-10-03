@@ -11,7 +11,7 @@ Script → speech with ElevenLabs, done so the delivery is directed, the batch i
 
 You cannot hear the audio. Everything here is built so that the parts a machine *can* check get checked (tags spoken vs performed, durations, alignment), and the parts it can't (is this the right emotion?) are handed to a human explicitly.
 
-**Requirements:** `ELEVENLABS_API_KEY` env var (never echo it), a voice ID, Python 3 (scripts are stdlib-only), `afinfo`/`ffprobe` for durations.
+**Requirements:** `ELEVENLABS_API_KEY` env var (never echo it), a voice ID, Python 3 (scripts are stdlib-only), ffmpeg and ffprobe (the trim, level, A/B and music scripts use them; `afinfo` also works for a quick duration).
 
 ## Choose the model
 
@@ -160,7 +160,7 @@ On-screen text keeps normal Hebrew spelling: the Latin respelling is TTS input o
 python3 <this-skill-dir>/scripts/generate_music_and_sfx.py sounds.json audio/
 # sounds.json: {"op": {"type": "music", "prompt": "...", "seconds": 52}, "whoosh": {"type": "sfx", "prompt": "...", "seconds": 1}}
 ```
-`/v1/music` still defaults to `music_v1`. The script always sends `model_id: music_v2_5` and `force_instrumental: true`. A cue shorter than the stretch it scores simply stops, so ask for the window plus 2-4 s and check the real length with `ffprobe`: the length you get is not exactly the length you asked for (a 6 s request came back 7.5 s). Prompts, cue planning and SFX: `references/music-and-sfx.md`.
+`/v1/music` still defaults to `music_v1`. The script sends `model_id: music_v2_5` and `force_instrumental: true` by default (an entry's `model` or `"vocals": true` overrides them). A cue shorter than the stretch it scores simply stops, so ask for the window plus 2-4 s and check the real length with `ffprobe`: the length you get is not exactly the length you asked for (a 6 s request came back 7.5 s). Prompts, cue planning and SFX: `references/music-and-sfx.md`.
 
 ## When the key or the plan says no
 

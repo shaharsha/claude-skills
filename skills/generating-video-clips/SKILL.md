@@ -61,7 +61,7 @@ An edit needs a clip that fills its shot exactly, at the edit's frame rate:
 | Bad middle | Split the shot: play the first line on a crop that keeps the problem out of frame, then cut back after it. |
 | Unfixable (a door appears, a second person walks in) | Regenerate with a pinned prompt, 2-3 takes, and pick on a sheet. |
 
-`lipsync_parts.py normalize clip.mp4 shot.mp4 --frames N --off S --speed K` does the offset, speed, fps, scale and last-frame hold in one step, and always returns exactly N frames.
+`lipsync_parts.py normalize clip.mp4 shot.mp4 --frames N --off S --speed K` does the offset, speed, fps, scale (cover and center-crop, never stretch) and last-frame hold in one step, and always returns exactly N frames.
 
 ## Lip-sync dialogue
 

@@ -165,3 +165,38 @@ def test_level_continues_past_a_silent_clip(tmp_path):
     r = subprocess.run([sys.executable, os.path.join(SCRIPTS, "level_clips.py"), str(src), str(out)], capture_output=True, text=True)
     assert r.returncode != 0 and "b" in r.stderr + r.stdout and "Traceback" not in r.stderr
     assert (out / "a.mp3").exists() and (out / "c.mp3").exists() and not (out / "b.mp3").exists()
+
+
+def test_trim_text_without_equals_is_a_clear_error(tmp_path, monkeypatch):
+    (tmp_path / "s.json").write_text('{"a": "x"}')
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "k")
+    monkeypatch.setattr(sys, "argv", ["t", str(tmp_path / "s.json"), str(tmp_path), str(tmp_path / "o"), "--text", "a"])
+    with pytest.raises(SystemExit) as e:
+        T.main()
+    assert "ID=TEXT" in str(e.value)
+
+
+def failing_ffmpeg(monkeypatch, module):
+    real = module.subprocess.run
+    def run(cmd, *a, **k):
+        if cmd[0] == "ffmpeg" and str(cmd[-1]).endswith(".part.mp3"):
+            open(cmd[-1], "wb").write(b"half")
+            raise subprocess.CalledProcessError(1, cmd)
+        return real(cmd, *a, **k)
+    monkeypatch.setattr(module.subprocess, "run", run)
+
+
+def test_cut_failure_leaves_no_part_file(tmp_path, monkeypatch):
+    tone(tmp_path / "a.mp3")
+    failing_ffmpeg(monkeypatch, T)
+    with pytest.raises(subprocess.CalledProcessError):
+        T.cut(str(tmp_path / "a.mp3"), str(tmp_path / "b.mp3"), 0.1, 0.5)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["a.mp3"]
+
+
+def test_apply_gain_failure_leaves_no_part_file(tmp_path, monkeypatch):
+    tone(tmp_path / "a.mp3")
+    failing_ffmpeg(monkeypatch, L)
+    with pytest.raises(subprocess.CalledProcessError):
+        L.apply_gain(str(tmp_path / "a.mp3"), str(tmp_path / "b.mp3"), 3.0)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["a.mp3"]

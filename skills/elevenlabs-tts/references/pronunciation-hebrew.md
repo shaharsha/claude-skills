@@ -4,7 +4,7 @@ Verified on `eleven_v4` in 2026-10 with a large cloned-voice cast. Everything he
 
 ## The ladder: try in this order
 
-Each rung fixes something the one before can't, and each has its own failure.
+Each rung fixes something the one before can't, and each has its own failure. **Loanwords, brands and names:** rungs 1, 2, then 4 and 5. **A Hebrew word read wrong:** rung 3. **Acronyms:** rung 6.
 
 1. **Latin script inside the Hebrew.** Write loanwords, brands and names in Latin letters, and keep the Hebrew prefix, hyphenated:
    `הבאתי ה-Absolut ל-Shiran` instead of `הבאתי האבסולוט לשירן`.

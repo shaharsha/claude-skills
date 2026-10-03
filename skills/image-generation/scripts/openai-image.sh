@@ -130,6 +130,7 @@ START=$(date +%s)
 
 # Pick endpoint
 if [[ ${#REFS[@]} -eq 0 ]]; then
+  # OPENAI_IMAGE_API_BASE is a test hook (a local fake API); leave it unset in real use - it decides where the key is sent
   ENDPOINT="${OPENAI_IMAGE_API_BASE:-https://api.openai.com}/v1/images/generations"
   BODY=$(jq -n \
     --arg model "$MODEL" \

@@ -31,7 +31,7 @@ python3 <this-skill-dir>/scripts/level_clips.py trimmed/ leveled/ --target -18
 
 `atempo=1.1` on every line (pitch is kept) tightened comedic timing noticeably:
 ```bash
-for f in raw/*.mp3; do ffmpeg -y -i "$f" -af atempo=1.1 -ar 44100 -b:a 160k "fast/$(basename "$f")"; done
+mkdir -p fast && for f in raw/*.mp3; do ffmpeg -y -i "$f" -af atempo=1.1 -ar 44100 -b:a 160k "fast/$(basename "$f")"; done
 ```
 Apply it to the whole set, and force-align **after** it, never before.
 

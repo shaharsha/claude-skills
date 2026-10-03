@@ -6,6 +6,7 @@ from a tag, or a long lead-in. This keeps the span from the first aligned word t
 and tail, with short fades so the cut never clicks. Originals are never modified.
 
   ELEVENLABS_API_KEY=... python3 trim_to_words.py scripts.json audio/ trimmed/ [--prefix ""] [--only a b]
+  (every run re-aligns every clip it is given: after a partial failure, rerun with --only <the failed ids>)
       [--text ID="the words actually kept"] [--lead 0.04] [--tail 0.14]
 
 scripts.json is the {"id": "text with [tags]"} file generate_tts.py read. Use --text when a clip's audio no
@@ -45,8 +46,13 @@ def cut(src, dst, start, end):
     af = (f"atrim={start:.3f}:{end:.3f},asetpts=PTS-STARTPTS,"
           f"afade=t=in:d=0.02,afade=t=out:st={max(0.0, n - 0.06):.3f}:d=0.06")
     tmp = dst + ".part.mp3"
-    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", src, "-af", af,
-                    "-ar", "44100", "-b:a", "160k", tmp], check=True)
+    try:
+        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", src, "-af", af,
+                        "-ar", "44100", "-b:a", "160k", tmp], check=True)
+    except subprocess.CalledProcessError:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise
     os.replace(tmp, dst)
 
 
@@ -64,6 +70,9 @@ def main():
         sys.exit("out_dir must differ from audio_dir: originals are kept")
     key = os.environ.get("ELEVENLABS_API_KEY") or sys.exit("ELEVENLABS_API_KEY not set")
     scripts = json.load(open(a.scripts, encoding="utf-8"))
+    bad_text = [t for t in a.text if "=" not in t]
+    if bad_text:
+        sys.exit(f"--text takes ID=TEXT pairs, got {bad_text}")
     override = dict(t.split("=", 1) for t in a.text)
     ids = [k for k in sorted(scripts) if not a.only or k in a.only]
     os.makedirs(a.out_dir, exist_ok=True)

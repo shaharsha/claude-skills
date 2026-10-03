@@ -379,3 +379,16 @@ def test_normalize_crops_instead_of_stretching(tmp_path):
                          "select=eq(n\\,0),crop=2:2:2:64", "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "gray", "-"],
                         capture_output=True).stdout
     assert px[0] > 200, px[0]
+
+
+def test_split_warns_on_tiny_or_outside_parts(tmp_path, capsys):
+    lavfi_clip(tmp_path / "shot.mp4", 48)
+    for i in ("a", "b", "c"):
+        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i",
+                        "sine=frequency=300:duration=0.5", str(tmp_path / f"{i}.mp3")], check=True)
+    shot = {"id": "S1", "video": "shot.mp4", "fps": 24, "frames": 48, "size": "72x128",
+            "lines": [L("a", 0.2, 0.9, speaker="maya"), L("b", 0.2, 0.8, speaker="ido"), L("c", 2.5, 3.0, speaker="noa")]}
+    LP.split(shot, str(tmp_path / "parts"), str(tmp_path))
+    err = capsys.readouterr().err
+    assert "S1_0" in err and "frames" in err          # two lines start together: a 0-frame part
+    assert "c" in err and "after the shot ends" in err

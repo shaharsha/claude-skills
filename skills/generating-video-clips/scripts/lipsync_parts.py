@@ -56,6 +56,12 @@ def split(shot, parts_dir, root=".", synced_dir=None):
     video = os.path.join(root, shot["video"])
     plan = {"id": sid, "fps": fps, "size": shot.get("size", "720x1280"), "parts": []}
     for k, (l, f0, f1) in enumerate(cuts(shot["lines"], shot["frames"], fps)):
+        if l["start"] * fps >= shot["frames"]:
+            print(f"WARNING: line {l['id']} starts at {l['start']:.2f}s, after the shot ends "
+                  f"({shot['frames'] / fps:.2f}s): its part is silent", file=sys.stderr)
+        if f1 - f0 < 12:
+            print(f"WARNING: {sid}_{k} ({l.get('speaker')}) is only {f1 - f0} frames: lines that start together can't be "
+                  f"split one speaker per part; mark one of them \"skip\"", file=sys.stderr)
         v = os.path.join(parts_dir, f"{sid}_{k}.mp4")
         a = os.path.join(parts_dir, f"{sid}_{k}.wav")
         ff("-i", video, "-vf", f"trim=start_frame={f0}:end_frame={f1},setpts=PTS-STARTPTS", "-an",

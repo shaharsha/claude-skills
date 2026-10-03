@@ -9,10 +9,11 @@ For a comic, storyboard or animated episode where real people (friends, family, 
 | Step | Input | Model | Output | Human gate |
 |---|---|---|---|---|
 | 1. Crops | 1-3 photos per person | `scripts/crop_faces.py` (OpenCV) | `faces/<photo>-<n>.png` + numbered sheet | which crop is whom |
-| 2. Face | 1-2 crops | Flare `--draft --n 2` | two anime faces | pick one, or ask for an adjustment |
-| 3. Card | the chosen face | Flare `--draft` edit | half-body costume card on a flat color | - |
-| 4. Likeness review | all cards on one sheet | - | retake list | yes: likeness, body, outfit |
-| 5. Promote | approved card | Sunburst `max` edit | final card | - |
+| 2. Face | 1-2 crops | Flare `--draft --n 2` | two anime faces | - |
+| 3. Pick | the two faces | - | one face, maybe an adjustment | pick one, or ask for an adjustment |
+| 4. Card | the chosen face | Flare `--draft` edit | half-body costume card on a flat color | - |
+| 5. Likeness review | all cards on one sheet | - | retake list | yes: likeness, body, outfit |
+| 6. Promote | approved card | Sunburst `max` edit | final card | - |
 
 ### 1. Crop the faces
 
@@ -20,7 +21,7 @@ For a comic, storyboard or animated episode where real people (friends, family, 
 pip install opencv-python-headless        # once
 python3 <this-skill-dir>/scripts/crop_faces.py photos/ faces/ --sheet faces/_sheet.jpg
 ```
-Each detected face becomes a square crop with 60% margin (forehead, hair and beard included), largest face first. Read the sheet, then ask the human which crop is which person. Keep 1-2 sharp, frontal crops per person: a typical expression beats a perfect photo. Group photos are fine as a source; the crop isolates the face.
+Each detected face becomes a square crop with 60% margin (forehead, hair and beard included), largest face first. Read the sheet, then ask the human which crop is which person, and rename the chosen ones `faces/<name>-1.png`, `faces/<name>-2.png` (the next steps use those names). Keep 1-2 sharp, frontal crops per person: a typical expression beats a perfect photo. Group photos are fine as a source; the crop isolates the face.
 
 ### 2. Anime face (Flare draft, two options)
 
@@ -69,6 +70,7 @@ Expect retakes on roughly one card in four: a body type that drifted, an accesso
 
 **Judge likeness on a zoomed face crop, side by side with the photo, not on the downscaled full frame.** Shrunk, a face can read older or rounder than it is; in one photoreal run a "change only the face" retake ($0.19) changed almost nothing, because the likeness had been fine all along. Crop the face region from both and put them next to each other, then read the result:
 ```bash
+# adjust each crop box (WxH+X+Y) to the face in that image
 magick photo.jpg -crop 400x400+300+120 +repage a.png && magick output.png -crop 400x400+310+140 +repage b.png && magick a.png b.png +append face_check.png
 ```
 

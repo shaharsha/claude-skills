@@ -1,14 +1,15 @@
-import base64, http.server, io, json, os, subprocess, threading
+import base64, http.server, json, os, shutil, subprocess, threading
 import pytest
-from PIL import Image
 
+PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEklEQVR4nGP8z4AdMOEQH6QSAM1BAQ/oQeJvAAAAAElFTkSuQmCC"  # an 8x8 red PNG, so the test needs no image library
+pytestmark = pytest.mark.skipif(not all(shutil.which(x) for x in ("bash", "curl", "jq")),
+                                reason="openai-image.sh needs bash, curl and jq")
 SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts", "openai-image.sh")
 PROMPT = 'CONSTRAINTS: no text anywhere; absolutely no subtitles @home <b> "quoted" end.'
 
 
 def png_b64():
-    buf = io.BytesIO(); Image.new("RGB", (8, 8), "red").save(buf, "PNG")
-    return base64.b64encode(buf.getvalue()).decode()
+    return PNG_B64
 
 
 @pytest.fixture
@@ -43,7 +44,7 @@ def multipart_field(got, name):
 
 def test_edit_prompt_reaches_api_intact(fake_api, tmp_path):
     base, got = fake_api
-    ref = tmp_path / "ref.png"; Image.new("RGB", (8, 8), "blue").save(ref)
+    ref = tmp_path / "ref.png"; ref.write_bytes(base64.b64decode(PNG_B64))
     env = dict(os.environ, OPENAI_IMAGE_API_KEY="dummy", OPENAI_IMAGE_API_BASE=base)
     r = subprocess.run(["bash", SCRIPT, "--prompt", PROMPT, "--ref", str(ref), "--draft", "--output", str(tmp_path / "o.png")],
                        env=env, capture_output=True, text=True, cwd=tmp_path)

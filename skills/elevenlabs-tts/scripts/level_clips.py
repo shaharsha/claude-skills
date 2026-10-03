@@ -59,9 +59,14 @@ def rms_windows(path, win=0.15):
 
 def apply_gain(src, dst, gain_db):
     tmp = dst + ".part.mp3"
-    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", src, "-af",
-                    f"volume={gain_db:.2f}dB,alimiter=limit=0.891:level=false", "-ar", "44100", "-b:a", "160k", tmp],
-                   check=True)
+    try:
+        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", src, "-af",
+                        f"volume={gain_db:.2f}dB,alimiter=limit=0.891:level=false", "-ar", "44100", "-b:a", "160k", tmp],
+                       check=True)
+    except subprocess.CalledProcessError:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise
     os.replace(tmp, dst)
 
 

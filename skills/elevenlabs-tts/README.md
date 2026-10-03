@@ -52,7 +52,7 @@ ln -s "$PWD/claude-skills/skills/elevenlabs-tts" ~/.claude/skills/elevenlabs-tts
 - `ELEVENLABS_API_KEY` as an env var, never pasted into output. The key needs Text to Speech; the leak check and alignment also use Speech to Text; music and sound effects need their own permissions on the key.
 - A voice ID
 - Python 3. The scripts use only the standard library.
-- `afinfo` (macOS) or `ffprobe` for durations
+- ffmpeg and ffprobe (the trim, level, A/B and music scripts need them; `afinfo` on macOS also gives durations)
 
 ## Quick start
 
