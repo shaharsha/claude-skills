@@ -38,7 +38,7 @@ def test_card_keep_adjusted(tiny):
 def test_panel_prompt_binds_first_mention_only(tiny):
     p = G.panel_prompt(setup(tiny), "p02")
     assert "Maya (the person from Image 1) hands Ido (the person from Image 2) a phone. Maya smiles." in p
-    assert "these 2 named people" in p and p.startswith("Image 1: Maya's character card")
+    assert "with 2 named people" in p and p.startswith("Image 1: Maya's character card")
 
 
 def test_panel_args_quality_and_refs(tiny):
@@ -91,3 +91,14 @@ def test_processing_lines_in_place_is_refused(tiny):
     tiny.data["voice"] = {"tempo": 1.1}
     with pytest.raises(SystemExit, match="lines_raw"):
         G.check_line_paths(tiny)
+
+
+def test_one_character_panel_reads_naturally(tiny):
+    tiny.data["panels"] = {"p9": {"chars": ["maya"], "scene": "SCENE: Maya waves."}}
+    assert "with 1 named person" in G.panel_prompt(tiny, "p9")
+
+
+def test_line_scripts_for_the_leak_check(tiny):
+    setup(tiny)
+    s = G.line_scripts(tiny)
+    assert s["02-1"] == "איפה ה-Absolut?" and s["02-3__ido"] == "לחיים!"

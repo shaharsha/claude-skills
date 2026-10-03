@@ -39,7 +39,7 @@ DEFAULT_PROMPTS = {
                    "Add nothing new: no extra objects, no writing, no watermark."),
     "panel_ref": "Image {i}: {name}'s character card (identity only).",
     "panel_bind": "{name} (the person from Image {i})",
-    "panel_task": ("GOAL: a new illustration of these {n} named {noun}, each recognizable from their card (face, hair, build and "
+    "panel_task": ("GOAL: a new illustration with {n} named {noun} from the cards, each recognizable from their card (face, hair, build and "
                    "clothes), placed in the scene below. Leave the cards' flat backdrops, framing and poses behind. Only the props "
                    "the scene mentions."),
     "person_one": "person", "person_many": "people",

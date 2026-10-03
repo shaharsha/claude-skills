@@ -84,9 +84,12 @@ def run(ep, shots, only=None, workers=6):
         x, y = faces[key]
         jobs.append({"video": ep.path("lipsync", "parts", f"{p['shot']}_{p['k']}.mp4"),
                      "audio": ep.path("lipsync", "parts", f"{p['shot']}_{p['k']}.wav"),
-                     "out": ep.path("lipsync", "out", f"{p['shot']}_{p['k']}.mp4"), "face": f"{x},{y}@{p['mid']}"})
+                     "out": ep.path("lipsync", "out", f"{p['shot']}_{p['k']}.mp4"), "face": f"{x},{y}@{p['mid']}",
+                     "seconds": (p["f1"] - p["f0"]) / ep.fps})
     if missing:
         print("  no face point (kept unsynced):", ", ".join(missing))
+    secs = sum(j["seconds"] for j in jobs if not os.path.exists(j["out"]))
+    print(f"  {len(jobs)} part(s) to sync, {secs:.1f} s of video not yet synced: about ${secs * 0.133:.2f} (Sync 3 on fal, ~$0.133/s)")
     if jobs:
         os.makedirs(ep.path("lipsync", "out"), exist_ok=True)
         f = ep.path("lipsync", "out", "_jobs.json")

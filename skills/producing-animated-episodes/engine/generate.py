@@ -105,6 +105,11 @@ def line_jobs(ep, only=None):
     return jobs
 
 
+def line_scripts(ep, only=None):
+    """{clip: the exact TTS text}: what elevenlabs-tts check_tags_spoken.py compares the takes against."""
+    return {clip: text for clip, _, text in line_jobs(ep, only)}
+
+
 def sound_requests(ep, only=None):
     gm = _module("elevenlabs-tts", "generate_music_and_sfx.py")
     out = {}
@@ -203,6 +208,9 @@ def run_lines(ep, only=None, workers=4):
         return clip, None
 
     jobs = line_jobs(ep, only)
+    os.makedirs(raw, exist_ok=True)
+    json.dump(line_scripts(ep, only), open(os.path.join(raw, "_scripts.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    print(f"  {len(jobs)} takes, {sum(len(t) for _, _, t in jobs)} characters billed (tags included)")
     with ThreadPoolExecutor(workers) as ex:
         for clip, err in ex.map(tts, jobs):
             print(f"  {clip}: {'OK' if not err else 'FAIL ' + ' '.join(err)}", flush=True)
@@ -246,6 +254,7 @@ def run_sound(ep, only=None):
         spec = {n: {"type": kind, **v} for n, v in ep.data.get(kind, {}).items() if not only or n in only}
         if not spec:
             continue
+        print(f"  {kind}: {len(spec)} item(s), {sum(v['seconds'] for v in spec.values()):.0f} s requested (billed in ElevenLabs credits)")
         os.makedirs(ep.path(dest), exist_ok=True)
         f = ep.path(dest, "_spec.json")
         json.dump(spec, open(f, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
@@ -267,8 +276,19 @@ def run_animate(ep, only=None, takes=1):
     os.makedirs(ep.path("clips"), exist_ok=True)
     f = ep.path("clips", "_jobs.json")
     json.dump({"base": "", "jobs": jobs}, open(f, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    before = {p: os.path.getmtime(p) for p in _clip_files(ep)}
+    print(f"  {len(jobs)} shot(s) x {takes} take(s); billed per second of clip (~$0.10/s, a 6 s clip ~$0.60)")
     subprocess.run([sys.executable, tool("generating-video-clips", "scripts", "omni_generate.py"), f, ep.path("clips"),
                     "--takes", str(takes)])
+    new = [p for p in _clip_files(ep) if before.get(p) != os.path.getmtime(p)]
+    secs = sum(float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", p],
+                                    capture_output=True, text=True).stdout or 0) for p in new)
+    print(f"  generated {len(new)} clip(s), {secs:.1f} s: about ${secs * 0.10:.2f}")
+
+
+def _clip_files(ep):
+    d = ep.path("clips")
+    return [os.path.join(d, f) for f in os.listdir(d) if f.endswith(".mp4")] if os.path.isdir(d) else []
 
 
 def pick_take(ep, sid, k):

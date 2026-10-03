@@ -61,6 +61,24 @@ def check(ep):
     for cue in ep.data.get("music_cues", []):
         if not os.path.exists(ep.path("music", f"{cue[0]}.mp3")):
             blockers.append(f"music cue missing: {cue[0]}.mp3 (episode.py sound)")
+    used = {ov.get("style") for s in ep.shots for ov in s.get("overlays", [])}
+    S = ep.data.get("subtitle", {})
+    need = {S.get("font", "bold"): "subtitles", S.get("name_font", "hblack"): "subtitle names"} if ep.lines else {}
+    for name in used:
+        st = ep.styles.get(name, {})
+        kind = st.get("kind", "text")
+        if kind == "text":
+            need.setdefault(st.get("font", ""), f"style {name}")
+        elif kind == "band":
+            need.setdefault(st.get("name_font", "black"), f"style {name}"); need.setdefault(st.get("stat_font", "bold"), f"style {name}")
+        elif kind == "stack":
+            for it in st.get("items", []):
+                need.setdefault(it.get("font", ""), f"style {name}")
+        elif kind == "poll":
+            need.setdefault(st.get("title_font", "hblack"), f"style {name}"); need.setdefault(st.get("option_font", "bold"), f"style {name}")
+    for key, user in need.items():
+        if key and not os.path.exists(ep.font(key)):
+            blockers.append(f"font '{key}' (used by {user}) is not in fonts, or its file is missing")
     for skill, script in SIBLINGS:
         if not os.path.exists(os.path.join(generate.SKILLS, skill, "scripts", script)):
             blockers.append(f"sibling skill file missing: {skill}/scripts/{script}")
@@ -119,7 +137,7 @@ def sheet(ep, ids):
     os.makedirs(out_dir, exist_ok=True)
     W, H = 216, 384
     for n in range(0, len(rows), 6):
-        im = Image.new("RGB", (3 * (W + 6) + 120, 6 * (H + 6)), "white")
+        im = Image.new("RGB", (3 * (W + 6) + 120, len(rows[n:n + 6]) * (H + 6)), "white")
         d = ImageDraw.Draw(im)
         for r, s in enumerate(rows[n:n + 6]):
             d.text((6, r * (H + 6) + 8), f"{s['id']}\n{s['start']:.1f}s\n+{s['dur']:.1f}s", fill="black")

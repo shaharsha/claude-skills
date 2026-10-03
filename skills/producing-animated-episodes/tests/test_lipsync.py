@@ -39,7 +39,9 @@ def test_run_builds_jobs_only_for_faced_parts(tiny, monkeypatch, capsys):
     mid = lipsync.plan_parts(tiny, shots)[0]["mid"]
     assert [j["face"] for j in jobs] == [f"400,500@{mid}"]
     assert jobs[0]["out"].endswith("video/lipsync/out/S02_0.mp4")
-    assert "S02|1" in capsys.readouterr().out                      # a speaking part without a face point is reported
+    out = capsys.readouterr().out
+    assert "S02|1" in out                                         # a speaking part without a face point is reported
+    assert "about $" in out                                       # the cost is shown before anything is submitted
 
 
 def test_join_one_is_frame_exact(tiny, tmp_path):

@@ -59,3 +59,23 @@ def test_check_warns_when_overlay_text_is_wider_than_the_frame(tmp_path):
     r = run(proj, "check")
     assert "S01" in r.stdout and "wider than the frame" in r.stdout
     assert r.returncode == 0                       # a warning, not a blocker
+
+
+def test_check_blocks_on_a_missing_subtitle_font(tmp_path):
+    run(tmp_path, "demo")
+    proj = tmp_path / "demo-episode"
+    cfg = json.load(open(proj / "episode.json"))
+    cfg["subtitle"] = {"font": "nosuchkey"}
+    json.dump(cfg, open(proj / "episode.json", "w"), ensure_ascii=False)
+    r = run(proj, "check")
+    assert r.returncode == 1 and "nosuchkey" in r.stdout
+
+
+def test_sheet_page_fits_its_shots(tmp_path):
+    from PIL import Image
+    run(tmp_path, "demo")
+    proj = tmp_path / "demo-episode"
+    assert run(proj, "build", "--workers", "2").returncode == 0
+    assert run(proj, "sheet").returncode == 0
+    im = Image.open(proj / "build" / "review" / "shots_0.jpg")
+    assert im.height == 5 * (384 + 6)                              # the demo has 5 shots, not 6 rows
