@@ -1,0 +1,55 @@
+{
+ "version": 1,
+ "title": "המשולש האחרון",
+ "output": "demo",
+ "text": {"language": "he"},
+ "fonts": {"black": "fonts/Rubik-Black.ttf", "hblack": "fonts/Heebo-Black.ttf", "bold": "fonts/Heebo-Bold.ttf", "hand": "fonts/AmaticSC-Bold.ttf"},
+ "timing": {"pad_scale": 0.8},
+ "characters": {
+  "maya": {"display": "מאיה", "background": "hot magenta #E0218A", "voice": "<voice id>", "panel_name": "Maya",
+           "likeness": "round face, short black bob haircut, big dark eyes, small silver nose ring",
+           "body": "average build, NOT muscular", "pose": "one hand on her hip, pointing accusingly", "outfit": "red bomber jacket over a striped shirt"},
+  "ido":  {"display": "עידו", "background": "royal blue #2450D8", "voice": "<voice id>", "panel_name": "Ido",
+           "likeness": "long narrow face, curly brown hair, thin mustache, sleepy eyes",
+           "body": "tall and thin", "pose": "hands behind his back, innocent smile", "outfit": "green hoodie with tomato sauce on the sleeve"}
+ },
+ "speakers": {"ALL": {"display": "כולם", "color": "#FFFFFF"}},
+ "voice": {"model": "eleven_v4", "stability": 0.45, "language_code": "he", "tempo": 1.1},
+ "pronounce": [["אבסולוט", "Absolut"]],
+ "lines": [
+  {"id": "01-1", "who": "maya", "text": "[shocked, loud] מי אכל את המשולש האחרון?!"},
+  {"id": "02-1", "who": "maya", "text": "[proud, energetic intro shout] צדק!", "trim": true, "level": true},
+  {"id": "02-2", "who": "ido",  "text": "[innocent, slow] פיצה?", "trim": true, "level": true},
+  {"id": "03-1", "who": "ido",  "text": "[nervous, fast] אני... לא הייתי פה בכלל. הייתי בטלפון."}
+ ],
+ "prompts": {"char_style": "STYLE: bright anime cel art, bold clean outlines, flat two-tone shading, saturated colors, grown-up proportions.",
+             "panel_style": "STYLE: bright anime cel art, bold clean outlines, flat two-tone shading, saturated colors, richly painted backgrounds."},
+ "panels": {
+  "p01":  {"chars": ["maya", "ido"], "scene": "SCENE: a small student kitchen at night, one empty pizza box open on the counter. SUBJECT: Maya points furiously at the empty box; Ido stands behind her with sauce on his sleeve, looking at the ceiling."},
+  "p02s": {"chars": ["ido"], "scene": "SCENE: a selfie-style video call frame. SUBJECT: Ido, close-up, sweating, fake smile, a pizza crust visible in the corner of the frame."}
+ },
+ "animate": {"base": "Bring this still to life as it is: same art style, palette and layout, every face and outfit unchanged. Nothing written on screen, nobody new, one continuous shot. ",
+             "shots": {"S01": {"panel": "p01", "motion": "[0-3s] The woman in the red bomber jacket points at the empty box and talks, outraged. [3-5s] The tall man in the green hoodie slowly hides his sleeve behind his back."}}},
+ "music": {"theme": {"prompt": "Light comic mystery bed, plucked cello and tiptoeing clarinet, soft shaker, curious and loopable. No vocals.", "seconds": 16}},
+ "sfx": {"whoosh": {"prompt": "quick swish for a scene transition", "seconds": 0.6}},
+ "music_cues": [["theme", "S01", "S03", 0.35, 0]],
+ "styles": {
+  "title": {"font": "black", "size": 120, "fill": "#FFFFFF", "stroke": 12, "stroke_fill": "#6A1B9A", "y_center": 640, "anim": "pop"},
+  "band": {"kind": "band", "stat_fill": "#FFD24A"},
+  "endtitle": {"kind": "stack", "canvas": [1080, 520], "pos": [0, 90], "anim": "pop", "items": [
+   {"font": "black", "size": 120, "fill": "#FFFFFF", "stroke": 12, "stroke_fill": "#6A1B9A", "y": 20},
+   {"font": "hblack", "size": 70, "fill": "#FFD24A", "stroke": 6, "stroke_fill": "#1B2A4A", "gap": 20}]}
+ },
+ "collage": {"rows": [{"keys": ["maya", "ido"], "h": 980, "y": 900}]},
+ "shots": [
+  {"id": "S01", "img": "p01", "lines": ["01-1"], "pre": 0.6, "post": 0.6, "cam": {"in": [1.15, 0.45, 0.4]}, "fx": [["flash", 0]],
+   "sfx": [["whoosh", 0, 0.5]], "overlays": [{"style": "title", "text": "המשולש האחרון", "t0": 0.1, "t1": 1.2}]},
+  {"id": "C01", "img": "card:maya", "lines": ["02-1"], "pre": 0.15, "post": 0.5, "mindur": 1.3, "nosub": true, "cam": {"in": [1.06]},
+   "overlays": [{"style": "band", "text": ["מאיה", "שופטת הפיצה"], "t0": 0, "t1": null, "color": "#E0218A"}]},
+  {"id": "C02", "img": "card:ido", "lines": ["02-2"], "pre": 0.15, "post": 0.5, "mindur": 1.3, "nosub": true, "cam": {"in": [1.06]},
+   "overlays": [{"style": "band", "text": ["עידו", "חשוד מספר 1"], "t0": 0, "t1": null, "color": "#2450D8"}]},
+  {"id": "S02", "img": "tablet:p02s:p01", "lines": ["03-1"], "pre": 0.4, "post": 0.6, "cam": {"in": [1.08]}},
+  {"id": "S03", "img": "collage", "dur": 3.0, "cam": {"in": [1.03]},
+   "overlays": [{"style": "endtitle", "text": ["המשולש האחרון", "סוף הפרק"], "t0": 0.3, "t1": null}]}
+ ]
+}
