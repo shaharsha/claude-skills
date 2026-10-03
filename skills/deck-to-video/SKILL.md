@@ -1,6 +1,6 @@
 ---
 name: deck-to-video
-description: Use when turning a slide deck plus per-slide narration audio into an mp4 video — a self-playing/self-presenting deck video, "slides to video", "presentation to mp4", a shareable WhatsApp/Slack/Drive video of a narrated deck, or when a slide video needs a per-slide progress bar / countdown / slide counter. Also use when a slide video should highlight, glow or spotlight the element being talked about in time with the voice, or when narration and on-screen animation need syncing. Also use when an ffmpeg-drawn progress bar renders full/static from the first frame, or ffmpeg errors "No such filter: 'drawtext'". Also use when burning or hardcoding subtitles into a deck video, when subtitles do not show in a Slack or Teams inline player, when VLC shows two sets of subtitles at once, or when ffmpeg reports "No option name near" on a subtitles filter.
+description: Use when turning a slide deck plus per-slide narration audio into an mp4 video — a self-playing/self-presenting deck video, "slides to video", "presentation to mp4", a shareable WhatsApp/Slack/Drive video of a narrated deck, or when a slide video needs a per-slide progress bar / countdown / slide counter. Also use when a slide video should highlight, glow or spotlight the element being talked about in time with the voice, or when narration and on-screen animation need syncing. Also use when an ffmpeg-drawn progress bar renders full/static from the first frame, or ffmpeg errors "No such filter: 'drawtext'". Also use when burning or hardcoding subtitles into a deck video, when subtitles do not show in a Slack or Teams inline player, when VLC shows two sets of subtitles at once, or when ffmpeg reports "No option name near" on a subtitles filter. Also use when a final ffmpeg mux cuts off the end of a video, or ffmpeg 9 rejects -filter_complex_script.
 ---
 
 # Deck to Video (slides + narration → self-playing mp4)
@@ -147,6 +147,9 @@ if key in cache: os.link(cache[key], path); continue
 | Leaving the sidecar `.srt` beside a burned-in mp4 | VLC auto-loads any `.srt` matching the video's basename — the viewer sees **two** sets of subtitles stacked | move the sidecar out of that folder; a burned video is self-contained |
 | `force_style='…'` with commas, in the filter string | `No option name near …` — looks like a shell quoting bug, is actually the filtergraph splitting on those commas | convert to `.ass` and set the style in the file |
 | Counting ASS `Style:` field positions | Alignment/MarginV land on the wrong fields and libass renders it silently | map fields by the `Format:` header line |
+| `-filter_complex_script file` on ffmpeg 9 | `Unrecognized option` - the option was removed | `-/filter_complex file` (the `-/` prefix reads any option's value from a file; ffmpeg 7+) |
+| Final mux with `-shortest` when the mixed audio ends early | the video's last seconds (an end caption, a fade-out) are cut | pad the audio: `apad` in the graph plus `-t <video length>` on the mix, then check both stream durations with `ffprobe -show_entries stream=codec_type,duration` |
+| A music bed that stops before the video ends | the music cue is shorter than the stretch it scores | generate a longer cue (or add a second cue for the last section), and check every cue's real length against its window before mixing - see elevenlabs-tts, Music and sound effects |
 
 ## Caveats
 

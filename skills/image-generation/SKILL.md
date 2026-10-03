@@ -1,6 +1,6 @@
 ---
 name: image-generation
-description: Generate logos, icons, UI mockups, hero images, product shots, and other design assets using OpenAI GPT Image 2.5 (Sunburst, Flare) or Google Gemini (Nano Banana 2, Nano Banana Pro, Nano Banana 2 Lite). Use whenever the user asks to create, design, generate, mock up, render, or illustrate a visual asset, needs a transparent PNG, or asks for image prompt engineering. Picks the right model and quality for the job, writes a model-specific prompt following the official prompting rules of each provider, calls the API, and saves the image to disk.
+description: Generate logos, icons, UI mockups, hero images, product shots, and other design assets using OpenAI GPT Image 2.5 (Sunburst, Flare) or Google Gemini (Nano Banana 2, Nano Banana Pro, Nano Banana 2 Lite). Use whenever the user asks to create, design, generate, mock up, render, or illustrate a visual asset, needs a transparent PNG, or asks for image prompt engineering. Picks the right model and quality for the job, writes a model-specific prompt following the official prompting rules of each provider, calls the API, and saves the image to disk. Also use when turning photos of real people into consistent cartoon or anime characters, when drawing scenes with several recurring characters (only one appears, names get swapped, subtitles show up), or when a phone or tablet screen renders from behind.
 allowed-tools: Read, Write, Bash, WebFetch
 ---
 
@@ -90,6 +90,26 @@ Full decision tree per asset type: [reference/model-selection.md](reference/mode
 | Product photography / hero shot | [templates/product-shot.md](templates/product-shot.md) |
 
 For verbatim worked examples, see [examples.md](examples.md).
+
+## Recurring characters and story panels
+
+For comics, storyboards and animated episodes where the same people appear in many images:
+
+- **Characters from photos.** Never pass whole photos as references: the edit endpoint restyles the photo (copies pose, clothes and background, adds caption text) instead of drawing the person. The working pipeline:
+  1. Crop the faces first: `python3 <this-skill-dir>/scripts/crop_faces.py photos/ faces/ --sheet faces/_sheet.jpg`.
+  2. Make an anime face from the crops.
+  3. Edit that face into a half-body costume card, stating the body type.
+  4. Get human approval, then promote.
+
+  Prompts and the review loop: [reference/characters-from-photos.md](reference/characters-from-photos.md).
+- **Scenes with 2+ characters.**
+  - Draft with Sunburst `high`, not Flare: Flare drew only Image 1, outdoors, with subtitles.
+  - Bind each name to its card on first mention: "Dana (the woman from Image 1)".
+  - Forbid subtitles in any language.
+  - Phone and tablet screens render from behind: generate the screen content as its own image and composite it.
+
+  Recipe: [reference/multi-character-scenes.md](reference/multi-character-scenes.md).
+- **Batch billing.** `credit_balance_exhausted` means the OpenAI account is out of credit, not a bad request. Stop, list which shots finished, and after the top-up rerun only the missing ones.
 
 ## API keys and dependencies
 

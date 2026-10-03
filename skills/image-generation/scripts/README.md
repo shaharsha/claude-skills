@@ -146,6 +146,19 @@ Every call prints one line to stderr with latency, output tokens and cost, e.g. 
   --thinking minimal
 ```
 
+## crop_faces.py - face crops for character references
+
+Never pass whole photos as `--ref` for character work: the edit endpoint restyles the photo instead of drawing the person. Crop the faces first.
+
+```bash
+pip install opencv-python-headless   # the one dependency
+python3 crop_faces.py photos/ faces/ --sheet faces/_sheet.jpg
+# faces/<photo-stem>-<n>.png per detected face (largest first, 60% margin, square)
+# --sheet: numbered contact sheet so the human can say which crop is whom
+# --margin 0.6   --min 120 (smallest face side, px)
+```
+A photo with no detectable face prints `0 face(s)`. Crop it by hand with `sips` or ffmpeg's `crop` filter. HEIC must be converted first (`sips -s format jpeg in.heic --out out.jpg`). The full pipeline (crop, face, card, promote) is in `../reference/characters-from-photos.md`.
+
 ## rembg.sh — local background remover
 
 Use for Gemini outputs (which have no transparent mode) or to cut an existing image. For OpenAI renders, ask for `--background transparent` instead.

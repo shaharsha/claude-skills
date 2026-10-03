@@ -1,6 +1,6 @@
 # claude-skills
 
-Agent skills by [@shaharsha](https://github.com/shaharsha) - 22 production-grade [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills) that work in Claude Code, claude.ai, Codex, Cursor, and any other harness that reads the SKILL.md format.
+Agent skills by [@shaharsha](https://github.com/shaharsha) - 23 production-grade [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills) that work in Claude Code, claude.ai, Codex, Cursor, and any other harness that reads the SKILL.md format.
 
 MIT licensed. Built day-to-day; battle-tested in real projects.
 
@@ -15,7 +15,7 @@ MIT licensed. Built day-to-day; battle-tested in real projects.
 /plugin install shaharsha-skills@shaharsha-skills
 ```
 
-This installs all 22 skills as one plugin. Or pick a subset:
+This installs all 23 skills as one plugin. Or pick a subset:
 
 ```bash
 /plugin install documents-and-decks@shaharsha-skills    # gdoc-sync + gslides-sync + gsheets + presentation-generator + elevenlabs-tts + narrating-pptx + deck-to-video + self-presenting-decks
@@ -23,6 +23,7 @@ This installs all 22 skills as one plugin. Or pick a subset:
 /plugin install engineering-decisions@shaharsha-skills  # tech-design-doc + codex-review
 /plugin install building-agents@shaharsha-skills        # prompt-engineer + writing-project-instructions + working-with-other-sessions
 /plugin install utilities@shaharsha-skills              # namecheap-domains + office-render + viewing-videos + proton-pass + tavily-extract
+/plugin install video-production@shaharsha-skills       # generating-video-clips
 ```
 
 ### Manual (any other harness)
@@ -88,6 +89,12 @@ Each links to its own README — what it does, why it exists, install, and the g
 | [proton-pass](skills/proton-pass) | Credentials and secrets from the CLI via Proton Pass, with never-print-secrets guardrails. |
 | [tavily-extract](skills/tavily-extract) | Fetch the JS-rendered SPAs and 403-blocked hosts a normal fetcher can't, and flag soft 404s. |
 
+### Video production
+
+| Skill | What it does |
+|---|---|
+| [generating-video-clips](skills/generating-video-clips) | Still to short clip with Gemini Omni, takes reviewed on frame sheets, and mouths lip-synced to your own dialogue with Sync 3 on fal, one speaker per part, frame-exact. |
+
 ## How they compose
 
 A few of these are designed to work together:
@@ -100,6 +107,7 @@ A few of these are designed to work together:
 - `narrating-pptx` narrates decks produced by `presentation-generator` (or any pptx), generates its audio with `elevenlabs-tts`, and uses `office-render` for the real-PowerPoint validation step.
 - `deck-to-video` reuses the per-slide mp3s (and `elevenlabs-tts`' forced alignment for subtitles) and `office-render`'s real-PowerPoint PDF — the pptx and the video sound and look identical.
 - `self-presenting-decks` is the map over the whole chain: pptx authoring → `office-render` → `narrating-pptx` (+ `elevenlabs-tts`) → `deck-to-video`.
+- `generating-video-clips` animates `image-generation`'s panels and lip-syncs them to `elevenlabs-tts` dialogue.
 
 ---
 

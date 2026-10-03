@@ -262,6 +262,7 @@ Token rates: Flash $0.50/M input · $60/M output. Pro $2/M input · $120/M outpu
 11. **Thought signatures must be preserved** across multi-turn raw-REST calls.
 12. **`thinkingLevel="minimal"` on Flash doesn't save cost,** only latency — thinking tokens always billed.
 13. **Preview status** — both models can break/change. Pin your version, don't auto-upgrade silently.
+14. **Outpainting does not keep canvas placement** (Pro, 2026-10, one test). Given a sharp image in the middle of a taller canvas with blurred placeholder bands, Pro re-laid out the whole scene: it filled the bottom band well but left the top band blurry, and returned 1536x2752 (0.558, not exactly 9:16). Check every band, crop what it skipped, and resize to the exact aspect.
 
 ## Canonical examples by asset type (verbatim from Google)
 

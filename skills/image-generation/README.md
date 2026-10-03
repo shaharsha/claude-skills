@@ -23,6 +23,7 @@ The skill packages:
 - **Transparent backgrounds** — native on GPT Image 2.5 (png/webp, real RGBA alpha). For Gemini outputs or existing images the skill bundles a `rembg` post-process, plus an ImageMagick color-key path for monochrome line art from any source.
 - **Hebrew/RTL guidance** — GPT Image 2.5 handles Hebrew/Arabic directly for most cases (still check letter by letter, final forms especially); the two-stage composite workflow is a documented fallback.
 - **Bundled scripts** — `scripts/openai-image.sh` (GPT Image 2.5 / 2 wrapper; prints latency, tokens and cost per call), `scripts/gemini-image.sh` (Gemini wrapper), `scripts/rembg.sh` (local background remover).
+- **Recurring characters and story panels** - real people from photos turned into consistent cartoon/anime characters (face crops via `scripts/crop_faces.py`, anime face, costume card, promote), and multi-character scenes that keep every character (Sunburst `high`, names bound to their reference images, screens composited separately).
 - **Iteration discipline** — a self-critique loop where Claude reads the saved image with its multimodal vision, scores against the brief, and decides ship / edit / rewrite before showing the user.
 
 ## Install
@@ -126,6 +127,8 @@ scripts/
 - **Transparent PNGs are native on 2.5** (`--background transparent`, png or webp). Apple rejects 1024×1024 App Store icons with transparency, so ship a flattened copy for iOS.
 - **Read the generated image before showing the user.** Claude is multimodal and will actually see the pixels: mangled letterforms, wrong hex, broken geometry. Catch it first; don't ask "is this good?" about something you haven't looked at.
 - **After 3 unsuccessful iterations on the same image, change strategy** — rewrite the base prompt or switch models. Tweaking a fourth time rarely converges.
+- **Never pass whole photos as references for a character.** The edit endpoint restyles the photo (same pose, clothes, background, sometimes invented captions). Crop the face first.
+- **Two or more characters in one panel need Sunburst `high`.** Flare drew only Image 1, outdoors, with subtitles.
 - **Dimensions must be multiples of 16** for GPT Image. `1920×1080` is invalid because 1080 isn't; use `2560×1440`.
 - **Gemini `*-preview` IDs are shut down.** Use `gemini-3.1-flash-image`, `gemini-3-pro-image`, `gemini-3.1-flash-lite-image` (aliases `flash`, `pro`, `lite`); the smallest Gemini size is spelled `512`.
 

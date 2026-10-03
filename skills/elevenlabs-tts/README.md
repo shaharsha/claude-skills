@@ -49,10 +49,10 @@ ln -s "$PWD/claude-skills/skills/elevenlabs-tts" ~/.claude/skills/elevenlabs-tts
 
 ## Requirements
 
-- `ELEVENLABS_API_KEY` as an env var, never pasted into output. The key needs Text to Speech; the leak check and alignment also use Speech to Text.
+- `ELEVENLABS_API_KEY` as an env var, never pasted into output. The key needs Text to Speech; the leak check and alignment also use Speech to Text; music and sound effects need their own permissions on the key.
 - A voice ID
 - Python 3. The scripts use only the standard library.
-- `afinfo` (macOS) or `ffprobe` for durations
+- ffmpeg and ffprobe (the trim, level, A/B and music scripts need them; `afinfo` on macOS also gives durations)
 
 ## Quick start
 
@@ -69,6 +69,16 @@ python3 scripts/generate_tts.py scripts.json VOICE_ID audio/ --stability 0.5 [--
 
 # 3. timings for subtitles / synced visuals
 python3 scripts/align_narration.py scripts.json audio/ alignment/
+
+# a cast of voices with one-word lines: trim to the spoken word, then level the set
+python3 scripts/trim_to_words.py lines.json raw/ trimmed/ --prefix ""
+python3 scripts/level_clips.py trimmed/ leveled/ --target -18     # or: level_clips.py raw/ --report (swallowed words)
+
+# pronunciation A/B by ear: one file, a timestamp per variant
+python3 scripts/ab_concat.py ab.mp3 v1.mp3 v2.mp3 v3.mp3
+
+# music cues and sound effects (music_v2_5, instrumental)
+python3 scripts/generate_music_and_sfx.py sounds.json audio/
 ```
 
 ## The scripts
@@ -78,11 +88,18 @@ python3 scripts/align_narration.py scripts.json audio/ alignment/
 | `generate_tts.py` | One clip per `scripts.json` entry; parallel with 429 backoff; validates responses are real mp3 (not error JSON); refuses over-limit scripts per model; `--seed`, `--language-code`, `--stitch` (request stitching); writes `_manifest.json` and warns when a directory mixes settings |
 | `check_tags_spoken.py` | Transcribes clips with Scribe and flags `LEAK` (a tag word was spoken) or `EXTRA` (transcript longer than the tag-free script — catches a tag spoken in another alphabet) |
 | `align_narration.py` | Forced alignment against the tag-stripped script; verifies `len(characters) == len(text)` so character offsets map to timestamps |
+| `trim_to_words.py` | Cuts short clips to the first-to-last aligned word (lead 0.04 s, tail 0.14 s, short fades); drops a repeated word or a stray sigh; never touches the originals |
+| `level_clips.py` | Levels clips to one **voiced** loudness (silence excluded) with a limiter; `--report` lists 150 ms windows where a word sagged |
+| `ab_concat.py` | Joins pronunciation variants a second apart and prints each start time, so the human picks by timestamp |
+| `generate_music_and_sfx.py` | Music cues (`/v1/music`, `music_v2_5`, instrumental) and SFX (`/v1/sound-generation`) from one spec; skips existing files, never leaves a partial one |
 
 ## References
 
 - [`references/audio-tags.md`](references/audio-tags.md) — the v4 tag vocabulary by family, narration directions, writing your own, troubleshooting.
 - [`references/api.md`](references/api.md) — full request schema, request stitching, timestamps vs forced alignment, Text to Dialogue, real-time Turbo, Studio, pronunciation, output formats, concurrency, pricing, clones.
+- [`references/short-lines-and-casts.md`](references/short-lines-and-casts.md) - a cast of voices, one-word lines, pace, crowd shouts, swallowed words, leak-check false alarms.
+- [`references/pronunciation-hebrew.md`](references/pronunciation-hebrew.md) - the fix ladder for names and loanwords (Latin script, respelling, niqqud, IPA) and the A/B procedure.
+- [`references/music-and-sfx.md`](references/music-and-sfx.md) - music and SFX requests, prompt recipe, planning cues against the edit, plan gating.
 
 ## Gotchas
 

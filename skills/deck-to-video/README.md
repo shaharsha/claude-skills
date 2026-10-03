@@ -118,6 +118,9 @@ You cannot verify audio headlessly. Say so; never claim you heard it.
 | Piping the build through `\| tail` in an `&&` chain | Pipeline exit becomes tail's 0 — a failed build "succeeds" and stale artifacts ship | Run unpiped, or `set -o pipefail`; gate delivery on verified output |
 | Expecting a sidecar `.srt` or a soft subtitle track to show in Slack | Its inline player exposes no CC control, so viewers who just hit play see nothing | Burn them in for that destination — SKILL.md's *Subtitles* section |
 | Leaving the sidecar `.srt` beside a burned-in mp4 | VLC auto-loads it by basename — two sets of subtitles stacked on screen | Move the sidecar out of the folder; a burned video is self-contained |
+| `-filter_complex_script file` on ffmpeg 9 | `Unrecognized option` - the option was removed | `-/filter_complex file` (ffmpeg 7+) |
+| Final mux with `-shortest` when the mixed audio ends early | The video's last seconds are cut | `apad` on the mix plus `-t <video length>`, then check both stream durations |
+| A music bed that stops before the video ends | The cue is shorter than the stretch it scores | A longer cue (or a second one), checked against its window - see elevenlabs-tts |
 
 ## Caveats
 
