@@ -1,6 +1,6 @@
 ---
 name: elevenlabs-tts
-description: Use when generating speech, voiceover, narration, or any spoken audio with ElevenLabs in any language (Hebrew, English, mixed) — writing scripts with audio tags, choosing eleven_v4 vs v3 settings, batching many clips, cloned or library voices, or getting word/character timings for subtitles and synced animation. Also use when ElevenLabs output reads tags aloud, sounds monotone or over-acted, drifts between clips, mispronounces a term, returns 429s, or when alignment/subtitles drift after tagged narration. Use whenever the user mentions ElevenLabs, eleven_v4/eleven_v3, Eleven v4, audio tags, or TTS voiceover — even if they don't say "ElevenLabs" but want a voice generated.
+description: Use when generating speech, voiceover, narration, or any spoken audio with ElevenLabs in any language (Hebrew, English, mixed) — writing scripts with audio tags, choosing eleven_v4 vs v3 settings, batching many clips, cloned or library voices, or getting word/character timings for subtitles and synced animation. Also use when ElevenLabs output reads tags aloud, sounds monotone or over-acted, drifts between clips, mispronounces a term, returns 429s, or when alignment/subtitles drift after tagged narration. Use whenever the user mentions ElevenLabs, eleven_v4/eleven_v3, Eleven v4, audio tags, or TTS voiceover — even if they don't say "ElevenLabs" but want a voice generated. Also use for ElevenLabs music or sound effects (music_v2_5, instrumental cues, SFX), a cast of cloned voices with one-word lines that repeat or carry an extra sigh, Hebrew names and loanwords read wrong, or a key failing with missing_permissions or paid_plan_required.
 ---
 
 # ElevenLabs TTS (Eleven v4)
@@ -61,7 +61,7 @@ ElevenLabs' UI "Enhance" is an LLM inserting tags; there is no Enhance API. You 
 - English tags inside the Hebrew are performed, not read aloud (verified 2026-10-02 with Josh on v4: Scribe transcripts of tagged Hebrew clips contained no tag words, and `[Pause, dry amusement]` produced a real ~1.9 s pause). Still sample one clip per new voice/register — `scripts/check_tags_spoken.py`.
 - Write numbers, dates, units and acronyms out in words — "11" is "eleven" or "אחת-עשרה" depending on the reader's guess. `language_code: "he"` helps short or ambiguous text.
 - Keep the terms the audience says in English in English, joined the Hebrew way (`ה-pipeline`, `ה-agent`).
-- If a loanword's stress lands wrong, write it in Latin script; if a name breaks, add niqqud or respell it phonetically. (Third-party v3-era findings — re-check on v4.)
+- Loanwords, brands and names: write them in Latin script inside the Hebrew, prefixes hyphenated (`ה-Absolut`, `מ-Dani`). Verified on v4 in 2026-10, with the full fix ladder in `references/pronunciation-hebrew.md`.
 - A voice speaking a language other than its reference language now gets a *native* accent in that language — deliberate on v4.
 
 **Pronunciation of one stubborn term:** inline IPA in slashes inside quotes — `"/ˈtɔːrk/"` — with stress marks; or a pronunciation dictionary (`references/api.md` §7). SSML `<phoneme>` does not work on v4.
@@ -92,6 +92,8 @@ python3 <this-skill-dir>/scripts/check_tags_spoken.py scripts.json audio/ [--onl
 afinfo audio/slide01.mp3 | grep duration      # or ffprobe
 ```
 `check_tags_spoken.py` flags a clip when a tag word was spoken (`LEAK`) or the transcript runs longer than the tag-free script (`EXTRA` — catches a tag spoken in another script's letters). It costs speech-to-text credits; run it on the sample and on a few batch clips, not on every draft.
+
+False alarms to expect: Scribe writes non-speech as a bracketed annotation in the clip's own language (a Hebrew word for "sighs" in brackets is an annotation, not a leaked tag); a one-word clip can be transcribed in the wrong language (pass `--language-code`); and a tag word that also appears in the line itself (a `[whispering]` tag on a line that says "stop whispering") trips `LEAK`. Read the transcript before regenerating.
 
 **4. Hand the ear-check to the human, explicitly.** Emotion, over-acting, pace and pronunciation need ears. Say that you have not heard the audio; never claim you did.
 
@@ -124,6 +126,51 @@ Pass any voice ID. **Default to Shahar** unless the user names another. Shahar i
 
 Library voices work on v4 as-is. A user's **own** clones made before v4 should be retrained on v4 in the web app (My Voices → "+" next to Eleven v4) — and a retrained clone can sound different from its v3 self, so re-sample before regenerating anything that must match old audio.
 
+## A cast of voices and very short lines
+
+Character work (one voice per character, many short lines) breaks things narration never hits. Full recipe: `references/short-lines-and-casts.md`.
+
+- **One model and one stability for the whole cast** (0.4 suited a large comedic cast), with `language_code` set.
+- **Then stop for the ear check.** Generate one sample line per voice, send the files to the human, and wait for their verdict on every voice *before* generating the real lines. A voice that is wrong for its character found after the batch costs the whole batch again.
+- **One-word lines come back dirty**: the word said twice, a sigh or laugh from the tag, a long lead-in. Trim each clip to its spoken words with forced alignment, then level the set:
+  ```bash
+  python3 <this-skill-dir>/scripts/trim_to_words.py lines.json raw/ trimmed/ --prefix ""
+  python3 <this-skill-dir>/scripts/level_clips.py trimmed/ leveled/ --target -18
+  ```
+- **A swallowed word mid-sentence** shows up as a weak window in `level_clips.py raw/ --report`. Regenerate that line with a firmer tag (`[clear, confident]`), compare the takes by the report, then let the human pick.
+- **Pace**: `atempo=1.1` on the whole set (pitch kept) tightened comedy timing. Force-align after the tempo change, never before it.
+- **Crowd shouts**: record the line in 6-10 voices and mix them 0-160 ms apart (recipe in the reference).
+
+## Pronunciation, names and A/B tests
+
+Read `references/pronunciation-hebrew.md` before fixing a mispronounced word. Verified on v4 (2026-10):
+- **Latin script inside the Hebrew** fixed every loanword and name.
+- **Niqqud on a loanword** produced a syllable-by-syllable read.
+- **A prefix letter glued to a name** can turn it into another Hebrew word.
+
+Never decide by reading a transcript. Put the variants in one file and let the human answer by timestamp:
+```bash
+python3 <this-skill-dir>/scripts/ab_concat.py ab.mp3 v1.mp3 v2.mp3 v3.mp3   # prints A 0:00.00 / B 0:03.41 / ...
+```
+On-screen text keeps normal Hebrew spelling: the Latin respelling is TTS input only.
+
+## Music and sound effects
+
+```bash
+python3 <this-skill-dir>/scripts/generate_music_and_sfx.py sounds.json audio/
+# sounds.json: {"op": {"type": "music", "prompt": "...", "seconds": 52}, "whoosh": {"type": "sfx", "prompt": "...", "seconds": 1}}
+```
+`/v1/music` still defaults to `music_v1`. The script always sends `model_id: music_v2_5` and `force_instrumental: true`. A cue shorter than the stretch it scores simply stops, so ask for the window plus 2-4 s and check the real length with `ffprobe`: the length you get is not exactly the length you asked for (a 6 s request came back 7.5 s). Prompts, cue planning and SFX: `references/music-and-sfx.md`.
+
+## When the key or the plan says no
+
+| Response | Meaning | Fix |
+|---|---|---|
+| 401 `missing_permissions` | the key lacks that feature's permission (music, sound effects, image/video generation) | enable it on the key in the ElevenLabs dashboard, or use a key with all permissions |
+| 402 `paid_plan_required` | the feature needs a higher plan (Flows image/video needs Pro) | upgrade, or call the provider directly (see [generating-video-clips](../generating-video-clips)) |
+| 401 `quota_exceeded` | the month's credits are used up | wait for the reset or buy credits; the scripts wrote nothing partial |
+| 404 `voice_not_found` | the voice isn't on this key's account | use a voice that account owns |
+
 ## Cost
 
 Characters (tags included) are billed. `eleven_v4` is $0.022/1K chars **until 2026-10-12**, list $0.08 — same as v3, so there's no cost reason to stay on v3. A 15-slide deck at ~800 chars/slide ≈ 12K chars. Real cost is regenerations: get scripts approved by the human *before* generating, sample before batching.
@@ -144,6 +191,12 @@ Characters (tags included) are billed. `eleven_v4` is $0.022/1K chars **until 20
 | Firing all requests at once | 429s on most | `--concurrency 4` with backoff |
 | "It sounds right" | You can't hear | Leak check + durations; ear-check by the human |
 | Old clone used unretrained on v4 | Lower fidelity | Retrain on v4, re-sample |
+| `/v1/music` without `model_id` | the old music_v1 model | `model_id: music_v2_5` (the bundled script) |
+| A music cue exactly as long as its scene | it stops before the scene ends | ask for 2-4 s more; check the real length |
+| One-word clips used raw | repeated word, stray sighs, uneven gaps | `trim_to_words.py`, then `level_clips.py` |
+| `loudnorm` on one-word clips | the silence sets the level; loud and quiet clips stay uneven | level the voiced part (`level_clips.py`) |
+| Latin respelling copied into subtitles | viewers see "Absolut" inside a Hebrew subtitle | respell only the TTS input |
+| Judging pronunciation from a transcript | Scribe "hears" the intended word | A/B by ear: `ab_concat.py`, the human picks by timestamp |
 
 ## Related skills
 

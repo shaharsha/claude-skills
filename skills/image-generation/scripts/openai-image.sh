@@ -130,7 +130,7 @@ START=$(date +%s)
 
 # Pick endpoint
 if [[ ${#REFS[@]} -eq 0 ]]; then
-  ENDPOINT="https://api.openai.com/v1/images/generations"
+  ENDPOINT="${OPENAI_IMAGE_API_BASE:-https://api.openai.com}/v1/images/generations"
   BODY=$(jq -n \
     --arg model "$MODEL" \
     --arg prompt "$PROMPT" \
@@ -148,19 +148,20 @@ if [[ ${#REFS[@]} -eq 0 ]]; then
     -H "Content-Type: application/json" \
     -d "$BODY")
 else
-  ENDPOINT="https://api.openai.com/v1/images/edits"
+  ENDPOINT="${OPENAI_IMAGE_API_BASE:-https://api.openai.com}/v1/images/edits"
   echo "▸ POST $ENDPOINT (edit, model=$MODEL, ${#REFS[@]} ref(s), quality=$QUALITY, size=$SIZE, background=$BACKGROUND)" >&2
 
   CURL_ARGS=(
     -sS -X POST "$ENDPOINT"
     -H "Authorization: Bearer $OPENAI_IMAGE_API_KEY"
-    -F "model=$MODEL"
-    -F "prompt=$PROMPT"
-    -F "quality=$QUALITY"
-    -F "size=$SIZE"
-    -F "background=$BACKGROUND"
-    -F "output_format=$OUTPUT_FORMAT"
-    -F "n=$N"
+    # --form-string, not -F: -F cuts a value at its first ";" and treats a leading @ or < as a file
+    --form-string "model=$MODEL"
+    --form-string "prompt=$PROMPT"
+    --form-string "quality=$QUALITY"
+    --form-string "size=$SIZE"
+    --form-string "background=$BACKGROUND"
+    --form-string "output_format=$OUTPUT_FORMAT"
+    --form-string "n=$N"
   )
   for ref in "${REFS[@]}"; do
     [[ -f "$ref" ]] || { echo "Error: ref not found: $ref" >&2; exit 1; }
