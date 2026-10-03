@@ -76,3 +76,18 @@ def test_sound_and_animate(tiny):
 def test_tool_missing_sibling():
     with pytest.raises(SystemExit):
         G.tool("no-such-skill", "x.py")
+
+
+def test_tts_command_carries_voice_settings():
+    V = {"model": "eleven_v4", "stability": 0.45, "similarity": 0.8, "language_code": "he"}
+    cmd = G.tts_cmd(V, "gen.py", "line.json", "VOICE", "work")
+    assert cmd[cmd.index("--stability") + 1] == "0.45" and cmd[cmd.index("--similarity") + 1] == "0.8"
+    assert cmd[cmd.index("--language-code") + 1] == "he"
+    assert "--similarity" not in G.tts_cmd({"model": "eleven_v4", "stability": 0.5}, "g", "j", "V", "w")
+
+
+def test_processing_lines_in_place_is_refused(tiny):
+    tiny.paths["lines_raw"] = tiny.paths["lines"]
+    tiny.data["voice"] = {"tempo": 1.1}
+    with pytest.raises(SystemExit, match="lines_raw"):
+        G.check_line_paths(tiny)

@@ -65,8 +65,24 @@ def test_render_all_skips_existing_and_concat(tiny, tmp_path):
     shots, _ = timeline.build_timeline(tiny, DUR)
     os.makedirs(tmp_path / "seg")
     (tmp_path / "seg" / "S01.mp4").write_bytes(b"keep")
+    (tmp_path / "seg" / "S01.key").write_text(render.shot_key(tiny, shots[0]))   # up to date: reused
     done = render.render_all(tiny, shots, str(tmp_path), workers=2)
     assert sorted(done) == ["S02", "S03"] and (tmp_path / "seg" / "S01.mp4").read_bytes() == b"keep"
     render.render_shot((tiny, shots[0], str(tmp_path), True))
     video = render.concat(shots, str(tmp_path))
     assert nframes(video) == sum(s["nframes"] for s in shots)
+
+
+def test_render_all_rerenders_stale_segments(tiny, tmp_path):
+    import time
+    panels(tiny)
+    shots, _ = timeline.build_timeline(tiny, DUR)
+    assert sorted(render.render_all(tiny, shots, str(tmp_path), workers=2)) == ["S01", "S02", "S03"]
+    assert render.render_all(tiny, shots, str(tmp_path), workers=2) == []          # nothing changed
+    time.sleep(1.1)
+    os.makedirs(tiny.path("clips"), exist_ok=True)                                  # a clip arrives for S01
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=288x512:rate=24",
+                    "-frames:v", "12", "-pix_fmt", "yuv420p", tiny.path("clips", "S01.mp4")], check=True)
+    assert render.render_all(tiny, shots, str(tmp_path), workers=2) == ["S01"]
+    shots[1]["overlays"][0]["text"] = "שעתיים קודם."                                # S02's overlay text changes
+    assert render.render_all(tiny, shots, str(tmp_path), workers=2) == ["S02"]

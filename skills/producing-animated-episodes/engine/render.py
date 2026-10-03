@@ -1,5 +1,5 @@
 """Render each shot to a segment: source image or clip, camera move, fx, overlays and subtitles, frame by frame."""
-import math, os, random, subprocess
+import hashlib, json, math, os, random, subprocess
 from multiprocessing import Pool
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 import frames as FR
@@ -207,15 +207,47 @@ def render_shot(args):
     return shot["id"]
 
 
+def shot_inputs(ep, shot):
+    """Files a shot's frames are made from (a missing file counts too: it may appear later)."""
+    img, files = shot["img"], []
+    if img.startswith("card:"):
+        files.append(ep.path("characters", img[5:] + ".png"))
+    elif img.startswith("tablet:"):
+        files += [ep.panel(p) for p in img.split(":")[1:]]
+    elif img == "collage":
+        files += [ep.path("characters", f"{k}.png") for r in ep.data.get("collage", {}).get("rows", []) for k in r["keys"]]
+    elif img != "black":
+        files.append(ep.panel(img))
+    files += [ep.path("clips", f"{shot.get('clip', shot['id'])}.mp4"), ep.path("lipsync", "final", f"{shot['id']}.mp4")]
+    return files
+
+
+def shot_key(ep, shot, lipsync=True):
+    """Everything a segment depends on: its spec (not its position), the look settings, its line texts and its input files."""
+    spec = {k: v for k, v in shot.items() if k != "start"}
+    look = {k: ep.data.get(k) for k in ("styles", "subtitle", "fonts", "text", "video", "tablet", "collage")}
+    texts = [ep.lines.get(x.partition("@")[0], {}).get("text") for x in shot.get("lines", [])]
+    files = [(f, os.path.getmtime(f), os.path.getsize(f)) if os.path.exists(f) else (f, None) for f in shot_inputs(ep, shot)]
+    blob = json.dumps([spec, look, ep.speakers, texts, files, lipsync], sort_keys=True, default=str, ensure_ascii=False)
+    return hashlib.sha256(blob.encode()).hexdigest()
+
+
 def render_all(ep, shots, build_dir, only=None, force=False, lipsync=True, workers=6):
-    """Render missing segments (all with force, or exactly `only`); existing segments are reused."""
+    """Render every segment whose inputs changed since it was made (all with force, or exactly `only`)."""
     seg = os.path.join(build_dir, "seg")
     os.makedirs(seg, exist_ok=True)
-    todo = [s for s in shots if (only and s["id"] in only) or
-            (not only and (force or not os.path.exists(os.path.join(seg, f"{s['id']}.mp4"))))]
+    keys = {s["id"]: shot_key(ep, s, lipsync) for s in shots}
+
+    def fresh(s):
+        out, keyf = os.path.join(seg, f"{s['id']}.mp4"), os.path.join(seg, f"{s['id']}.key")
+        return os.path.exists(out) and os.path.exists(keyf) and open(keyf).read() == keys[s["id"]]
+
+    todo = [s for s in shots if (only and s["id"] in only) or (not only and (force or not fresh(s)))]
     done = []
     with Pool(workers) as p:
         for sid in p.imap_unordered(render_shot, [(ep, s, build_dir, lipsync) for s in todo]):
+            with open(os.path.join(seg, f"{sid}.key"), "w") as fh:
+                fh.write(keys[sid])
             print("rendered", sid, flush=True)
             done.append(sid)
     return done

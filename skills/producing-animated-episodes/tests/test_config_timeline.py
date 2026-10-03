@@ -76,3 +76,7 @@ def test_write_timeline(tiny, tmp_path):
     timeline.write_timeline(shots, str(tmp_path / "t.json"))
     t = json.load(open(tmp_path / "t.json"))
     assert set(t[0]) == {"id", "start", "dur", "placed"} and t[1]["placed"]["02-2"] == list(shots[1]["placed"]["02-2"])
+
+
+def test_raw_and_final_lines_are_separate_by_default(tiny):
+    assert tiny.path("lines_raw") != tiny.path("lines")

@@ -5,7 +5,7 @@ DEFAULT_VIDEO = {"fps": 24, "size": [1080, 1920], "src_size": [1152, 2048], "cli
 DEFAULT_TIMING = {"pad_scale": 1.0, "gap": 0.12, "silent_scale": 1.0, "default_pre": 0.35, "default_post": 0.5,
                   "sub_tail": 0.12}
 DEFAULT_PATHS = {"characters": "characters/final", "cards": "characters", "faces": "faces",
-                 "panels_final": "panels/final", "panels_draft": "panels/draft", "lines_raw": "audio/lines",
+                 "panels_final": "panels/final", "panels_draft": "panels/draft", "lines_raw": "audio/lines_raw",
                  "lines": "audio/lines", "music": "audio/music", "sfx": "audio/sfx", "clips": "video/omni",
                  "lipsync": "video/lipsync", "build": "build"}
 RTL_LANGS = {"he", "ar", "fa", "ur"}

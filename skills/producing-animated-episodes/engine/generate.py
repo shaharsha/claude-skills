@@ -160,9 +160,29 @@ def _ff(*a):
     subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *a], check=True)
 
 
+def tts_cmd(V, gen, js, voice, work):
+    cmd = [sys.executable, gen, js, voice, work, "--model", V["model"], "--stability", str(V["stability"]),
+           "--concurrency", "1", "--prefix", ""]
+    if V.get("similarity") is not None:
+        cmd += ["--similarity", str(V["similarity"])]
+    if V.get("language_code"):
+        cmd += ["--language-code", V["language_code"]]
+    return cmd
+
+
+def check_line_paths(ep):
+    """Tempo, trim and level write processed copies: raw and processed lines must live in different folders."""
+    V = ep.data.get("voice", {})
+    processed = V.get("tempo", 1.0) != 1.0 or any(l.get("trim") or l.get("level") for l in ep.data.get("lines", []))
+    if processed and os.path.abspath(ep.path("lines_raw")) == os.path.abspath(ep.path("lines")):
+        raise SystemExit("paths.lines_raw and paths.lines are the same folder, so tempo/trim/level would be skipped or "
+                         "applied twice: give them different folders (defaults: audio/lines_raw and audio/lines)")
+
+
 def run_lines(ep, only=None, workers=4):
     """TTS every line (crowd lines per voice, then mixed), then tempo, then optional trim and level per line."""
     _need("ELEVENLABS_API_KEY")
+    check_line_paths(ep)
     V = {"model": "eleven_v4", "stability": 0.5, "tempo": 1.0, **ep.data.get("voice", {})}
     raw, final = ep.path("lines_raw"), ep.path("lines")
     gen, groups = tool("elevenlabs-tts", "scripts", "generate_tts.py"), ep.data.get("groups", {})
@@ -173,11 +193,7 @@ def run_lines(ep, only=None, workers=4):
         os.makedirs(work, exist_ok=True)
         js = os.path.join(work, "line.json")
         json.dump({clip: text}, open(js, "w", encoding="utf-8"), ensure_ascii=False)
-        cmd = [sys.executable, gen, js, voice, work, "--model", V["model"], "--stability", str(V["stability"]),
-               "--concurrency", "1", "--prefix", ""]
-        if V.get("language_code"):
-            cmd += ["--language-code", V["language_code"]]
-        r = subprocess.run(cmd, capture_output=True, text=True)
+        r = subprocess.run(tts_cmd(V, gen, js, voice, work), capture_output=True, text=True)
         src = os.path.join(work, f"{clip}.mp3")
         if r.returncode or not os.path.exists(src):
             return clip, (r.stdout + r.stderr).strip().splitlines()[-1:] or ["failed"]
