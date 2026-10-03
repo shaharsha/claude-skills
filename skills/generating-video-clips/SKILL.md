@@ -87,7 +87,7 @@ Details, model choice and failure cases: `references/lipsync.md`.
 
 | Step | Count | Cost | Time |
 |---|---|---|---|
-| Omni clip | per call (plan ~1.5 calls per shot for retakes) | ~$0.40 | ~30 s each, 4 in parallel |
+| Omni clip | per second of output video (a 6 s clip is ~$0.60; plan ~1.5 calls per shot for retakes) | ~$0.10 | ~30 s per call, 4 in parallel |
 | Sync 3 lip-sync | per second of output (a part is typically 3-6 s) | ~$0.13 | ~70-150 s per part, 6 in parallel |
 
 ## Common mistakes
@@ -108,3 +108,4 @@ Details, model choice and failure cases: `references/lipsync.md`.
 - [image-generation](../image-generation): the stills (character cards, panels).
 - [elevenlabs-tts](../elevenlabs-tts): the dialogue the mouths sync to.
 - [viewing-videos](../viewing-videos): frame extraction for reviewing clips.
+- [producing-animated-episodes](../producing-animated-episodes): the whole episode workflow that uses these clips.
