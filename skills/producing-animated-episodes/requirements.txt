@@ -1,0 +1,7 @@
+# Required: Pillow must be built with RAQM (Hebrew/Arabic shaping); the engine checks at startup.
+Pillow>=10.0
+numpy>=1.26
+# Optional: equal face sizes in the group collage. Without it the collage still renders.
+opencv-python-headless>=4.8
+# Tests only
+pytest>=8

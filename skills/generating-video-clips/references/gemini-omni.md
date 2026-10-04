@@ -65,4 +65,4 @@ Each sentence before the timeline answers a failure of an earlier take (see `fai
 
 ## Cost
 
-Budget roughly $0.40 a call (an estimate from one episode's billing total); check Google's current pricing page before a large batch.
+Google's list price (2026-10) is $17.50 per 1M video output tokens at 5,792 tokens per second of 720p, about **$0.10 per second of video**: a 6 s clip is about $0.60, and there is no free tier. Plan about 1.5 calls per shot for retakes, and check the current pricing page before a large batch.

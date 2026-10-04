@@ -10,11 +10,11 @@ Both generation scripts require `curl`, `jq`, and `base64` (preinstalled on macO
 chmod +x ~/.claude/skills/image-generation/scripts/*.sh
 ```
 
-Export API keys before running the generation scripts. Sources are documented in `~/.claude/projects/-Users-shaharshavit/memory/api-keys.md`:
+Export API keys before running the generation scripts (from your own secret store; never print them):
 
 ```bash
-export OPENAI_IMAGE_API_KEY='sk-proj-...'   # from "OpenAI (image generation)" section
-export GEMINI_IMAGE_API_KEY='...'   # from "Google AI Studio (image generation)" section
+export OPENAI_IMAGE_API_KEY='sk-proj-...'   # an OpenAI key with image access
+export GEMINI_IMAGE_API_KEY='...'           # a Google AI Studio key (GEMINI_API_KEY also works)
 ```
 
 The `rembg.sh` script needs no API key but requires the `rembg` Python CLI installed once (optional - only for Gemini outputs or existing images):
