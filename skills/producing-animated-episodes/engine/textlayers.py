@@ -175,6 +175,8 @@ def subtitle_layer(ep, lid, who):
     body = text_layer(wrap(text, f, S.get("wrap", 940)), f, fill=(255, 255, 255), stroke=S.get("stroke", 7), sfill=(0, 0, 0),
                       pad=S.get("pad", 6))
     sp = ep.speakers.get(who, {"display": who, "color": "#FFFFFF"})
+    if not sp.get("display", who):  # "display": null, e.g. a narrator: the text alone
+        return body, ((ep.W - body.width) // 2, S.get("bottom", 1560) + 4)
     col = rgb(sp.get("color", "#FFFFFF"))[:3]
     fg = (0, 0, 0) if lum(col) > 150 else (255, 255, 255)
     name = pill([sp.get("display", who)], font(ep.font(S.get("name_font", "hblack")), S.get("name_size", 38)), fg, col + (255,),

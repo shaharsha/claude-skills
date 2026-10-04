@@ -4,6 +4,8 @@
 
 **Under 30 seconds** (3-4 shots): a cold open with the title as an overlay, one dialogue shot, one payoff shot with the end caption as an overlay. No intro montage. Keep each dialogue shot under about 8-9 s (the clip length an image-to-video model holds well); split longer exchanges into two shots.
 
+**Narrated** (one storyteller voice, e.g. for a class): the narrator is a `speakers` entry with a voice, so it is never drawn; each shot holds about one narration line, and nobody needs lip-sync unless a character also speaks on screen.
+
 **About 1 minute** (8-10 shots):
 1. Cold open, 0-4 s: the problem in one image and one line.
 2. Title card.

@@ -92,6 +92,14 @@ def panel_final_args(ep, pid):
 
 
 # ---------------------------------------------------------------- voices, sound, clips
+def voice_of(ep, lid, who):
+    """A character's voice, or a speaker's (a narrator is a speaker with a voice, never drawn)."""
+    v = ep.characters.get(who, {}).get("voice") or ep.speakers.get(who, {}).get("voice")
+    if not v:
+        raise SystemExit(f'line {lid}: {who} has no voice: give that character or speaker a "voice", or list the line in "groups"')
+    return v
+
+
 def line_jobs(ep, only=None):
     groups, jobs = ep.data.get("groups", {}), []
     for l in ep.data.get("lines", []):
@@ -99,9 +107,9 @@ def line_jobs(ep, only=None):
             continue
         text = pron(ep, l["text"])
         if l["id"] in groups:  # a crowd line: one take per voice, mixed later
-            jobs += [[f"{l['id']}__{k}", ep.characters[k]["voice"], text] for k in groups[l["id"]]]
+            jobs += [[f"{l['id']}__{k}", voice_of(ep, l["id"], k), text] for k in groups[l["id"]]]
         else:
-            jobs.append([l["id"], ep.characters[l["who"]]["voice"], text])
+            jobs.append([l["id"], voice_of(ep, l["id"], l["who"]), text])
     return jobs
 
 

@@ -59,6 +59,7 @@ Rules that held up (details and a worked example: `references/script-writing.md`
 
 `templates/episode.example.json` is a complete small episode; every key is in `references/config-schema.md`. The parts you edit most:
 - `characters`: display name, color, voice, and the prompt fields from the character bible.
+- `speakers`: voices that are never drawn, such as a narrator (`{"display": null, "voice": "<id>"}` gives subtitles without a name).
 - `lines`: id, speaker, text with audio tags; `trim` and `level` on one-word lines.
 - `shots`: image, lines (`"02-3@-0.4"` overlaps the previous line), pads, `mindur`, camera, fx, sfx, overlays, clip offset and speed.
 - `music_cues`: `[cue, from shot, to shot, volume, offset]`. The build warns when a cue is shorter than its window.

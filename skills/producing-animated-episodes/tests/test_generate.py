@@ -213,3 +213,18 @@ def test_animate_force_and_retakes_replace_existing_clips(tiny, monkeypatch):
     assert not calls                                                     # both takes exist: nothing to do
     episode.main([tiny.root, "animate", "S02", "--takes", "2", "--force"])
     assert calls and not os.path.exists(tiny.path("clips", "S02_t1.mp4"))  # earlier takes moved aside: 2 new takes
+
+
+# ---- narration: a narrator is a speaker with a voice, never drawn
+def test_narrator_speaker_voices_its_lines(tiny):
+    tiny.speakers["narrator"] = {"display": None, "voice": "VN"}
+    tiny.data["lines"].append({"id": "09-1", "who": "narrator", "text": "Once upon a time."})
+    assert ["09-1", "VN", "Once upon a time."] in G.line_jobs(tiny)
+    assert "narrator" not in G.prompts_dump(tiny)["char_face"]
+
+
+def test_a_line_without_a_voice_is_named(tiny):
+    tiny.data["groups"] = {}                                   # 02-3 by ALL is no longer a crowd line
+    with pytest.raises(SystemExit) as e:
+        G.line_jobs(tiny)
+    assert "02-3" in str(e.value) and "voice" in str(e.value)

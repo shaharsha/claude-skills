@@ -144,3 +144,11 @@ def test_rgba_character_colors_do_not_crash(tiny):
     tiny.speakers["maya"]["color"] = "#F28C2880"
     im, pos = TL.subtitle_layer(tiny, "02-1", "maya")
     assert im.width > 0
+
+
+def test_speaker_without_display_name_has_no_name_pill(tiny):
+    TL.configure(tiny)
+    with_name, _ = TL.subtitle_layer(tiny, "02-1", "maya")
+    tiny.speakers["narrator"] = {"display": None, "voice": "VN"}
+    without, _ = TL.subtitle_layer(tiny, "02-1", "narrator")
+    assert without.height < with_name.height - 30              # the text alone, no pill above it

@@ -56,7 +56,7 @@ One file holds the whole project. `engine/config.py` loads it, fills in defaults
 - `refs`: face-crop stems in `faces/`. Leave empty for a character described only by text.
 - `likeness`, `body`, `pose`, `outfit`, `background`, `face_adjust`: the card prompt fields (see image-generation, characters from photos).
 
-`speakers`: `{"ALL": {"display": "everyone", "color": "#FFFFFF"}}`. A line's `who` must be a character or a speaker.
+`speakers`: `{"ALL": {"display": "everyone", "color": "#FFFFFF"}}`. A line's `who` must be a character or a speaker. A narrator is a speaker with a voice, never drawn: `{"narrator": {"display": null, "voice": "<voice id>"}}`; `display: null` shows its subtitles without a name pill.
 
 ## lines and groups
 
