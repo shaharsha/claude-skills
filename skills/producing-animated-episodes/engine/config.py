@@ -1,5 +1,6 @@
 """Load and validate an episode.json; resolve every path against the project folder."""
 import json, os, re
+from timeline import TIME_REF, time_refs
 
 DEFAULT_VIDEO = {"fps": 24, "size": [1080, 1920], "src_size": [1152, 2048], "clip_size": [720, 1280]}
 DEFAULT_TIMING = {"pad_scale": 1.0, "gap": 0.12, "silent_scale": 1.0, "default_pre": 0.35, "default_post": 0.5,
@@ -134,6 +135,14 @@ class Episode:
             for l, w in who.items():
                 if w not in self.speakers:
                     errs.append(f"{sid}: line {l} speaker {w!r} is neither a character nor a speaker")
+            for field, ref in time_refs(s):
+                if ref is None or isinstance(ref, (int, float)):
+                    continue
+                m = TIME_REF.match(ref) if isinstance(ref, str) else None
+                if not m:
+                    errs.append(f"{sid}: {field} {ref!r} is not a time: seconds, S<line> or E<line> (e.g. 'E02-1+0.3')")
+                elif m.group(2) not in lids:
+                    errs.append(f"{sid}: {field} {ref!r} names line {m.group(2)}, which is not in this shot")
         for cue in self.data.get("music_cues", []):
             for sid in cue[1:3]:
                 if sid not in ids:

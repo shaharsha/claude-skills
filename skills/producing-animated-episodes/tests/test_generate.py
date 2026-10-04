@@ -102,3 +102,114 @@ def test_line_scripts_for_the_leak_check(tiny):
     setup(tiny)
     s = G.line_scripts(tiny)
     assert s["02-1"] == "איפה ה-Absolut?" and s["02-3__ido"] == "לחיים!"
+
+
+# ---- final review fixes: partial failures, --force, leak-check scripts
+import json, os, subprocess, sys, types
+import episode, timeline
+
+FAKE_TTS = r'''
+import json, os, subprocess, sys
+js, voice, out = sys.argv[1:4]
+for clip in json.load(open(js)):
+    if clip in os.environ.get("FAKE_FAIL", "").split(","):
+        print(clip + ": HTTP 400"); sys.exit(1)
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "sine=f=440:d=0.5",
+                    os.path.join(out, clip + ".mp3")], check=True)
+'''
+
+
+def tone(path, secs):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", f"sine=f=220:d={secs}", path],
+                   check=True)
+
+
+def fake_tts(monkeypatch, tmp_path, fail):
+    fake = tmp_path / "fake_tts.py"
+    fake.write_text(FAKE_TTS)
+    real = G.tool
+    monkeypatch.setattr(G, "tool", lambda skill, *rel: str(fake) if rel[-1] == "generate_tts.py" else real(skill, *rel))
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "test")
+    monkeypatch.setenv("FAKE_FAIL", fail)
+
+
+def test_failed_take_is_not_processed_and_is_reported(tiny, tmp_path, monkeypatch, capsys):
+    fake_tts(monkeypatch, tmp_path, "02-2")
+    for lid in ("01-1", "02-2"):
+        tone(tiny.path("lines_raw", f"{lid}.mp3"), 3.0)          # last round's takes
+        tone(tiny.path("lines", f"{lid}.mp3"), 3.0)
+    failed = G.run_lines(tiny)
+    assert failed == ["02-2"]
+    assert timeline.adur(tiny.path("lines", "01-1.mp3")) < 1.0                 # the new take went through
+    assert timeline.adur(tiny.path("lines", "02-3.mp3")) < 1.0                 # the crowd line was mixed and copied
+    assert timeline.adur(tiny.path("lines", "02-2.mp3")) > 2.5                 # the old take was not passed off as new
+    out = capsys.readouterr().out
+    assert "1 line(s) failed" in out and "lines 02-2" in out
+
+
+def test_failed_crowd_part_fails_its_line(tiny, tmp_path, monkeypatch):
+    fake_tts(monkeypatch, tmp_path, "02-3__ido")
+    assert G.run_lines(tiny) == ["02-3"]
+    assert not os.path.exists(tiny.path("lines", "02-3.mp3"))
+
+
+def test_leak_check_scripts_match_their_folders(tiny, tmp_path, monkeypatch):
+    fake_tts(monkeypatch, tmp_path, "")
+    G.run_lines(tiny)
+    main = json.load(open(tiny.path("lines_raw", "_scripts.json")))
+    parts = json.load(open(tiny.path("lines_raw", "parts", "_scripts.json")))
+    assert "01-1" in main and not any("__" in k for k in main)
+    assert set(parts) == {"02-3__maya", "02-3__ido"}
+
+
+def test_cli_lines_exits_nonzero_on_a_failed_take(tiny, tmp_path, monkeypatch):
+    fake_tts(monkeypatch, tmp_path, "01-1")
+    assert episode.main([tiny.root, "lines"]) == 1
+
+
+def capture(monkeypatch):
+    calls = []
+    monkeypatch.setattr(G.subprocess, "run", lambda cmd, **k: calls.append(cmd) or types.SimpleNamespace(stdout="", returncode=0))
+    return calls
+
+
+def save(ep):
+    json.dump(ep.data, open(ep.file, "w"), ensure_ascii=False)
+
+
+def touch(path):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    open(path, "wb").write(b"x")
+
+
+def test_sound_force_regenerates_existing_cues(tiny, monkeypatch, capsys):
+    save(setup(tiny))
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "test")
+    touch(tiny.path("music", "theme.mp3"))
+    calls = capture(monkeypatch)
+    assert episode.main([tiny.root, "sound", "theme"]) == 0
+    out = capsys.readouterr().out
+    assert not calls and "theme: exists" in out and "--force" in out      # nothing requested, nothing priced
+    assert episode.main([tiny.root, "sound", "theme", "--force"]) == 0
+    assert calls and "--force" in calls[-1]
+    assert "20 s requested" in capsys.readouterr().out
+
+
+def test_animate_force_and_retakes_replace_existing_clips(tiny, monkeypatch):
+    save(setup(tiny))
+    monkeypatch.setenv("GEMINI_API_KEY", "test")
+    touch(tiny.path("panels_final", "p02.png"))
+    touch(tiny.path("clips", "S02.mp4"))
+    calls = capture(monkeypatch)
+    episode.main([tiny.root, "animate", "S02"])
+    assert not calls and os.path.exists(tiny.path("clips", "S02.mp4"))     # exists: nothing requested without --force
+    episode.main([tiny.root, "animate", "S02", "--force"])
+    assert calls and not os.path.exists(tiny.path("clips", "S02.mp4")) and os.listdir(tiny.path("clips", "_old"))
+    calls.clear()
+    for t in (1, 2):
+        touch(tiny.path("clips", f"S02_t{t}.mp4"))
+    episode.main([tiny.root, "animate", "S02", "--takes", "2"])
+    assert not calls                                                     # both takes exist: nothing to do
+    episode.main([tiny.root, "animate", "S02", "--takes", "2", "--force"])
+    assert calls and not os.path.exists(tiny.path("clips", "S02_t1.mp4"))  # earlier takes moved aside: 2 new takes

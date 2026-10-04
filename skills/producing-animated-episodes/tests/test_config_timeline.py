@@ -80,3 +80,14 @@ def test_write_timeline(tiny, tmp_path):
 
 def test_raw_and_final_lines_are_separate_by_default(tiny):
     assert tiny.path("lines_raw") != tiny.path("lines")
+
+
+def test_time_references_must_name_a_line_in_the_shot(tmp_path):
+    cfg = tiny_cfg()
+    cfg["shots"][1]["overlays"][0]["t0"] = "E01-1"                       # 01-1 is in S01, not S02
+    cfg["shots"][1]["fx"] = [["shake", "X02-1", 1.0, 10]]                # bad syntax
+    cfg["shots"][0]["sfx"] = [["whoosh", "S02-2", 0.5]]                  # 02-2 is in S02
+    with pytest.raises(config.ConfigError) as e:
+        config.load(write(tmp_path, cfg))
+    msg = str(e.value)
+    assert "S02" in msg and "E01-1" in msg and "X02-1" in msg and "S02-2" in msg

@@ -85,7 +85,7 @@ def pill(lines, f, fg, bg, pad=(34, 18), r=26):
 
 def band(ep, st, name, stat, color):
     """A character card's slanted name band (ports edit.make_overlay 'band')."""
-    W, c = ep.W, rgb(color)
+    W, c = ep.W, rgb(color)[:3]
     b = Image.new("RGBA", (W + 200, 330), (0, 0, 0, 0))
     d = ImageDraw.Draw(b)
     d.polygon([(0, 60), (W + 200, 0), (W + 200, 270), (0, 330)], fill=(15, 15, 25, 235))
@@ -169,11 +169,13 @@ def subtitle_layer(ep, lid, who):
     """Speaker name pill (in the speaker's color) above the line's text, centered near the bottom."""
     S = ep.data.get("subtitle", {})
     text = strip_tags(ep.lines[lid]["text"])
+    if not text:  # a line that is only audio tags ("[gasps]") has nothing to show
+        return None
     f = font(ep.font(S.get("font", "bold")), S.get("size", 58))
     body = text_layer(wrap(text, f, S.get("wrap", 940)), f, fill=(255, 255, 255), stroke=S.get("stroke", 7), sfill=(0, 0, 0),
                       pad=S.get("pad", 6))
     sp = ep.speakers.get(who, {"display": who, "color": "#FFFFFF"})
-    col = rgb(sp.get("color", "#FFFFFF"))
+    col = rgb(sp.get("color", "#FFFFFF"))[:3]
     fg = (0, 0, 0) if lum(col) > 150 else (255, 255, 255)
     name = pill([sp.get("display", who)], font(ep.font(S.get("name_font", "hblack")), S.get("name_size", 38)), fg, col + (255,),
                 tuple(S.get("name_pad", (24, 8))), S.get("name_radius", 20))

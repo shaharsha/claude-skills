@@ -185,7 +185,8 @@ def check_line_paths(ep):
 
 
 def run_lines(ep, only=None, workers=4):
-    """TTS every line (crowd lines per voice, then mixed), then tempo, then optional trim and level per line."""
+    """TTS every line (crowd lines per voice, then mixed), then tempo, then optional trim and level per line.
+    Only lines whose takes all succeeded are processed; returns the failed line ids (their old files are untouched)."""
     _need("ELEVENLABS_API_KEY")
     check_line_paths(ep)
     V = {"model": "eleven_v4", "stability": 0.5, "tempo": 1.0, **ep.data.get("voice", {})}
@@ -208,13 +209,20 @@ def run_lines(ep, only=None, workers=4):
         return clip, None
 
     jobs = line_jobs(ep, only)
-    os.makedirs(raw, exist_ok=True)
-    json.dump(line_scripts(ep, only), open(os.path.join(raw, "_scripts.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    scripts = line_scripts(ep, only)
+    for folder, keep in ((raw, lambda c: "__" not in c), (os.path.join(raw, "parts"), lambda c: "__" in c)):
+        part = {c: t for c, t in scripts.items() if keep(c)}
+        if part:  # each folder gets the scripts of the takes it holds, for the leak check
+            os.makedirs(folder, exist_ok=True)
+            json.dump(part, open(os.path.join(folder, "_scripts.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     print(f"  {len(jobs)} takes, {sum(len(t) for _, _, t in jobs)} characters billed (tags included)")
+    failed = set()
     with ThreadPoolExecutor(workers) as ex:
         for clip, err in ex.map(tts, jobs):
             print(f"  {clip}: {'OK' if not err else 'FAIL ' + ' '.join(err)}", flush=True)
-    ids = [l["id"] for l in ep.data["lines"] if not only or l["id"] in only]
+            if err:
+                failed.add(clip.split("__")[0])  # a crowd line fails with any of its voices
+    ids = [l["id"] for l in ep.data["lines"] if (not only or l["id"] in only) and l["id"] not in failed]
     for lid in ids:
         if lid in groups:  # crowd: stagger the voices 0-160 ms apart
             parts = [os.path.join(raw, "parts", f"{lid}__{k}.mp3") for k in groups[lid]]
@@ -245,23 +253,34 @@ def run_lines(ep, only=None, workers=4):
             shutil.copy(os.path.join(final, f"{lid}.mp3"), os.path.join(keep, f"{lid}.mp3"))
         subprocess.run([sys.executable, tool("elevenlabs-tts", "scripts", "level_clips.py"), keep, final,
                         "--target", str(V.get("level_target", -18)), "--only", *flagged["level"]])
+    if failed:
+        bad = sorted(failed)
+        print(f"  {len(bad)} line(s) failed: {bad}; their old files were left as they were. "
+              f"Rerun them: episode.py PROJECT lines {' '.join(bad)}")
+    return sorted(failed)
 
 
-def run_sound(ep, only=None):
+def run_sound(ep, only=None, force=False):
+    """Generate missing music cues and SFX (with force: regenerate the named ones, e.g. after raising `seconds`)."""
     _need("ELEVENLABS_API_KEY")
     gen = tool("elevenlabs-tts", "scripts", "generate_music_and_sfx.py")
     for kind, dest in (("music", "music"), ("sfx", "sfx")):
         spec = {n: {"type": kind, **v} for n, v in ep.data.get(kind, {}).items() if not only or n in only}
+        for n in [n for n in spec if not force and os.path.exists(ep.path(dest, f"{n}.mp3"))]:
+            print(f"  {n}: exists, skipped (--force to regenerate it)")
+            del spec[n]
         if not spec:
             continue
         print(f"  {kind}: {len(spec)} item(s), {sum(v['seconds'] for v in spec.values()):.0f} s requested (billed in ElevenLabs credits)")
         os.makedirs(ep.path(dest), exist_ok=True)
         f = ep.path(dest, "_spec.json")
         json.dump(spec, open(f, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-        subprocess.run([sys.executable, gen, f, ep.path(dest)])
+        subprocess.run([sys.executable, gen, f, ep.path(dest)] + (["--force"] if force else []))
 
 
-def run_animate(ep, only=None, takes=1):
+def run_animate(ep, only=None, takes=1, force=False):
+    """Clips for shots whose files are missing (a partial run fills the gaps). With force, the shot's existing clip or
+    takes move to <clips>/_old/ first and new ones are made."""
     if not (os.environ.get("GEMINI_API_KEY") or os.environ.get("GEMINI_IMAGE_API_KEY")):
         raise SystemExit("set GEMINI_API_KEY first")
     jobs, missing = {}, []
@@ -273,6 +292,21 @@ def run_animate(ep, only=None, takes=1):
             missing.append(pid)
     if missing:
         raise SystemExit(f"promote these panels first (panels final): {sorted(set(missing))}")
+    for sid in list(jobs):
+        names = [f"{sid}.mp4"] if takes == 1 else [f"{sid}_t{t}.mp4" for t in range(1, takes + 1)]
+        have = [ep.path("clips", n) for n in names if os.path.exists(ep.path("clips", n))]
+        if force and have:
+            os.makedirs(ep.path("clips", "_old"), exist_ok=True)
+            stamp = time.strftime("%Y%m%d-%H%M%S")
+            for f in have:
+                shutil.move(f, ep.path("clips", "_old", f"{stamp}-{os.path.basename(f)}"))
+        elif len(have) == len(names):
+            more = f", or --takes {takes + 2} to add 2 more" if takes > 1 else ""
+            print(f"  {sid}: {', '.join(names)} already exist{'s' if len(names) == 1 else ''}, skipped "
+                  f"(--force makes new ones and moves these to {ep.paths['clips']}/_old/{more})")
+            del jobs[sid]
+    if not jobs:
+        return
     os.makedirs(ep.path("clips"), exist_ok=True)
     f = ep.path("clips", "_jobs.json")
     json.dump({"base": "", "jobs": jobs}, open(f, "w", encoding="utf-8"), ensure_ascii=False, indent=1)

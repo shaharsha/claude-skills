@@ -1,10 +1,11 @@
 """Render each shot to a segment: source image or clip, camera move, fx, overlays and subtitles, frame by frame."""
-import hashlib, json, math, os, random, subprocess
+import hashlib, itertools, json, math, os, random, subprocess
 from multiprocessing import Pool
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 import frames as FR
+import lipsync as LS
 import textlayers as TL
-from timeline import resolve_time
+from timeline import FX_TIMES, resolve_time
 
 FFMPEG = "ffmpeg"
 STILL = [(0, 1.0, .5, .5), (1, 1.0, .5, .5)]
@@ -82,8 +83,8 @@ def render_shot(args):
     keys = cam_keys(shot.get("cam")) or STILL
     clip = ep.path("clips", f"{shot.get('clip', shot['id'])}.mp4")
     off, speed = shot.get("clip_off", 0), shot.get("clip_speed", 1.0)
-    synced = ep.path("lipsync", "final", f"{shot['id']}.mp4")
-    if lipsync and os.path.exists(synced):  # lip-synced version: already offset, sped and frame-exact
+    synced = LS.current_final(ep, shot)[0] if lipsync else None
+    if synced:  # lip-synced version: already offset, sped and frame-exact
         clip, off, speed = synced, 0, 1.0
     frames, tbase = None, None
     if os.path.exists(clip) and not shot.get("static"):
@@ -92,7 +93,14 @@ def render_shot(args):
             frames = FR.clip_frames(clip, *FR.screen_size(ep), off, speed, FPS)
         else:
             frames = FR.clip_frames(clip, SW, SH, off, speed, FPS)
-        keys = cam_keys(shot.get("clip_cam")) or CLIP_DEFAULT
+        first = next(frames, None)
+        if first is None:
+            print(f"WARNING: {shot['id']}: {os.path.basename(clip)} gives no frames from {off:g}s "
+                  "(clip_off past its end?): using the still", flush=True)
+            frames, tbase = None, None
+        else:
+            frames = itertools.chain([first], frames)
+            keys = cam_keys(shot.get("clip_cam")) or CLIP_DEFAULT
     placed = shot["placed"]
     ovs = []  # (layer or poll style, pos, t0, t1, anim)
     for ov in shot.get("overlays", []):
@@ -105,10 +113,11 @@ def render_shot(args):
         im, pos, anim = TL.render_style(ep, st, ov.get("text"), ov.get("color"))
         ovs.append((im, pos, t0, t1, anim))
     for lid, (st_, en) in ({} if shot.get("nosub") else placed).items():
-        who = shot.get("who", {}).get(lid, ep.lines[lid]["who"])
-        im, pos = TL.subtitle_layer(ep, lid, who)
-        ovs.append((im, pos, st_, en + ep.timing["sub_tail"], "sub"))
-    fx = shot.get("fx", [])
+        sub = TL.subtitle_layer(ep, lid, shot.get("who", {}).get(lid, ep.lines[lid]["who"]))
+        if sub:
+            ovs.append((*sub, st_, en + ep.timing["sub_tail"], "sub"))
+    fx = [[f[0], *(resolve_time(v, placed) if i in FX_TIMES.get(f[0], ()) else v for i, v in enumerate(f[1:], 1))]
+          for f in shot.get("fx", [])]  # line references (S02-1, E02-1+0.3) become seconds
     speedfx = None
     for f in fx:
         if f[0] == "speed":
@@ -140,7 +149,7 @@ def render_shot(args):
         frame = src.transform((W, H), Image.EXTENT, (x0, y0, x0 + cw, y0 + ch), Image.BICUBIC)
         for f in fx:
             if f[0] == "desat":
-                t0 = resolve_time(f[1], placed)
+                t0 = f[1]
                 if t >= t0:
                     frame = Image.blend(frame, ImageOps.grayscale(frame).convert("RGB"), min(1, (t - t0) / .5))
             elif f[0] == "glow":
@@ -151,7 +160,7 @@ def render_shot(args):
                     k = math.sin(math.pi * (t - t0) / (t1 - t0))
                     frame = Image.alpha_composite(frame.convert("RGBA"), with_alpha(glow_layers[side], .85 * k)).convert("RGB")
             elif f[0] == "speed":
-                t0 = resolve_time(f[1], placed)
+                t0 = f[1]
                 if t >= t0 and speedfx is not None:
                     k = min(1, (t - t0) / .15) * (0.75 + .25 * math.sin(t * 40))
                     frame = Image.alpha_composite(frame.convert("RGBA"), with_alpha(speedfx, k)).convert("RGB")
@@ -227,8 +236,11 @@ def shot_key(ep, shot, lipsync=True):
     spec = {k: v for k, v in shot.items() if k != "start"}
     look = {k: ep.data.get(k) for k in ("styles", "subtitle", "fonts", "text", "video", "tablet", "collage")}
     texts = [ep.lines.get(x.partition("@")[0], {}).get("text") for x in shot.get("lines", [])]
+    who = {l: shot.get("who", {}).get(l, ep.lines.get(l, {}).get("who")) for l in shot.get("placed", {})}
     files = [(f, os.path.getmtime(f), os.path.getsize(f)) if os.path.exists(f) else (f, None) for f in shot_inputs(ep, shot)]
-    blob = json.dumps([spec, look, ep.speakers, texts, files, lipsync], sort_keys=True, default=str, ensure_ascii=False)
+    synced = bool(lipsync and LS.current_final(ep, shot)[0])
+    blob = json.dumps([spec, look, ep.speakers, texts, who, ep.timing["sub_tail"], files, synced], sort_keys=True,
+                      default=str, ensure_ascii=False)
     return hashlib.sha256(blob.encode()).hexdigest()
 
 
@@ -237,6 +249,10 @@ def render_all(ep, shots, build_dir, only=None, force=False, lipsync=True, worke
     seg = os.path.join(build_dir, "seg")
     os.makedirs(seg, exist_ok=True)
     keys = {s["id"]: shot_key(ep, s, lipsync) for s in shots}
+    for s in shots:
+        if lipsync and LS.current_final(ep, s)[1]:
+            print(f"WARNING: {s['id']} lip-sync is stale (its clip, offset, speed, lines or face points changed): using the "
+                  f"raw clip until you run `lipsync prep {s['id']}` and `lipsync run {s['id']}`", flush=True)
 
     def fresh(s):
         out, keyf = os.path.join(seg, f"{s['id']}.mp4"), os.path.join(seg, f"{s['id']}.key")

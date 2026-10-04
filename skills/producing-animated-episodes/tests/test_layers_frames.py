@@ -130,3 +130,17 @@ def test_clip_frames_scale_and_count(tmp_path):
     fr = list(frames.clip_frames(str(p), 72, 128, 0, 1.0, 24))
     assert len(fr) == 48 and fr[0].size == (72, 128)
     assert len(list(frames.clip_frames(str(p), 72, 128, 1.0, 1.0, 24))) == 24
+
+
+def test_tag_only_line_has_no_subtitle(tiny):
+    TL.configure(tiny)
+    tiny.lines["01-1"]["text"] = "[gasps]"
+    assert TL.subtitle_layer(tiny, "01-1", "maya") is None
+
+
+def test_rgba_character_colors_do_not_crash(tiny):
+    TL.configure(tiny)
+    TL.band(tiny, {}, "מאיה", "שופטת", "#E0218A80")
+    tiny.speakers["maya"]["color"] = "#F28C2880"
+    im, pos = TL.subtitle_layer(tiny, "02-1", "maya")
+    assert im.width > 0

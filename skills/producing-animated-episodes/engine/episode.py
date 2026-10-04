@@ -218,16 +218,15 @@ def main(argv=None):
             ap.error("panels draft [ids] [--flare|--hq] | panels final ids")
         return 0
     if cmd == "lines":
-        generate.run_lines(ep, set(rest) or None)
-        return 0
+        return 1 if generate.run_lines(ep, set(rest) or None) else 0
     if cmd == "sound":
-        generate.run_sound(ep, set(rest) or None)
+        generate.run_sound(ep, set(rest) or None, a.force)
         return 0
     if cmd == "animate":
         if rest[:1] == ["pick"]:
             generate.pick_take(ep, rest[1], int(rest[2]))
         else:
-            generate.run_animate(ep, set(rest) or None, a.takes)
+            generate.run_animate(ep, set(rest) or None, a.takes, a.force)
         return 0
     if cmd == "lipsync":
         sub, only = rest[0], set(rest[1:]) or None

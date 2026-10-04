@@ -86,3 +86,53 @@ def test_render_all_rerenders_stale_segments(tiny, tmp_path):
     assert render.render_all(tiny, shots, str(tmp_path), workers=2) == ["S01"]
     shots[1]["overlays"][0]["text"] = "שעתיים קודם."                                # S02's overlay text changes
     assert render.render_all(tiny, shots, str(tmp_path), workers=2) == ["S02"]
+
+
+# ---- final review fixes
+def color_clip(path, color, frames=48, size="288x512"):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", f"color={color}:s={size}:r=24",
+                    "-frames:v", str(frames), "-pix_fmt", "yuv420p", path], check=True)
+
+
+def test_stale_lipsync_final_is_not_used(tiny, tmp_path, capsys):
+    import json, lipsync
+    panels(tiny)
+    shots, _ = timeline.build_timeline(tiny, DUR)
+    s1 = dict(shots[0], clip_cam=[[0, 1, .5, .5], [1, 1, .5, .5]])
+    color_clip(tiny.path("clips", "S01.mp4"), "red", 96)
+    color_clip(tiny.path("lipsync", "final", "S01.mp4"), "blue", s1["nframes"], "720x1280")
+    json.dump(lipsync.manifest(tiny, s1), open(tiny.path("lipsync", "final", "S01.json"), "w"))
+    render.render_shot((tiny, s1, str(tmp_path / "a"), True))
+    assert raw_frames(str(tmp_path / "a" / "seg" / "S01.mp4"), [10])[0][96, 54][2] > 150        # current: the synced (blue) file
+    s1b = dict(s1, clip_off=0.5)                                                                 # the clip offset changed
+    render.render_all(tiny, [s1b], str(tmp_path / "b"), workers=1)
+    assert raw_frames(str(tmp_path / "b" / "seg" / "S01.mp4"), [10])[0][96, 54][0] > 150        # stale: the raw (red) clip
+    out = capsys.readouterr().out
+    assert "S01" in out and "stale" in out
+
+
+def test_fx_accept_line_time_references(tiny, tmp_path):
+    panels(tiny)
+    shots, _ = timeline.build_timeline(tiny, DUR)
+    s2 = dict(shots[1], fx=[["shake", "S02-1", "E02-1", 10], ["flash", "S02-2"], ["glow", "S02-1", "E02-1", "#FFD34D", "top"]])
+    render.render_shot((tiny, s2, str(tmp_path), True))
+    assert nframes(str(tmp_path / "seg" / "S02.mp4")) == s2["nframes"]
+
+
+def test_key_tracks_speaker_and_subtitle_tail(tiny):
+    shots, _ = timeline.build_timeline(tiny, DUR)
+    k = render.shot_key(tiny, shots[0])
+    tiny.lines["01-1"]["who"] = "ido"
+    k2 = render.shot_key(tiny, shots[0])
+    tiny.timing["sub_tail"] = 1.0
+    assert len({k, k2, render.shot_key(tiny, shots[0])}) == 3
+
+
+def test_clip_offset_past_the_end_warns(tiny, tmp_path, capsys):
+    panels(tiny)
+    shots, _ = timeline.build_timeline(tiny, DUR)
+    color_clip(tiny.path("clips", "S01.mp4"), "red", 24)
+    render.render_shot((tiny, dict(shots[0], clip_off=5.0), str(tmp_path), True))
+    out = capsys.readouterr().out
+    assert "S01" in out and "no frames" in out
