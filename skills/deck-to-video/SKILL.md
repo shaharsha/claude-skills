@@ -157,3 +157,7 @@ if key in cache: os.link(cache[key], path); continue
 - ~13–17 min of 1080p mostly-static slides ≈ 40–50 MB.
 - The video is a *third* artifact beside the clean pptx and the narrated pptx — it forces the narration's pace on the viewer, so keep the pptx variants for people who prefer reading.
 - Burning re-encodes the whole video (~60 s for 10 min at CRF 20 on an M-series); the sidecar and soft-track forms are seconds and lossless. Keep the pre-burn master so a restyle is one re-encode from source, not two stacked.
+
+## Related skills
+
+- [producing-animated-episodes](../producing-animated-episodes): voiced, animated episodes with characters, built on the same ffmpeg lessons.
