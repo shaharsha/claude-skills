@@ -64,7 +64,7 @@ One file holds the whole project. `engine/config.py` loads it, fills in defaults
 {"id": "02-1", "who": "maya", "text": "[proud, energetic] Justice!", "trim": true, "level": true}
 ```
 - `id` is `<scene>-<n>`. Time references use it (below).
-- `text` keeps the audio tags. Subtitles show it with the tags stripped.
+- `text` keeps the audio tags. Subtitles show it with the tags stripped (a line that is only tags gets no subtitle).
 - `trim: true` cuts the clip to its aligned words after generation; `level: true` levels it to `voice.level_target`. Use both for one-word lines.
 
 `groups`: `{"19-7": ["maya", "ido", "noa"]}` makes line 19-7 a crowd: one take per listed voice, mixed 0-160 ms apart.
@@ -106,9 +106,9 @@ One file holds the whole project. `engine/config.py` loads it, fills in defaults
 | `static` | ignore any clip and use the still |
 | `clip`, `clip_off`, `clip_speed`, `clip_cam` | which clip file, where it starts, how much it is slowed, and the camera over the clip |
 
-**Time references** (`t0`, `t1`, fx and sfx times): seconds from the shot start, or `S<line>[+-x]` (that line's start) or `E<line>[+-x]` (its end), e.g. `"E15-1+0.4"`.
+**Time references** (`t0`, `t1`, fx and sfx times): seconds from the shot start, or `S<line>[+-x]` (that line's start) or `E<line>[+-x]` (its end), e.g. `"E15-1+0.4"`. The line must be one of this shot's lines; loading checks every reference.
 
-When `video/omni/<clip>.mp4` exists the shot uses it, and when `video/lipsync/final/<shot>.mp4` exists that wins (it is already offset, slowed and frame-exact). `build --no-lipsync` ignores the lip-synced versions.
+When `video/omni/<clip>.mp4` exists the shot uses it, and when `video/lipsync/final/<shot>.mp4` exists and was made from the shot as it is now, that wins (it is already offset, slowed and frame-exact). After a change to the clip, `clip_off`, `clip_speed` or the shot's lines it is stale: the build uses the raw clip and says so until `lipsync prep` and `lipsync run` redo it. `build --no-lipsync` ignores the lip-synced versions.
 
 ## styles
 

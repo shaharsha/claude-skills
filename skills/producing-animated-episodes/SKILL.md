@@ -69,6 +69,8 @@ Rules that held up (details and a worked example: `references/script-writing.md`
 
 - **Batch the fixes.** A full build takes minutes. Collect every note from a review round (a line take, a pad, a clip offset), apply them all, then rebuild once.
 - **Segments are cached and tracked.** `build` re-renders exactly the shots whose inputs changed: a new clip or lip-synced version, a promoted panel, an edited line, shot or style. `build --only S05,S06` forces those shots; `--force` re-renders everything.
+- **A lip-synced shot is redone after any change to its clip, offset, speed or lines:** `lipsync prep S05 && lipsync run S05`. Until then the build warns it is stale and uses the raw clip.
+- **Regenerating an existing asset needs `--force`** (`sound theme --force`, `animate S05 --force`); without it, existing files are kept and only gaps are filled.
 - **Review with sheets.** `sheet` puts 3 frames per shot on a page. When the human names a moment by time, extract and read those frames before answering (`ffmpeg -ss T -i build/<output>.mp4 -frames:v 1 f.jpg`).
 - **`check` before every build:** missing assets, keys, sibling skills, and overlay text wider than the frame.
 - **Durations are verified at the end of every build.** Audio shorter than video fails the build instead of cutting the ending.
@@ -87,7 +89,7 @@ Rules that held up (details and a worked example: `references/script-writing.md`
 |---|---|
 | Cards or captions too fast to read | raise `mindur` / `post`: ~1.2-1.5 s per short card, 4-6 s for the final caption |
 | A title clipped at both edges | `check` warns; lower the style's `size` or add `wrap` |
-| Music stops before the section ends | the build warned: regenerate the cue longer, or split the section into two cues |
+| Music stops before the section ends | the build warned: raise the cue's `seconds`, `sound <cue> --force`; or split the section into two cues |
 | The ending is cut off | can't happen with the engine (exact-length mix, duration check); in hand-made muxes, see deck-to-video |
 | A line is buried under music | `level_clips.py --report` on that line, then a firmer take; lower that cue's volume |
 | A character points or acts before their line | `clip_off` past it, or split the shot and crop the first part with `clip_cam` |

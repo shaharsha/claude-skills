@@ -4,7 +4,7 @@
 |---|---|---|---|
 | Cards or captions too fast to read | shot length follows the audio, and a one-word line is short | raise the shot's `mindur` or `post` (~1.2-1.5 s per card, 4-6 s for a final caption) | watch it at speed, or read the timeline |
 | A title or caption clipped at both edges | text wider than the 1080 px frame | lower the style's `size`, or add `wrap` | `check` warns "wider than the frame" |
-| Music stops before the section ends | the cue is shorter than its window | regenerate the cue longer (window + 2-4 s), or split the section into two cues | the build prints "music cue ... will stop early" |
+| Music stops before the section ends | the cue is shorter than its window | raise its `seconds` (window + 2-4 s) and `sound <cue> --force`, or split the section into two cues | the build prints "music cue ... will stop early" |
 | Music cuts out after the last line | (fixed in the engine) the ducking key ended with the dialogue | update the engine; hand-built mixes must pad the key: `[dlg]asplit=2[dlg1][k0];[k0]apad[key]` | listen to the last seconds |
 | The ending is cut off | a `-shortest` mux, or a mix trimmed short | the engine pads the mix to the exact timeline and checks both streams | the build's last line shows equal durations |
 | A line is buried under music | a word sagged in the take, or the cue is loud | `level_clips.py raw/ --report`, then a firmer take; lower that cue's volume | listen at the timestamp |
@@ -15,7 +15,10 @@
 | A door, prop or person appears mid-clip | image-to-video invention | regenerate with pinned prompts, 2-3 takes (generating-video-clips, failure modes) | sheet |
 | Mouths don't move with the words | no lip-sync for that shot, or a part was skipped | add the shot to `lipsync.shots`, a face point, `lipsync run` | 3 frames per shot |
 | A visible face talks, but the shot is not lip-synced | its mouth moves out of time with the line | hide the mouth in the panel (turned away, behind an object, a close-up elsewhere), or move the line to the clip's mouth movement with the shot's `pre` or a line `@` offset; `clip_off` moves the clip instead | 3 frames around the line |
-| The wrong mouth moves | the face point is on the listener | correct `lipsync.faces`, delete that part's synced file, `lipsync run` | `take_sheet.py point` |
+| The wrong mouth moves | the face point is on the listener | correct `lipsync.faces`, `lipsync run` (it re-syncs parts whose point changed) | `take_sheet.py point` |
+| `S05 lip-sync is stale` in the build | the shot's clip, offset, speed or lines changed after it was synced | `lipsync prep S05`, then `lipsync run S05` | the warning is gone |
+| `lines` ends with "line(s) failed" | a take failed (quota, a 400) | fix the cause, then `lines <the ids it printed>`; the other lines are done | `check` passes |
+| A clip edit changes nothing on screen | the shot is lip-synced and stale, or the clip exists and was not regenerated | see the two rows above; `animate S05 --force` for a new clip | sheet |
 | One face much bigger in the group shot | face sizes not equalized | install `opencv-python-headless`; `mirror` a card whose prop covers a neighbor | read the collage frame |
 | Only one character appears in a multi-character panel | drafted with Flare | the engine drafts 2+ characters with Sunburst high; force with `panels draft --hq` | read the draft |
 | Captions appear inside panels | no language-named text ban | keep the default `panel_no_text` (it names English and Japanese) | read the draft |

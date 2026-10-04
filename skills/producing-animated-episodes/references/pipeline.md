@@ -45,19 +45,22 @@ episode.py PROJECT panels final p01 p02  # promote the approved ones
 ```bash
 episode.py PROJECT lines                 # all lines; or: episode.py PROJECT lines 02-1 05-3
 ```
-This generates every line in its speaker's voice, mixes crowd lines, applies the tempo, then trims and levels the lines marked `trim`/`level`. The originals stay in `paths.lines_raw`, with `_scripts.json` (the exact TTS text), so the leak check runs as is:
+This generates every line in its speaker's voice, mixes crowd lines, applies the tempo, then trims and levels the lines marked `trim`/`level`. The originals stay in `paths.lines_raw`, each folder with a `_scripts.json` (the exact TTS text of the takes it holds), so the leak check runs as is, plus once on `parts/` when there are crowd lines:
 ```bash
 python3 <elevenlabs-tts>/scripts/check_tags_spoken.py audio/lines_raw/_scripts.json audio/lines_raw --prefix "" --language-code he
+python3 <elevenlabs-tts>/scripts/check_tags_spoken.py audio/lines_raw/parts/_scripts.json audio/lines_raw/parts --prefix "" --language-code he
 ```
+A take that fails is not processed, and the command ends with the failed ids and a non-zero exit: rerun just those (`lines 02-2`). The other lines are already done.
 - **Gate:** the full set by ear, with timestamps. For names and loanwords, use A/B files (elevenlabs-tts `ab_concat.py`), and put the winning spelling in `pronounce`.
 - **Cost:** ElevenLabs bills characters (tags included); `lines` prints the count.
 
 ## 7. Music and sound effects
 
 ```bash
-episode.py PROJECT sound
+episode.py PROJECT sound                 # every missing cue and effect
+episode.py PROJECT sound theme --force   # regenerate one, e.g. after raising its seconds
 ```
-Ask for each cue's window plus 2-4 s; the build warns when a cue is shorter than its window.
+Ask for each cue's window plus 2-4 s; the build warns when a cue is shorter than its window. Existing files are kept unless you pass `--force`.
 - **Gate:** the music choice.
 - **Cost:** ElevenLabs credits per second of music and per effect; `sound` prints what it requests. Compare your ElevenLabs usage before and after if you need exact figures.
 
@@ -74,24 +77,30 @@ The animatic has the real voices, timing, subtitles, cards, music and effects, w
 
 ```bash
 episode.py PROJECT animate               # one take per shot, straight to video/omni/<shot>.mp4
-episode.py PROJECT animate S05 --takes 2 # a shot that failed: 2 more takes, S05_t1.mp4 and S05_t2.mp4
+episode.py PROJECT animate S05 --force   # a new clip for S05 (after editing its motion prompt); the old one moves to _old/
+episode.py PROJECT animate S05 --takes 2 # a shot that failed: 2 takes, S05_t1.mp4 and S05_t2.mp4
+episode.py PROJECT animate S05 --takes 4 # 2 more takes next to them (t3, t4); --takes 2 --force replaces t1 and t2
 episode.py PROJECT animate pick S05 2    # install take 2 as video/omni/S05.mp4 (the old one moves to _old/)
 ```
+Existing clips and takes are never regenerated without `--force`, so a rerun after a failure fills only the gaps.
 Sheet every take (generating-video-clips `take_sheet.py`). Fix bad starts with `clip_off`, short clips with `clip_speed`, and bad middles by splitting the shot. Regenerate only what can't be fitted.
 - **Gate:** motion, from sheets.
 - **Cost:** about $0.10 per second of clip, per take: a 6 s shot is about $0.60 per take, so `--takes 2` on every shot doubles the bill. Start with one take and retake only what fails; `animate` prints the cost of what it made.
 
 ## 10. Lip-sync
 
+First list the shots in `episode.json` (`"lipsync": {"shots": ["S05"]}`): `plan` and `prep` cover only those.
 ```bash
 episode.py PROJECT lipsync plan          # the parts: one speaker each
 episode.py PROJECT lipsync prep          # cut the parts, write each part's middle frame
 # read video/lipsync/parts/<shot>_<k>_mid.png, pick a pixel on the speaker's face, confirm it with
 #   python3 <generating-video-clips>/scripts/take_sheet.py point video/lipsync/parts/S05_0.mp4 check.jpg --frame <mid> --xy 410,560
-# then list the shot and the point in episode.json: "lipsync": {"shots": ["S05"], "faces": {"S05|0": [410, 560]}}
+# then add the point: "lipsync": {"shots": ["S05"], "faces": {"S05|0": [410, 560]}}
 episode.py PROJECT lipsync run           # prints the cost, runs Sync 3 on fal for every part with a point, joins
 ```
 Mark a line `skip` when its speaker is seen from behind, off screen, faceless, or it's a crowd. The joined shots land in `video/lipsync/final/` and the build prefers them.
+
+**After a review change to a lip-synced shot** (a new take, `clip_off` or `clip_speed`, a line retake), redo it: `lipsync prep S05` then `lipsync run S05`. Each joined shot keeps a record of what it was made from, so until you do, the build uses the raw clip and prints `S05 lip-sync is stale`; `prep` moves the old synced parts to `video/lipsync/out/_old/` and `run` re-syncs and prices them. A changed face point is re-synced by `run` alone.
 - **Gate:** spot-check frames of each synced shot.
 - **Cost:** about $0.13 per second of dialogue shot; 70-150 s per part, 6 in parallel.
 
