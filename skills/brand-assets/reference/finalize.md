@@ -43,9 +43,9 @@ If you expected `counters=1` (just the bubble-"a") and see `counters=4`, the con
 
 - **Bbox containment is literal.** If the counter's bbox is just barely off (1-2 pixel shy of enclosing the dot), the filter drops it. Set `--contains-slack 5` to add padding to the containment check.
 - **Tolerance too tight → error.** Pragmatic default is 15 RGB-units. Vectorize-then-finalize pipelines rarely drift more than 3. Hand-drawn SVGs from Illustrator may drift 20+ because of "web color" optimization (e.g., `#0E1320` gets saved as `#0D1220`). Raise tolerance to 30 in those cases; beyond 50 you're lying to yourself about brand fidelity.
-- **Fill-rule preservation.** If the input SVG has `fill-rule="evenodd"` on a group, the finalize output keeps it. If you need to switch, pass `--fill-rule nonzero|evenodd`.
+- **Fill-rule preservation.** A direct colored parent group's `fill-rule` is copied onto paths that do not specify their own rule. Explicit path rules take precedence. There is no `--fill-rule` option; edit the source when a different rule is intended.
 - **Transforms flatten.** Any `transform="translate(x,y)"` on groups gets baked into the paths by default (via `--flatten-transforms`, on by default). Disable with `--preserve-transforms` only when the downstream consumer expects them.
-- **Paths not in a colored group.** Some tracers emit top-level paths without a `<g fill>` wrapper. Finalize treats those as "black" by default; pass `--default-fill HEX` to override.
+- **Paths not in a colored group.** Explicit top-level hex fills are preserved and snapped to the brand palette. A path with no explicit fill uses `--default-fill HEX`, or black when that option is absent.
 
 ## Typical workflows
 

@@ -197,6 +197,10 @@ def main():
         group.set("fill", fill)
         tx, ty = parse_transform(group.attrib.get("transform", ""))
         for path in group.findall(f"{{{SVG_NS}}}path"):
+            # Rebuilding the color groups removes inherited fill-rule; retain it
+            # on the path, without replacing an explicit path-level override.
+            if "fill-rule" not in path.attrib and "fill-rule" in group.attrib:
+                path.set("fill-rule", group.attrib["fill-rule"])
             d = path.attrib.get("d", "")
             raw_bbox = path_bbox(d)
             if raw_bbox is None:
@@ -207,7 +211,7 @@ def main():
 
     # Handle top-level paths (no colored group wrapper)
     for path in list(root.findall(f"{{{SVG_NS}}}path")):
-        fill = args.default_fill or "#000000"
+        fill = path.attrib.get("fill", args.default_fill or "#000000")
         fill = snap_fill(fill.upper(), brand, args.tolerance).upper()
         path.set("fill", fill)
         d = path.attrib.get("d", "")
