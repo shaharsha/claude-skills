@@ -1,9 +1,18 @@
 ---
 name: working-with-other-sessions
-description: Use when you need to know what another agent session did, said or decided, get a message to one, start one from outside it, or when a session exists on disk but is missing from a client's list (the desktop app not showing sessions the VS Code extension shows, or the reverse). Also when a finding exists only in a session's prose and not in any diff, PR or ticket, or a .jsonl transcript is too large for grep or cat. Triggers include "what is that other session doing", "which session opened this PR", "my session disappeared", "did another session already fix this", "send a message to that session", "start a new session for me", "open this session in the desktop app", "why don't I see my sessions in the sidebar".
+description: NOT for asking a RUNNING session what it knows, plans or is doing — message it (mcp__ccd_session_mgmt__send_message) and wait for its reply instead of reading its transcript. Use when you need to know what an ENDED (or unreachable) session did, said or decided, get a message to one, start one from outside it, or when a session exists on disk but is missing from a client's list (the desktop app not showing sessions the VS Code extension shows, or the reverse). Also when a finding exists only in a session's prose and not in any diff, PR or ticket, or a .jsonl transcript is too large for grep or cat. Triggers include "what is that other session doing", "which session opened this PR", "my session disappeared", "did another session already fix this", "send a message to that session", "start a new session for me", "open this session in the desktop app", "why don't I see my sessions in the sidebar".
 ---
 
 # Working with other sessions
+
+🔴 **A LIVE SESSION: ASK IT, DON'T READ IT.** If the session is running and the question is what it
+knows, plans or is doing *now* — "does it know dev is stuck?", "is it on this?" — send it a message
+(`mcp__ccd_session_mgmt__send_message`, its `local_…` id from `list_sessions`) and wait for the
+reply. Do not use `ccread`, `list_events` or this skill's reading recipes for that. A transcript is
+mostly tool-call stubs, and reading it is your guess at its state; its own answer is its current
+view. (Shahar, 2026-10-20: *"contact it, don't read its transcripts."*) Read a transcript only when
+the session has ended or can't answer, when the human asks for its history, or to find which
+session owns a PR or title.
 
 ## Core principle
 
@@ -13,9 +22,9 @@ A transcript is ~95% tool calls and tool results. Reading it with `cat`, `grep` 
 
 ## When to use
 
-- Several sessions run in parallel and you need to know what each is doing, or whether two have collided
+- Several sessions ran in parallel and you need to know whether two collided (for a LIVE one's current work, message it instead)
 - A PR, branch or commit appeared and you need its owner
-- A session is idle and you need to know whether it is blocked on a question
+- A session has ended or won't answer and you need to know whether it was blocked on a question
 - A session disappeared from the session list
 - You suspect work was already done, or already refuted, somewhere else
 - You are about to repeat an investigation another session may have finished
