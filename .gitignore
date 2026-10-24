@@ -1,5 +1,3 @@
-# session state, not instruction — rewritten by whoever holds the orchestrator role
-torque-orchestration/CURRENT-ORCHESTRATOR
-
-# Local pinned suite-runner installation, no machine paths in source control.
-/torque-orchestration/suite-runner.json
+# Torque's agent orchestration moved to the private repo Torque-Capital/torque-orchestration (2026-10-24, TOR-1585).
+# Nothing under this path may be committed here again: this repo is public.
+/torque-orchestration/
