@@ -1,0 +1,18 @@
+name: no-private-folders
+# This repo is public. Torque's agent orchestration lives in the private repo
+# Torque-Capital/torque-orchestration; fail any push or PR that tracks it here again.
+on:
+  push:
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refuse tracked files under torque-orchestration/
+        run: |
+          if git ls-files -- 'torque-orchestration/*' | grep -q .; then
+            echo "torque-orchestration/ must not be committed to this public repo (it lives in Torque-Capital/torque-orchestration)."
+            git ls-files -- 'torque-orchestration/*' | head -20
+            exit 1
+          fi
