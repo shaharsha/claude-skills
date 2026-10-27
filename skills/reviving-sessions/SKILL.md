@@ -9,12 +9,15 @@ The desktop app's session tools — `list_sessions`, `send_message`, `list_event
 `search_session_transcripts`, `start_session`, `set_session_title`, `archive_session` — cover
 every session the app has **indexed**. This skill is for the ones it has not: sessions created
 outside it (`claude -p`, the VS Code extension, another account), transcripts stranded on disk,
-and transcripts too large or too old for its tools.
+and transcripts too large or too old for its tools. It also covers the renames those tools get
+wrong on indexed sessions: one that silently changes nothing, or lands in only one account.
 
 🔴 **A session the app lists and is running: ask it, don't read it.** Send it a message
 (`mcp__ccd_session_mgmt__send_message`, its `local_…` id from `list_sessions`) and wait for the
 reply. A transcript is mostly tool-call stubs, and reading it is your guess at its state; its own
 answer is its current view. (Shahar, 2026-10-20: *"contact it, don't read its transcripts."*)
+Looking up a running session's title or transcript id in the `ccread` listing is fine; reading its
+conversation to learn its state is not.
 
 ## When to use
 
@@ -165,14 +168,17 @@ matched by title and had no transcript behind them. **The warning about this was
 file and its author walked into it anyway**, so the defence is a check, not a warning:
 
 ```bash
-# BEFORE, optional: does the listed id carry the transcript uuid?
-find ~/.claude/projects -name '<uuid-from-list_sessions>*.jsonl' | wc -l
-#   1  -> it is that transcript's session for certain
-#   0  -> cannot tell from the id: normal for a v5 id the app minted, and for a session the
-#         app created itself. Fall back to cwd + title + isRunning, then rely on AFTER.
+# BEFORE, required: find the session's transcript id, and keep it
+ccread --since <its start date>   # the listing: id (first 8 chars of the transcript uuid), cwd, title
+#   match the row you will rename by cwd + title + time. For a v4 desktop id it is simply the
+#   same uuid; for a v5 id the app minted, this listing is the only link. No match: stop, and do
+#   not adopt a session list_sessions already shows.
+find ~/.claude/projects -name '<uuid-from-list_sessions>*.jsonl' | wc -l   # optional extra evidence
+#   1 -> the listed id IS the transcript uuid      0 -> cannot tell from the id (normal for v5)
 
 # AFTER, required: the tool also writes customTitle into the transcript, so
-ccread <transcript uuid>      # must show the new title; and list_sessions must show it too
+ccread --since <its start date> | grep <transcript id>   # must show the new title
+# ...and list_sessions must show it too. This reads the listing only, not the conversation.
 ```
 
 If neither changed, the row was not the session you meant — go back to `list_sessions`.

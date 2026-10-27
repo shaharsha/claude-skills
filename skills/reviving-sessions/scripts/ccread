@@ -164,7 +164,11 @@ def turns(path):
 
 
 def resolve(needle, all_s):
-    hits = [s for s in all_s if s["sid"].startswith(needle)]
+    # `sid` is only the first 8 characters, so a full uuid (or the desktop app's local_<uuid>)
+    # never prefix-matches it. Also match the transcript's own filename, which is the full uuid.
+    bare = needle[len("local_"):] if needle.startswith("local_") else needle
+    hits = [s for s in all_s if s["sid"].startswith(bare)
+            or os.path.basename(s["path"]).startswith(bare)]
     if not hits:
         n = needle.lower()
         # Match the display name, the cwd, AND the superseded ai-title — renaming a session must
