@@ -53,6 +53,7 @@ a line or is a deliberate, documented no-op:
 ⚠️ And it must never block: it exits 0 on every path, including its own crash.
 A staleness hook that breaks a Bash call is worse than the staleness.
 """
+import hashlib
 import json
 import os
 import subprocess
@@ -114,7 +115,18 @@ def maybe_refresh(top, base, age):
         return
     try:
         os.makedirs(STAMPS, exist_ok=True)
-        key = str(abs(hash(top)))
+        # 🔴 NOT hash(). Python SALTS str hashing per process (PYTHONHASHSEED), so
+        # every invocation computed a DIFFERENT stamp filename, the cooldown never
+        # matched once, and every triggering Bash call spawned an unthrottled fetch.
+        # Measured 2026-08-16: 143 stamp files, one per invocation, and two runs of
+        # hash("/x") in the same second returning different integers.
+        #
+        # ⚠️ The rate limit was the ONE thing keeping this from hammering the network
+        # on every command, and it was decorative from the first commit. It looked
+        # like a cooldown, it created files that looked like stamps, and it throttled
+        # nothing -- a guard whose failure is invisible because its output is
+        # indistinguishable from its success.
+        key = hashlib.sha1(top.encode("utf-8", "replace")).hexdigest()[:16]
         stamp = os.path.join(STAMPS, key)
         try:
             if time.time() - os.path.getmtime(stamp) < REFETCH_COOLDOWN:
