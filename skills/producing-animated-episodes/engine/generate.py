@@ -320,8 +320,9 @@ def run_animate(ep, only=None, takes=1, force=False):
     json.dump({"base": "", "jobs": jobs}, open(f, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     before = {p: os.path.getmtime(p) for p in _clip_files(ep)}
     print(f"  {len(jobs)} shot(s) x {takes} take(s); billed per second of clip (~$0.10/s, a 6 s clip ~$0.60)")
+    cw, ch = ep.video["clip_size"]   # the model defaults to 9:16, so a landscape project must ask for 16:9
     subprocess.run([sys.executable, tool("generating-video-clips", "scripts", "omni_generate.py"), f, ep.path("clips"),
-                    "--takes", str(takes)])
+                    "--takes", str(takes), "--aspect", "16:9" if cw > ch else "9:16"])
     new = [p for p in _clip_files(ep) if before.get(p) != os.path.getmtime(p)]
     secs = sum(float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", p],
                                     capture_output=True, text=True).stdout or 0) for p in new)

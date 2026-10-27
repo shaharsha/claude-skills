@@ -30,3 +30,4 @@
 | fal 401 | the key was shortened | pass the full key exactly as fal shows it | - |
 | A segment is broken after a crash | an interrupted render | segments are written to `.part.mp4` first; delete the bad segment and rebuild | `build --only <shot>` |
 | Rebuilds are slow | many shots changed | rebuild once per batch of fixes; the build re-renders only shots whose inputs changed (a style or font change touches every shot) | the build log lists the rendered shots |
+| Clips come back 720x1280 in a 16:9 project (the edit shows a tall center slice) | (fixed in the engine 2026-10-08) Omni defaults to 9:16 and `animate` did not pass the aspect | update the engine: it now sends `--aspect 16:9` when `video.clip_size` is landscape. Test ONE clip before a full `animate` run on a new format | `ffprobe -show_entries stream=width,height video/omni/S01.mp4` |
