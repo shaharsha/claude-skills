@@ -368,7 +368,7 @@ The desktop channel needs no arming, no Monitor, and no cooperation from the rec
 
 | Target | Use | Delivery |
 |---|---|---|
-| **Any session, armed or not — START HERE** | `mcp__ccd_session_mgmt__send_message` | lands as a user turn labelled *"From \<your title\>"* with a link back; **returns no reply**; unavailable for unattended sessions |
+| **Any session in `list_sessions`, armed or not — START HERE** | `mcp__ccd_session_mgmt__send_message` | lands as a user turn labelled *"From \<your title\>"* with a link back, and starts a turn in an idle session; **returns no reply**. It cannot deliver into a session an orchestrator dispatched, and a CLI-started session has no `local_…` id until Desktop adopts it (see *Renaming a session*) — use a row below for those |
 | A session you know is armed, and you want a reply address | `ccsend <id> "…"` | inbox event, live, carries a `[reply with: ccsend …]` header |
 | You need the answer back synchronously | `claude -p --resume <id> --output-format json "…"` | runs a turn in that session and returns the reply **to you** |
 | A teammate in your own agent team | `SendMessage` | automatic; the harness tells the recipient it came from an agent, not the human |
@@ -420,7 +420,7 @@ EOF
 
 **To become reachable yourself, call Monitor with `command: ccarm`, `persistent: true`.** `ccarm` needs no argument: the harness exports `CLAUDE_CODE_SESSION_ID`, so a session can arm itself without being told who it is.
 
-**A session receives only while it holds an open Monitor on its inbox.** That watch is the entire mechanism, and it is what reaches a session sitting *idle* waiting for its human — which hooks, MCP channels and process wrappers all fail to do (a hook fires on tool calls; an idle session makes none). Monitor is explicit that events arrive "even if one lands while you're waiting for the user to answer a question."
+**A session receives only while it holds an open Monitor on its inbox.** That watch is the entire mechanism of the `ccsend` mailbox, and it is what reaches a session sitting *idle* waiting for its human — which hooks, MCP channels and process wrappers all fail to do (a hook fires on tool calls; an idle session makes none). This is about the mailbox only: `mcp__ccd_session_mgmt__send_message` goes through the desktop app instead, needs no Monitor, and starts a turn in an idle session. Monitor is explicit that events arrive "even if one lands while you're waiting for the user to answer a question."
 
 Messages carry their own reply address, so answering needs no lookup:
 
@@ -462,7 +462,7 @@ The corollary for senders: a constraint buried mid-message in a long body is a c
 
 `ccsend` **refuses by default when no watcher is live**, because writing to an unwatched file looks exactly like success. `--force` queues anyway, which only helps if you know the target will arm later — the backlog *is* delivered on arm.
 
-A watcher can also die without the session noticing: UI stop, teardown, timeout, session end. **`ccsend --list` is the only current truth about who can receive**; an earlier successful send is not evidence that the next one will land.
+A watcher can also die without the session noticing: UI stop, teardown, timeout, session end. **`ccsend --list` is the only current truth about who `ccsend` can reach**; an earlier successful send is not evidence that the next one will land. (An unarmed session is still reachable through `mcp__ccd_session_mgmt__send_message`.)
 
 ### Checking your OWN inbox — you cannot notice this from inside
 
