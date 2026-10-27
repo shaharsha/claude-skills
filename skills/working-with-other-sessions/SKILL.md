@@ -35,6 +35,11 @@ A transcript is ~95% tool calls and tool results. Reading it with `cat`, `grep` 
 
 Three scripts, no install: `scripts/ccread` (read), `scripts/ccsend` (send), `scripts/ccarm` (receive).
 
+⚠️ **For SENDING, read *Sending a message to another session* before reaching for `ccsend`** — it
+delivers only to a session that is armed, and on a normal machine nothing is. The default is the
+desktop channel `mcp__ccd_session_mgmt__send_message`, which needs no arming. `ccread` below is
+unaffected and remains the right tool for reading.
+
 ⚠️ **Renaming this skill breaks every session already running.** A live session holds the absolute
 path it first resolved — `~/.claude/skills/<old-name>/scripts/ccsend` — in its own context, and no
 amount of re-reading the skill dislodges it. Measured 2026-08-07: the rename to
@@ -98,7 +103,37 @@ its first message, use two steps:
 SID=$(uuidgen | tr 'A-Z' 'a-z')
 claude --session-id "$SID" -p "first message"   # creates + sends, headless
 open "claude://resume?session=$SID"             # Desktop adopts it live, writes its own index entry
+sleep 3                                         # the entry appears titleless
+# then set_session_title (MCP) with local_$SID "<a name a human can recognise>"   # ← REQUIRED, see below
 ```
+
+The title step comes **after** the `open`: until Desktop has adopted the session, `set_session_title`
+answers *not found* for every id form (see *Renaming a session* below).
+
+🔴 **THE TITLE STEP IS NOT OPTIONAL, AND OMITTING IT IS WHY EVERY HEADLESS LANE IS CALLED "General
+coding session".** A headless session gets **no title record of any kind** — measured 2026-08-13
+across four sessions:
+
+```
+1b703d78   interactive     aiTitle='Test Zapfloor API endpoints with Postman'
+a6eea7a7   interactive     aiTitle='Debug Metabase join query with text field…'
+31436a41   claude -p       aiTitle=None      <- nothing generated AT ALL
+a0a4b8f3   claude -p       aiTitle=None
+```
+
+An **interactive** session gets an auto-generated `aiTitle`. A `-p` session gets none, so Desktop
+falls back to its placeholder, and **only an explicit `set_session_title` (which writes
+`customTitle`) ever names it.**
+
+⚠️ **THE PLAUSIBLE MECHANISM IS WRONG AND COSTS YOU THE FIX.** The natural hypothesis is that a
+boilerplate first line ("You are a Sprint-1 lane in…", identical across every lane) is being
+*summarised into* something generic. **It is not summarised at all** — there is no summary. Anyone
+who stops at the plausible mechanism "fixes" it by rewording briefs, which changes nothing.
+
+🔑 **This recipe previously had no title step, so it produced indistinguishable lanes every time it
+was followed correctly**, and the cost landed on the human — who had to ask twice in one hour, and
+whose second ask reads as *"you forgot again"* rather than *"your procedure has no such step."* **A
+defect that arrives via a correctly-followed recipe cannot be fixed by being more careful.**
 
 `claude --session-id` and `claude -r <id> -p` are in `--help` and agents find them unaided — the
 deep links are the part worth remembering.
@@ -323,17 +358,38 @@ with open(SRC) as fi, open(DST, "w") as fo:
 
 ## Sending a message to another session
 
-`ccsend` is the right tool for a **live session that is armed** — it is the only one of these
-that delivers to a session sitting idle, and the only one whose message carries a reply address.
-Three other mechanisms exist and are better for different targets. Reach for `ccsend` by default;
-switch when the target does not match.
+🔴 **DEFAULT TO `mcp__ccd_session_mgmt__send_message`, NOT `ccsend`.** This section used to say
+"reach for `ccsend` by default", and following that correctly wastes a round of tooling on most
+machines, because **`ccsend` only delivers to a session holding an open Monitor on its inbox and
+almost nothing is armed.** Measured 2026-08-19: `ccsend --list` reported **17 of 17 sessions
+`unarmed`**, including four actively running that minute and the intended recipient (idle 3m). The
+send is then *refused*, not lost — which is the good failure — but the message has still not gone.
+The desktop channel needs no arming, no Monitor, and no cooperation from the recipient.
 
 | Target | Use | Delivery |
 |---|---|---|
-| A live, armed session | `ccsend <id> "…"` | inbox event, live, carries a reply address |
-| Any session, armed or not, live or not | `claude -p --resume <id> --output-format json "…"` | runs a turn in that session and returns the reply **to you**, synchronously |
+| **Any session, armed or not — START HERE** | `mcp__ccd_session_mgmt__send_message` | lands as a user turn labelled *"From \<your title\>"* with a link back; **returns no reply**; unavailable for unattended sessions |
+| A session you know is armed, and you want a reply address | `ccsend <id> "…"` | inbox event, live, carries a `[reply with: ccsend …]` header |
+| You need the answer back synchronously | `claude -p --resume <id> --output-format json "…"` | runs a turn in that session and returns the reply **to you** |
 | A teammate in your own agent team | `SendMessage` | automatic; the harness tells the recipient it came from an agent, not the human |
-| A live session, when you only need to push | `mcp__ccd_session_mgmt__send_message` | delivers by `sessionId`, **returns no reply**; unavailable for unattended sessions |
+
+⚠️ **THE TWO CHANNELS USE DIFFERENT SESSION IDS, AND LOOKING ONE UP IN THE WRONG REGISTRY LOOKS
+EXACTLY LIKE "THAT SESSION IS UNREACHABLE".** `list_sessions` returns `local_<uuid>`; `ccsend`/
+`ccread`/`ListAgents` use a different uuid for the same session. Measured 2026-08-19 on one pair of
+sessions, both ways:
+
+```
+"Team password security alternatives"      ccsend 9150a2a3   ccd local_9da4d14d-…
+"Cloudflare access for brain-embassy.com"  ccsend 5539821f   ccd (the peer guessed d0fa0cc2)
+```
+
+🔑 **The failure is a WRONG DIAGNOSIS, not a wrong id.** The session that could not find its peer
+concluded *"it is running but isn't exposed as a peer — probably a separate desktop instance not
+sharing the socket"*, reported the target unreachable, and asked its human to relay by hand. Both
+sessions were on one machine and the desktop channel reached the target first try. **So when a peer
+is "not in your peer list", resolve it in the OTHER registry before concluding anything about
+sockets or instances** — `list_sessions` (match on cwd + title + `isRunning`) and send with the
+`local_…` id **exactly as listed**.
 
 **`claude --resume` does not "message" a session — it runs a turn inside it.** The prompt lands in
 that session's transcript as an ordinary user turn and the answer comes back to your shell, not to
