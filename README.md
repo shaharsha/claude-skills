@@ -21,7 +21,7 @@ This installs all 24 skills as one plugin. Or pick a subset:
 /plugin install documents-and-decks@shaharsha-skills    # gdoc-sync + gslides-sync + gsheets + presentation-generator + elevenlabs-tts + narrating-pptx + deck-to-video + self-presenting-decks
 /plugin install brand-and-visuals@shaharsha-skills      # brand-system + brand-assets + image-generation + excalidraw-diagrams
 /plugin install engineering-decisions@shaharsha-skills  # tech-design-doc + codex-review
-/plugin install building-agents@shaharsha-skills        # prompt-engineer + writing-project-instructions + working-with-other-sessions
+/plugin install building-agents@shaharsha-skills        # prompt-engineer + writing-project-instructions + reviving-sessions
 /plugin install utilities@shaharsha-skills              # namecheap-domains + office-render + viewing-videos + proton-pass + tavily-extract
 /plugin install video-production@shaharsha-skills       # generating-video-clips + producing-animated-episodes
 ```
@@ -77,7 +77,7 @@ Each links to its own README — what it does, why it exists, install, and the g
 |---|---|
 | [prompt-engineer](skills/prompt-engineer) | Prompt and context engineering for the Claude / GPT / Gemini / Kimi / Grok APIs — system prompts, tool descriptions, provider differences, judge-prompt design. |
 | [writing-project-instructions](skills/writing-project-instructions) | Author or audit a `CLAUDE.md` / `AGENTS.md`, with the falsifiability test and the loading semantics people usually get wrong. |
-| [working-with-other-sessions](skills/working-with-other-sessions) | Read what a parallel agent session actually said — list every session, print one as a conversation, search the prose of all of them. |
+| [reviving-sessions](skills/reviving-sessions) | Bring back sessions the Claude desktop app cannot see — adopt CLI and headless sessions into it, fix renames, recover stranded transcripts, and read what an ended session said. |
 
 ### Utilities
 
