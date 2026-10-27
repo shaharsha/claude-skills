@@ -75,7 +75,7 @@ Each links to its own README — what it does, why it exists, install, and the g
 
 | Skill | What it does |
 |---|---|
-| [prompt-engineer](skills/prompt-engineer) | Prompt and context engineering for the Claude / GPT / Gemini APIs — system prompts, tool descriptions, provider differences, judge-prompt design. |
+| [prompt-engineer](skills/prompt-engineer) | Prompt and context engineering for the Claude / GPT / Gemini / Kimi / Grok APIs — system prompts, tool descriptions, provider differences, judge-prompt design. |
 | [writing-project-instructions](skills/writing-project-instructions) | Author or audit a `CLAUDE.md` / `AGENTS.md`, with the falsifiability test and the loading semantics people usually get wrong. |
 | [working-with-other-sessions](skills/working-with-other-sessions) | Read what a parallel agent session actually said — list every session, print one as a conversation, search the prose of all of them. |
 

@@ -1,6 +1,6 @@
 # prompt-engineer
 
-Expert prompt-engineering reference for AI agents on the **Claude, GPT, and Gemini** APIs. Covers system-prompt structure, tool descriptions (the single highest-leverage quality factor), context engineering, provider differences, budget-model patterns, cross-provider compatibility, anti-patterns, and evaluation / judge-prompt design.
+Expert prompt-engineering reference for AI agents on the **Claude, GPT, Gemini, Kimi, and Grok** APIs. Covers system-prompt structure, tool descriptions (the single highest-leverage quality factor), context engineering, provider differences, budget-model patterns, cross-provider compatibility, anti-patterns, and evaluation / judge-prompt design.
 
 Part of [shaharsha/claude-skills](../..). MIT.
 
@@ -12,7 +12,7 @@ Two problems, and the second is the reason this is a skill rather than a documen
 
 **Prompt engineering is provider-specific in ways that don't generalize.** Roughly 70% of the discipline is universal — role framing, XML delimiters, positive instruction, decision rules over absolutes. The other 30% is version-specific knobs that change every release: reasoning-effort defaults, sampling-parameter removals, thought signatures, caching mechanics, "stop doing" lists, migration breakages. Advice written from the universal layer alone is confidently stale, and stale prompt advice looks exactly like good prompt advice.
 
-**So the skill enforces a load order.** Step 0 identifies the model family from the code in scope — not the platform, because AWS Bedrock serves GPT *and* Claude, Vertex serves Gemini *and* Claude, and Microsoft Foundry serves GPT *and* Claude — then reads the matching `references/<family>.md` **before** giving any advice. That discipline is the skill's actual product. Skipping it is the #1 failure mode, and the symptom is a user repeatedly asking "did you read the provider-specific file?"
+**So the skill enforces a load order.** Step 0 identifies the model family from the code in scope — not the platform, because AWS Bedrock serves GPT, Claude, Kimi, *and* Grok, Vertex serves Gemini, Claude, *and* Grok, and Microsoft Foundry serves GPT, Claude, Grok, *and* Kimi — then reads the matching `references/<family>.md` **before** giving any advice. Not the SDK import either: Kimi and Grok are usually called through the OpenAI SDK with a different `base_url`. That discipline is the skill's actual product. Skipping it is the #1 failure mode, and the symptom is a user repeatedly asking "did you read the provider-specific file?"
 
 It also triggers on the right things. Nobody says "I have a prompt problem." They say *"the agent keeps calling the wrong tool,"* *"why is it ignoring my instructions,"* *"it got worse after the model upgrade,"* or they paste a log.
 
@@ -23,7 +23,7 @@ LLM code / prompt / failure report in scope
         │
         ▼
 Step 0a: identify model family from imports, model IDs, SDK calls
-        │  claude · gpt · gemini  (load all that match; ask if none)
+        │  claude · gpt · gemini · kimi · grok  (load all that match; ask if none)
         ▼
 Step 0b: read references/<family>.md IN FULL — the version-specific knobs
         │
@@ -66,8 +66,10 @@ There's nothing to run — this is a reference library the agent loads. It fires
 | `SKILL.md` | The universal layer: system-prompt structure, altitude, tool descriptions, context engineering, anti-patterns, eval design |
 | `references/claude.md` | Claude / Anthropic — effort defaults, sampling, thinking, caching, migration notes |
 | `references/gpt.md` | GPT / OpenAI incl. Azure — verbosity, reasoning effort, the "stop doing" list |
-| `references/gemini.md` | Gemini / Google incl. Vertex — thought signatures, caching, thinking cost |
-| `references/langgraph.md` | LangGraph / LangChain / Deep Agents: layers, context primitives, subagent context modes, eval practice |
+| `references/gemini.md` | Gemini / Google incl. Vertex — Gemini 4 Argon, long decode, thought signatures, caching, thinking cost |
+| `references/kimi.md` | Kimi / Moonshot — K3.1 Pro's always-on thinking, fixed sampling, `reasoning_content` replay, MFJS tool schemas, host differences |
+| `references/grok.md` | Grok / xAI — Grok 4.7's encrypted reasoning, required sampling values, server-side tools (web/X search), caching keys, compaction |
+| `references/langgraph.md` | LangGraph / LangChain / Deep Agents: layers, context primitives, typed HITL, skill-bound tools, harness profiles, MCP, subagent context modes, eval practice |
 | `references/use-cases.md` | Task playbooks: coding and code review, research/RAG, data/SQL, extraction, multimodal |
 | `references/model-selection.md` | Intelligence, cost per task, agent rankings, false-premise detection, routing math |
 | `templates/` | Reusable prompt scaffolds |
@@ -85,7 +87,8 @@ There's nothing to run — this is a reference library the agent loads. It fires
 ## Gotchas
 
 - **The universal section is not enough for "small" changes.** Even a one-line prompt edit interacts with provider defaults — reasoning effort, thinking, caching, sampling. Load the reference file first, every time.
-- **The platform never tells you the model family.** Bedrock, Vertex, and Foundry each host multiple families. Identify the family from imports and model IDs, then load *that* file.
+- **The platform never tells you the model family.** Bedrock, Vertex, and Foundry each host multiple families. Identify the family from model IDs and `base_url` (then imports), then load *that* file.
+- **Kimi and Grok break two cross-provider defaults.** Kimi fixes its sampling values and degrades silently if you don't replay the full assistant message; Grok asks you to *set* `temperature` 0.7 / `top_p` 0.95 instead of omitting them. Both are in their reference files.
 - **If no provider is identifiable, ask.** A wrong-provider answer is worse than one clarifying question.
 - **This skill's reference files go stale by design.** They track a fast-moving model roster; when a new flagship ships, the provider files need refreshing — and a refreshed model list sitting above an unrefreshed body section is the failure mode to watch for.
 - **Local-only hook interaction:** if you use a `PreToolUse` hook that gates edits to prompt files, this skill's Step 0 touches the flag file that unblocks it. That's a personal-setup detail, not part of the skill's contract.

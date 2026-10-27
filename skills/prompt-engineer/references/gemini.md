@@ -2,20 +2,20 @@
 
 Applies to the **Gemini model family** wherever it runs: the Gemini API (Google AI Studio) and Vertex AI / Gemini Enterprise Agent Platform. The platform does not change prompt engineering - the model version does.
 
-**Current models (September 2026):** Gemini ships a new **Flash every ~3 weeks** (3.6 in late July, 3.7 Aug 13, 3.8 Sept 2) - re-check this list before trusting it. There is **no Gemini 4**, and **Gemini 3.5 Pro still has not shipped** (announced at I/O in May; rumored specs stay `[unverified]` until a model card exists). Gemini 3.1 Pro is still the only Pro model, and still *preview*.
+**Current models (late October 2026):** **Gemini 4 has started - with Argon, not Pro.** Gemini 4 Argon is the new top tier; **Gemini 3.5 Pro is cancelled** ("Google no longer plans to release Gemini 3.5 Pro" - Google spokesperson to Reuters, Sept 30 2026), and Google Cloud now says to migrate from 3.1 Pro Preview to Argon. The ~3-week Flash cadence has stalled: **3.8 Flash (Sept 2) is still the newest Flash**, with no 3.9 Flash or Gemini 4 Flash yet ("the rest of the Gemini 4 family" is promised). Re-check this list before trusting it.
 
-- **Gemini 3.8 Flash** (`gemini-3.8-flash`, GA Sept 2 2026) - "our most intelligent Flash model", built on 3.7 Flash for long-horizon software engineering, autonomous agents, and complex enterprise workflows; default model for Google's managed **Antigravity** agent and SDK. **`thinking_level` `low`/`medium`/`high` only - `minimal` returns an error**; default `medium`. **Uses more tokens by design** (smaller reasoning steps, iterative tool calls, self-verification) - lower the level for everyday work, or stay on 3.7 Flash. Knowledge cutoff **March 2026** (some domains still Jan 2025).
-- **Gemini 3.7 Flash** (`gemini-3.7-flash`, GA Aug 13 2026) - algorithmic improvements on 3.6 Flash (not a new pretrain); same thinking rules as 3.8 (no `minimal`, default `medium`); March 2026 cutoff. Google recommends it where **compute efficiency** matters most.
-- **Gemini 3.6 Flash** (`gemini-3.6-flash`, July 2026) - previous-gen Flash; keeps the full `minimal`-`high` range, default `medium`; March 2026 cutoff.
-- **Gemini 3.5 Flash** (`gemini-3.5-flash`) - legacy Flash (full range, default `medium`, Jan 2025 cutoff).
-- **Gemini 3.5 Flash-Lite** (`gemini-3.5-flash-lite`) - still the newest, cheapest / fastest tier ($0.30 / $2.50); default `minimal`, full range. **Gemini 3.1 Flash-Lite** is the prior Lite.
-- **Gemini 3.1 Pro** (`gemini-3.1-pro-preview`, preview) - the Pro-tier reasoning model; `low`/`medium`/`high`, default `high`; $2 / $12 (≤200k input), $4 / $18 above; Jan 2025 cutoff.
-- **Gemini 3.8 Flash Cyber** - security-tuned sibling for finding and fixing vulnerabilities, restricted to governments and trusted partners through **Google Fairwind** (succeeds 3.5 Flash Cyber). Prompt it like 3.8 Flash.
-- Also current: Gemini 3.8 Live / Live Extended Thinking (voice agents), 3.8 Flash TTS / Flash-Lite TTS, Nano Banana 2 / Pro (images). `gemini-3-flash-preview` and Gemini 2.5 remain; Gemini 2.0 shut down June 1 2026.
+- **Gemini 4 Argon** (`gemini-4-argon`, announced Sept 30 for cyber defenders via the Fairwind Program, **GA Oct 13 2026** on the paid tier; stable ID, no `-preview`) - Google's flagship, "larger in size than Google's previous line of advanced 'Pro' models", a new sparse MoE pretrain (not a fine-tune), "trained to **work longer** and **retain context better** than any previous Gemini model." Text / image / video / audio / PDF in, text out. **`thinking_level` `low`/`medium`/`high`, default `medium`** (`minimal` and `thinking_budget` → 400 on Vertex; the AI Studio guide says `thinking_budget` only warns - don't send either). **Unified 1,048,576-token window shared by input, thinking, and output**; 64K output per synchronous response, **up to ~1M with long decode** (below). **Implicit caching only** (no explicit caches), sampling params ignored, **no prefilled model turns**. **$2 / $10 introductory through Nov 30 2026, then $4 / $20 from Dec 1** (cached input $0.10 → $0.20, 0.05×; Batch/Flex half; not on the free tier). March 2026 cutoff. Interactions API is Preview on Vertex. Allowlisted variant **`gemini-4-argon-cyber-permissive`** (Vertex) for defensive security work - default thinking `high`.
+- **Gemini 3.8 Flash** (`gemini-3.8-flash`, GA Sept 2 2026) - "our most intelligent Flash model" for long-horizon software engineering, autonomous agents, and complex enterprise workflows; default model for the managed **Antigravity** agent and Google's recommended **subagent** under an Argon orchestrator. **`thinking_level` `low`/`medium`/`high` only - `minimal` returns an error**; default `medium`. **Uses more tokens by design** (smaller reasoning steps, iterative tool calls, self-verification) - lower the level for everyday work. Knowledge cutoff **March 2026** (some domains still Jan 2025).
+- **Gemini 3.6 Flash** (`gemini-3.6-flash`, July 2026) - "our previous generation Flash model"; keeps the full `minimal`-`high` range, default `medium`; March 2026 cutoff.
+- **Deprecated and silently re-routed (Oct 8 2026):** `gemini-3.7-flash` now serves **`gemini-3.8-flash`** and `gemini-3.5-flash` now serves **`gemini-3.6-flash`** - the endpoints still answer, but a prompt tuned on those IDs is running on a different model (3.8 is the token-hungrier one). Re-run evals and switch the ID explicitly.
+- **Gemini 3.5 Flash-Lite** (`gemini-3.5-flash-lite`) - still the newest, cheapest / fastest tier ($0.30 / $2.50); default `minimal`, full range. **Gemini 3.1 Flash-Lite** is the prior Lite (shutdown May 7 2027).
+- **Gemini 3.1 Pro** (`gemini-3.1-pro-preview`, preview, no shutdown date) - the last Pro model; `low`/`medium`/`high`, default `high`; $2 / $12 (≤200k input), $4 / $18 above; Jan 2025 cutoff. New Pro-tier work goes to Argon. In the Gemini app, Deep Think (a 3.1 Pro mode) "is being replaced by Gemini 4 Argon".
+- **Gemini 3.8 Flash Cyber** (`gemini-3.8-flash-cyber`) - security-tuned sibling, GA behind an allowlist (Google Fairwind). **No grounding, code execution, function calling, or URL context, and no Interactions API** - a bare-generation model; prompt it like 3.8 Flash.
+- Also current: Gemini 3.8 Live / Live Extended Thinking (voice agents; default asynchronous function calling), 3.8 Flash TTS / Flash-Lite TTS, Nano Banana 2.1 (`gemini-nano-banana-2.1`, images; succeeds `gemini-3.1-flash-image`). `gemini-3-flash-preview` remains; **Gemini 2.5 is limited to projects that already used it** (Sept 18) - new work goes to 3.5 Flash-Lite or 3.8 Flash; Gemini 2.0 shut down June 1 2026.
 
-**Pricing:** 3.8, 3.7, and 3.6 Flash share an **introductory $0.75 / $3.75 per 1M** (output includes thinking tokens; context cache $0.075) **through Dec 31 2026**, rising to **$1.50 / $7.50 on Jan 1 2027** - budget for the step-up. Batch and Flex are 50%.
+**Pricing:** 3.8 and 3.6 Flash share an **introductory $0.75 / $3.75 per 1M** (output includes thinking tokens; context cache $0.075) **through Dec 31 2026**, rising to **$1.50 / $7.50 on Jan 1 2027**. Argon's intro price ends sooner (**Nov 30**). Budget for both step-ups. Batch and Flex are 50%.
 
-Current Gemini 3 models share a **~1M-token input window (1,048,576) and 64K output (65,536)**. **Cutoffs differ by model**: March 2026 for 3.6-3.8 Flash (uneven - some domains still end at Jan 2025), Jan 2025 for 3.5 Flash, 3.5 Flash-Lite, and 3.1 Pro.
+Gemini 3 models have a **~1M-token input window (1,048,576) and 64K output (65,536)**; Argon puts input and output in **one** 1,048,576-token window. **Cutoffs differ by model**: March 2026 for Argon and 3.6-3.8 Flash (uneven - some domains still end at Jan 2025), Jan 2025 for 3.5 Flash-Lite and 3.1 Pro.
 
 ## Contents
 - The Interactions API (now the default surface)
@@ -23,6 +23,8 @@ Current Gemini 3 models share a **~1M-token input window (1,048,576) and 64K out
 - Sampling parameters (don't set them)
 - Thinking level
 - Thought preservation and signatures
+- Prompting Gemini 4 Argon
+- Output budget and long decode (Argon)
 - Prompt design fundamentals (few-shot, completion priming, decomposition, iteration)
 - Gemini 3 prompting principles and Flash clauses
 - Agentic workflows: steering dimensions and system-instruction template
@@ -37,17 +39,19 @@ Current Gemini 3 models share a **~1M-token input window (1,048,576) and 64K out
 - Temporal grounding
 - Multimodal
 - Flash tier and inference tiers (Flex / Priority)
-- Migration to Gemini 3.8 / 3.7 Flash
+- Migration to Gemini 4 Argon
+- Migration to Gemini 3.8 Flash
 
 ## The Interactions API (now the default surface)
 
 Google's **Interactions API** (GA June 2026) is "the best way to build with Gemini models and agents" and where every new model, tool, and agent feature launches; the original `generateContent` API is now **legacy** but fully supported. One endpoint covers models and agents (`client.interactions.create(model=… | agent=…, input=…)`), including managed agents such as Deep Research and Antigravity (`antigravity-preview-09-2026`).
 
 - **Stateful by default.** Pass `previous_interaction_id` to continue a conversation; the server keeps history, thoughts, and signatures, and implicit caching hits more often. **But `previous_interaction_id` preserves only history - `system_instruction`, `tools`, and `generation_config` (incl. `thinking_level`) are interaction-scoped and must be re-sent on every call.** A system instruction sent only on turn 1 is silently gone on turn 2.
-- **It stores interactions by default** - 55 days on the paid tier, 1 day on free (configurable to 7/14/28/55 days in AI Studio). For sensitive data set `store=false`, which also disables `background=true` execution and `previous_interaction_id` (you then resend history yourself).
-- Background execution (`background=true`) for long-running tasks (Deep Think, Deep Research); observable typed execution **steps** for debugging and UI. The SDK's `.output_text` joins only the *final* run of text blocks - text interleaved with thoughts, tool calls, or images is dropped, so iterate over `steps` for anything non-trivial. In stateless mode (`store=false`) resend the full history including every model-generated step (`thought`, `function_call`) exactly as received.
-- **Limitations:** remote MCP is not yet supported on Gemini 3; when mixing models in one conversation, each later model must accept the earlier models' output modalities as input.
-- The OpenAI-compatibility layer maps `reasoning_effort` to `thinking_level` automatically.
+- **It stores interactions by default** - 55 days on the paid tier, 1 day on free (configurable to 7/14/28/55 days in AI Studio). For sensitive data set `store=false`, which also disables `background=true` execution and `previous_interaction_id` (you then resend history yourself). **Since Oct 26 2026, new paid-tier projects on `generateContent` also store requests by default** (existing projects keep their setting) - check `store` on both surfaces.
+- Background execution (`background=true`) for long-running tasks (Argon long decode, Deep Research); observable typed execution **steps** for debugging and UI. Terminal statuses: `completed`, `requires_action`, `incomplete` (text can be empty if the model was still thinking), `failed`, `cancelled`. The SDK's `.output_text` joins only the *final* run of text blocks - text interleaved with thoughts, tool calls, or images is dropped, so iterate over `steps` for anything non-trivial. In stateless mode (`store=false`) resend the full history including every model-generated step (`thought`, `function_call`) exactly as received.
+- **Limitations:** remote MCP works only inside **managed agents** (Antigravity, Deep Research) as an `mcp_server` tool - Streamable HTTP only (no SSE), and the server name must be lowercase alphanumeric (uppercase → a generic 400); for raw model calls, bridge MCP tools yourself as function declarations. When mixing models in one conversation, each later model must accept the earlier models' output modalities as input.
+- The OpenAI-compatibility layer maps `reasoning_effort` to `thinking_level` automatically (on Argon `minimal` and `low` both map to `low`).
+- **Managed agents:** Antigravity `antigravity-preview-09-2026` defaults to 3.8 Flash and accepts Argon via `agent_config: {"type": "antigravity", "model": "gemini-4-argon"}` (`antigravity-preview-05-2026` shut down Oct 5). Deep Research is now `deep-research-preview-04-2026` (fast, streams well) or `deep-research-max-preview-04-2026` (most comprehensive); `deep-research-pro-preview-12-2025` shut down Oct 23.
 
 ## System instructions and placement
 
@@ -55,7 +59,7 @@ Use `system_instruction` for role, behavioral rules, and format requirements. Go
 
 ## Sampling parameters (don't set them)
 
-For Gemini 3.x, **do not set `temperature`, `top_p`, or `top_k`** - leave `temperature` at the default 1.0. Setting it below 1.0 risks **looping or degraded performance**, especially on math and complex reasoning; the 3.8 migration checklist says to strip all three, plus `candidate_count` (unsupported on Gemini 3). For determinism, use explicit rules and structured output. (Google's general prompt-design page still carries older advice such as "increase the temperature" to escape fallback responses - that predates 3.x; ignore it.)
+**Strip `temperature`, `top_p`, and `top_k` from every request.** Google's prompt-design page (Oct 13 2026): "Gemini 4 and Gemini 3.6+ models ignore custom values for `temperature`, `top_p`, and `top_k` and return deprecation warning headers (**and will return `400` errors in a future release**)." On earlier Gemini 3 models keep them at the defaults (`temperature` 1.0) - below 1.0 risks **looping or degraded performance**, especially on math and complex reasoning. Also drop `candidate_count`, and on Argon `frequency_penalty` / `presence_penalty` (400 on Vertex). For determinism, use explicit rules and structured output. (Google's general prompt-design page still carries older advice such as "increase the temperature" to escape fallback responses - that predates 3.x; ignore it.)
 
 ## Thinking level
 
@@ -63,8 +67,9 @@ Gemini 3.x uses `thinking_level`, replacing the numeric `thinking_budget` (still
 
 | Model | Default | Supported |
 |---|---|---|
-| 3.8 Flash, 3.7 Flash | `medium` | `low`, `medium`, `high` (**`minimal` → error**) |
-| 3.6 Flash, 3.5 Flash | `medium` | `minimal`-`high` |
+| **4 Argon** | `medium` | `low`, `medium`, `high` (**`minimal` → 400**); cyber-permissive variant defaults to `high` |
+| 3.8 Flash (and `gemini-3.7-flash`, which now routes to it) | `medium` | `low`, `medium`, `high` (**`minimal` → error**) |
+| 3.6 Flash (and `gemini-3.5-flash`, which now routes to it) | `medium` | `minimal`-`high` |
 | 3.5 Flash-Lite | `minimal` | `minimal`-`high` |
 | 3.1 Pro (preview) | `high` | `low`, `medium`, `high` |
 | 3 Flash (preview) | `high` | `minimal`-`high` |
@@ -78,11 +83,11 @@ Start at the model's default; drop a level for faster/cheaper; escalate only for
 
 **`max_output_tokens` is a hard cutoff that includes thinking.** If the model hits it while reasoning, the interaction ends `incomplete` with truncated or empty output - and you're still billed for the thinking. To cut cost or latency, lower `thinking_level`; don't shrink `max_output_tokens`.
 
-**Cost:** thinking tokens bill **at the output rate**, so the level moves the bill more than the model choice often does. Fine for low-volume calls; on a high-throughput path keep it low (on 3.8/3.7 Flash `low` is the floor - route truly no-reasoning traffic to Flash-Lite at `minimal`) and recover accuracy with the prompt and examples first. The knob is per-request. Thought summaries are opt-in (`thinking_summaries:"auto"`) - read them to debug failures.
+**Cost:** thinking tokens bill **at the output rate**, so the level moves the bill more than the model choice often does. Fine for low-volume calls; on a high-throughput path keep it low (on Argon and 3.8 Flash `low` is the floor - route truly no-reasoning traffic to Flash-Lite at `minimal`) and recover accuracy with the prompt and examples first. The knob is per-request. Thought summaries are opt-in (`thinking_summaries:"auto"`) - read them to debug failures.
 
 ## Thought preservation and signatures
 
-Thought preservation is on by default on Gemini 3.x - the model carries intermediate reasoning across turns (better iterative work, more tokens). In **stateful** Interactions mode (`store` on + `previous_interaction_id`) the server manages thoughts and signatures entirely. In **stateless** mode (or legacy `generateContent` over REST) you must round-trip them:
+Thought preservation is on by default on Gemini 3.x and 4 - the model carries intermediate reasoning across turns (better iterative work, more tokens). In **stateful** Interactions mode (`store` on + `previous_interaction_id`) the server manages thoughts and signatures entirely. In **stateless** mode (or legacy `generateContent` over REST) you must round-trip them:
 
 - **Single function call** → return the `thoughtSignature` inside its original `Part`.
 - **Parallel calls** → only the **first** `functionCall` carries a signature; return the response parts in the **exact order received**.
@@ -91,6 +96,28 @@ Thought preservation is on by default on Gemini 3.x - the model carries intermed
 - **Injected or synthesized calls** → pass a **dummy signature string** so validation passes.
 
 Always pass the matching call `id` back in each function response (see *Function calling*).
+
+## Prompting Gemini 4 Argon
+
+Argon is built to run long and unattended, so Google's guidance shifts the work to **before** the run (agree on the goal) and **into** the run (give it something to check against). From Google's *5 practical tips for building with Gemini 4 Argon* (AI Studio developer guide, Oct 13 2026) and the Vertex developer's guide:
+
+- **Agree on intent up front.** "Clear alignment upfront on measurable goals and key milestones helps you get to your result most effectively." State the goal and success criteria, then ask Argon to **surface clarifying questions** about edge cases first, and run a **pre-flight check** - have it confirm it has the tools and docs it needs and restate the intent. Then "step back and let Argon run to completion" rather than steering turn by turn; it is trained to pause for confirmation before irreversible steps, so you don't need to prompt that in.
+- **Give it a verification loop.** "Argon does its best long-horizon work when it can test its own changes against a real feedback loop." Have it write a reproducible verification script, record a baseline, and test every change against it until the target is met; if there's nothing to measure, ask it to build a baseline benchmark first. This is the external signal Section A says a critic step needs.
+- **Prompt with the goal, put conventions in files.** Google's worked example (an 11-hour unattended performance run on the ADK codebase) started from a single goal paragraph ("…back each change with a test that would catch a regression") - Argon spent 70 minutes measuring before editing, and its first-round failures were all **missing maintainer conventions** (it changed a public JSON schema, ran only nearby tests). Round two put those conventions in `.agents/skills` (a short `SKILL.md` index pointing to `references/` files) and stated the deliverable ("Open one pull request … with before and after numbers in its description. Don't merge it.") - the run then used the full test suite. Lesson: the prompt carries the goal and the deliverable; durable rules live in skills/`AGENTS.md`.
+- **Orchestrate with Flash.** Google's recommended topology: **Argon (`medium` or `high`) as lead orchestrator** for architecture, planning, and review; **parallel, well-scoped work to Gemini 3.8 Flash subagents**. An **adversarial critic subagent** run at the end of each round ("list at least 3 specific flaws to fix … keep iterating until the critic rates it 9/10") is Google's pattern for open-ended quality.
+- **Ask it to reflect into instructions.** "Having Argon write those lessons into `AGENTS.md` or a reusable skill means future sessions take the direct path on the first try" - e.g. *"Investigate our current session to see where things stalled or required extra steps, and analyze why. Propose updates to our AGENTS.md or custom skills."*
+- **Point at a reference instead of describing a look.** For visual work give 1-2 concrete references, or have Argon distill typography, palette, and layout rules into a short `DESIGN.md` first.
+- **Style.** Argon "answers questions more directly with less hedging, doesn't repeat itself more than necessary, and skips clichés"; on long tasks it reports progress more often. Prompts that pushed earlier Gemini models to elaborate may now over-correct - test before carrying them over.
+- **Request shape (Vertex guide):** no assistant prefill (a history can't end on a `model` turn); **no unstructured text before a tool call** - log intermediate state through a dedicated `update(previous_step, plan, next_step)` function, and separate inline instructions with `\n\n`; **"each FunctionResponse must match the id, name, and order of the preceding FunctionCall"**; and **"prefer sequential tool execution turns in multi-step tool loops."**
+- **Thinking level:** `low` for classification, summarization, extraction, and light analysis/writing; **`medium` (default) for most work, including complex code, tool use, and document Q&A**; `high` for multi-file engineering, proofs, architecture, hard math/science, and vulnerability discovery. Google: "Run your evaluations at all three levels, then pick the lowest level that meets your quality bar." On BullshitBench `low` slightly *outscored* `high` - the Section A finding that effort doesn't fix false-premise acceptance holds here too.
+
+## Output budget and long decode (Argon)
+
+- **Thinking counts against `max_output_tokens`, and Argon thinks more than earlier models.** Google's migration note: apps with a limit under 32K should "raise max_output_tokens to at least 32,768 … To use fewer tokens, lower the thinking level instead." Check the value your agent framework or eval tool sets - "a low value, such as 8,192, stops the model before it finishes thinking", and the turn ends `incomplete` with truncated or empty text while still billing the thinking.
+- **Argon doesn't follow length targets.** Asked whether it can write to a fixed length, Google's long-decode guide answers: "No. The model doesn't follow length targets." `max_output_tokens` is room, not a target - "the model still decides how much to write." Control depth with `thinking_level` and shape with the prompt and `response_schema`, not with word counts.
+- **Long decode** lets one response run past 64K tokens, up to 1,048,576 minus input. On the **Interactions API** it needs `background: true` (and `store: true`) plus `max_output_tokens` > 65,536 (> 65,536 with `background=false` → 400; `background` without a limit stops at 64K). Output arrives in hops of up to 64K, each a `model_output` step - **join the text across all `model_output` steps**; streaming sends ~5K-token chunks, reconnect with `last_event_id`, runs last up to 24 h. On **`generateContent` / Vertex** the SDK follows `finish_reason=CONTINUATION` + an encrypted `continuation_token` automatically (v1beta1 only; not on Vertex's Interactions API). **Don't append partial output and ask the model to "continue"**, and in harnesses read `initial_prompt_token_count` rather than the cumulative `prompt_token_count` when deciding when to compact. For complex reasoning and coding Google suggests `max_output_tokens` of 131,072 or 262,144.
+- **Don't use long decode for tool-heavy agents** - many short turns with large outputs fill the shared window fast.
+- **Timeouts:** hard prompts can take several minutes (AA measured ~57 s to first token); use background execution or HTTP timeouts of at least 15 minutes.
 
 ## Prompt design fundamentals (few-shot, completion priming, decomposition, iteration)
 
@@ -129,7 +156,7 @@ Gemini 3.x defaults to **terse, direct answers**. If you want detail or a conver
 
 ## Grounding and built-in tools
 
-Native **Google Search grounding** connects the model to real-time information (5,000 free grounded requests/month shared across Gemini 3.x, then $14 / 1,000). Built-in tools: **Google Search, Maps grounding, File Search, Code Execution, URL Context**, and **Computer Use** (preview, built in - no separate model). Gemini 3 combines any of them with custom function calling **and with structured output** in a single request. Enable Search for current or obscure facts and Code Execution for calculations.
+Native **Google Search grounding** connects the model to real-time information (5,000 free grounded requests/month shared across Gemini 3.x, then $14 / 1,000). Built-in tools: **Google Search, Maps grounding, File Search, Code Execution, URL Context**, and **Computer Use** (preview, built in - no separate model; Argon included). Gemini 3 and 4 combine any of them with custom function calling (still Preview) **and with structured output** in a single request. On Vertex, Argon also grounds through Agent Search, Parallel Web Search, Exa Web Search, and Web Grounding for Enterprise. Enable Search for current or obscure facts and Code Execution for calculations.
 
 ## Function calling
 
@@ -143,7 +170,7 @@ Native **Google Search grounding** connects the model to real-time information (
 
 ## Tool-use control and error recovery
 
-If the model overuses tools - more likely on 3.8 Flash, which calls tools iteratively by design - first lower `thinking_level`, then constrain the budget in the system instruction (*"You have a limited action budget of N tool calls."*). Gemini benefits from an explicit recovery rule: **"Don't repeat a failed call with identical arguments"** - change the query, parameters, or approach; retry transient errors only up to a stated limit.
+If the model overuses tools - more likely on 3.8 Flash, which calls tools iteratively by design, and on Argon, which averaged ~62K output tokens per AA task (2.3× GPT-6 Astra) - first lower `thinking_level`, then constrain the budget in the system instruction (*"You have a limited action budget of N tool calls."*). Gemini benefits from an explicit recovery rule: **"Don't repeat a failed call with identical arguments"** - change the query, parameters, or approach; retry transient errors only up to a stated limit.
 
 ## Structured output
 
@@ -156,19 +183,19 @@ Prefer the structured-output feature over describing a JSON schema in prose (JSO
 
 ## Caching
 
-**Implicit caching is automatic** (stateful and stateless) - no setup; cached tokens appear in `usage.total_cached_tokens`. To raise the hit rate, put large, common content (system instruction, tool defs, shared context) at the **start** and send same-prefix requests close together; continuing conversations with `previous_interaction_id` also improves implicit hits. **The minimum cacheable input is 4,096 tokens on all current 3.x models** (3.5-3.8 Flash, 3.1 Pro; 2,048 on 2.5). **Explicit caching** (cache once, reference by handle) gives guaranteed savings at scale; TTL defaults to 1 hour, with a per-hour storage charge. Cache when a large fixed context is reused by shorter requests.
+**Implicit caching is automatic** (stateful and stateless) - no setup; cached tokens appear in `usage.total_cached_tokens`. To raise the hit rate, put large, common content (system instruction, tool defs, shared context) at the **start** and send same-prefix requests close together; continuing conversations with `previous_interaction_id` also improves implicit hits. **The minimum cacheable input is 4,096 tokens on Argon and all current 3.x models** (2,048 on 2.5; some Vertex Argon pages say 6,144 - design for the larger number). **Argon's agent-loop rule:** "Gemini caches the full previous request only if the new request adds at least 2,050 tokens" (model output, thoughts, and function results all count); smaller additions re-process the last 2,050 tokens at the full input rate - so tiny tool-loop turns cache worse than you'd expect. **Explicit caching** (cache once, reference by handle) gives guaranteed savings at scale, TTL 1 hour by default with a per-hour storage charge - but it is **not available on the Interactions API, or on Argon and later models** at all; use `generateContent` with a supported 3.x/2.5 model if you need it. Argon's cached input is 0.05× (vs ~0.1× on Flash).
 
 ## Long context
 
-The 1M window makes "put everything in context" viable, but mind recall: single-needle retrieval is ~99%, **multi-needle recall degrades** - when you need several distinct facts pulled reliably, prefer separate targeted requests. Put the query **last**, after the context, with an anchoring phrase. Longer inputs raise time-to-first-token; pair reused large contexts with caching.
+The 1M window makes "put everything in context" viable, but mind recall (and on Argon, the window is shared with thinking and output - a 900K-token prompt leaves little room to answer): single-needle retrieval is ~99%, **multi-needle recall degrades** - when you need several distinct facts pulled reliably, prefer separate targeted requests. Put the query **last**, after the context, with an anchoring phrase. Longer inputs raise time-to-first-token; pair reused large contexts with caching.
 
 ## Non-English output
 
-Gemini needs **aggressive** language enforcement to hold a non-English output language: *"RESPOND IN {LANGUAGE}. YOU MUST RESPOND UNMISTAKABLY IN {LANGUAGE}."* Also note 3.8 Flash's model card reports a slight **regression in non-English safety** vs 3.7 Flash - test safety behavior in each target language if it matters.
+Gemini needs **aggressive** language enforcement to hold a non-English output language: *"RESPOND IN {LANGUAGE}. YOU MUST RESPOND UNMISTAKABLY IN {LANGUAGE}."* Also note 3.8 Flash's model card reports a slight **regression in non-English safety** vs 3.7 Flash - test safety behavior in each target language if it matters. Google hasn't published Argon-specific language guidance; keep the enforcement clause and test.
 
 ## Temporal grounding
 
-Cutoffs differ by model - **March 2026 for 3.6-3.8 Flash** (with some domains still at Jan 2025), **January 2025** for 3.5 Flash, 3.5 Flash-Lite, and 3.1 Pro. For anything past the cutoff, enable Search grounding. For time-sensitive tasks, anchor the date explicitly (Google's clause above: *"Remember it is 2026 this year"*) and tell the model its cutoff - Gemini benefits from being told both even though it can search.
+Cutoffs differ by model - **March 2026 for Argon and 3.6-3.8 Flash** (with some domains still at Jan 2025), **January 2025** for 3.5 Flash-Lite and 3.1 Pro. For anything past the cutoff, enable Search grounding. For time-sensitive tasks, anchor the date explicitly (Google's clause above: *"Remember it is 2026 this year"*) and tell the model its cutoff - Gemini benefits from being told both even though it can search.
 
 ## Multimodal
 
@@ -185,26 +212,39 @@ Treat text, images, audio, video, and PDFs as equal-class inputs and reference e
 | Video (general) | `media_resolution_low`/`medium` | 70 / frame |
 | Video with dense text (OCR, small details) | `media_resolution_high` | 280 / frame |
 
-Gemini 3 defaults can raise token use for PDFs and lower it for video; reduce resolution explicitly if requests overflow.
+Gemini 3 defaults can raise token use for PDFs and lower it for video; reduce resolution explicitly if requests overflow. **Agentic video understanding** (the model seeks through a video rather than reading fixed frames) is GA but **off by default on Argon** - uploaded videos use `media_processing="static"`; set `"agentic"` to turn it on.
 
 **Troubleshooting.** If the model misses details, hint *which* aspects to draw from; if output is generic, ask it to **describe the image first**, then answer; to curb fabrication, ask for shorter descriptions (keep temperature at the default). Image segmentation is unsupported on Gemini 3 (use Gemini 2.5 Flash with thinking off). **Computer Use** is a built-in client-side tool (preview) on current Flash models - intent-based actions across browser / mobile / desktop, no separate model. Its safety layer is configured, not prompted: built-in policy categories (`FINANCIAL_TRANSACTIONS`, `SENSITIVE_DATA_MODIFICATION`, `COMMUNICATION_TOOL`, `ACCOUNT_CREATION`, `DATA_MODIFICATION`, `USER_CONSENT_MANAGEMENT`, `LEGAL_TERMS_AND_AGREEMENTS`) block or require confirmation; function calls can carry a `safety_decision` of `require_confirmation` - prompt the user and return `safety_acknowledgement` in the result. **Always handle that decision even if you set overrides** (overrides are preferences, not guarantees). From 3.5 Flash on, opt-in **prompt-injection detection** scans screenshots for hidden instructions and blocks execution (off by default - turn it on). Pair with a custom safety system instruction, a sandboxed VM/container/browser profile, and human-in-the-loop for consequential actions.
 
 ## Flash tier and inference tiers (Flex / Priority)
 
-The Flash line is now Google's workhorse, including for agents and coding - 3.8 Flash competes with larger frontier models on long-horizon SWE. Pick by workload: **3.8 Flash** for hard agentic/coding work (accept the token appetite or lower the level); **3.7 Flash** when compute efficiency matters more; **3.5 Flash-Lite** for high-volume classification, routing, and extraction (raise its `thinking_level` for a cheap accuracy boost on ambiguous inputs). Give Flash-Lite more explicit instructions and more (simpler) examples, and keep its tool set small.
+The Flash line is now Google's workhorse, including for agents and coding - 3.8 Flash competes with larger frontier models on long-horizon SWE. Pick by workload: **Argon** for the hardest work and as the orchestrator; **3.8 Flash** for hard agentic/coding work and as Argon's subagents (accept the token appetite or lower the level); **3.6 Flash** when you need `minimal` thinking on a Flash-class model (3.7 Flash, the compute-efficient option, now routes to 3.8); **3.5 Flash-Lite** for high-volume classification, routing, and extraction (raise its `thinking_level` for a cheap accuracy boost on ambiguous inputs). Give Flash-Lite more explicit instructions and more (simpler) examples, and keep its tool set small.
 
 Separately, **Flex** (batch-tolerant, ~50% cost) and **Priority** (faster, steadier latency at a premium) inference tiers apply per request, independent of the model.
 
-## Migration to Gemini 3.8 / 3.7 Flash
+## Migration to Gemini 4 Argon
+
+From 3.1 Pro Preview (Google Cloud's recommended path) or from a Flash model being promoted to the top tier. Google's `gemini-api-dev` skill offers `migrate my app to Gemini 4 Argon`.
+- Model ID `gemini-4-argon` (stable). Treat it as a new family, not a drop-in: re-run evals at `low`, `medium`, and `high` and keep the lowest level that passes.
+- **Raise `max_output_tokens` to ≥ 32,768** (check framework and eval-tool defaults too); lower `thinking_level` to cut tokens instead of shrinking the cap. Raise client timeouts to ≥ 15 minutes or use background execution.
+- Remove `temperature` / `top_p` / `top_k` (ignored, 400 later), `candidate_count`, `frequency_penalty`, `presence_penalty`, any `thinking_budget`, and `minimal`.
+- **Drop assistant prefill** and histories ending on a `model` turn; force shape with `response_schema`.
+- **Explicit caches don't carry over** - rely on implicit caching: static prefix first, ≥ 4,096 tokens, and expect weaker hits on small agent-loop turns (the 2,050-token rule).
+- Function calling: exact id/name/order symmetry on responses; no free text before calls (use an `update()` function); prefer sequential tool turns.
+- Remove word-count and length targets from prompts - Argon ignores them; trim elaboration nudges written for terser 3.x models and re-check output length.
+- Rewrite long agentic prompts around a **measurable goal + a verification script + a stated deliverable**, and move conventions into `AGENTS.md`/skills (see *Prompting Gemini 4 Argon*).
+- Budget: $2 / $10 until Nov 30 2026, then **$4 / $20** - compare cost per task against GPT-6 Astra and Claude Opus 5.5 at the price you'll actually pay.
+
+## Migration to Gemini 3.8 Flash
 
 Google's `gemini-api-dev` skill can automate this for coding agents.
-- Update the model ID (`gemini-3.8-flash` or `gemini-3.7-flash`); pin explicit IDs, not `-latest` aliases (alias targets shift; `gemini-3-pro-preview` was already retired → `gemini-3.1-pro-preview`).
-- **Replace `thinking_level:"minimal"` with `low`** (or route that traffic to Flash-Lite) - `minimal` errors on 3.7/3.8. Replace numeric `thinking_budget` with `thinking_level`; never send both.
+- Update the model ID to `gemini-3.8-flash` (`gemini-3.7-flash` is deprecated and already routes there); pin explicit IDs, not `-latest` aliases (alias targets shift; `gemini-3-pro-preview` was already retired → `gemini-3.1-pro-preview`).
+- **Replace `thinking_level:"minimal"` with `low`** (or route that traffic to Flash-Lite) - `minimal` errors on 3.8. Replace numeric `thinking_budget` with `thinking_level`; never send both.
 - Remove `temperature`, `top_p`, `top_k`, and `candidate_count`.
 - **Move to the Interactions API** for new work: standardize multi-turn on `previous_interaction_id`, **re-send `system_instruction` / `tools` / `generation_config` every call**, and decide on `store` (default retention 55 days).
 - **Drop assistant prefill** - a history ending on a non-empty `model` turn returns 400. Force shape with structured output.
 - Audit function calling: multimodal assets inside the response payload; inline guidance separated by `\n\n`; ids/`call_id` on every response; remove structured pre-tool text (see *Function calling*) if you hit `Malformed_Function_Call`.
 - Keep thought signatures round-tripping in stateless mode (or go stateful).
-- **Expect higher token use on 3.8 Flash** and budget for the Jan 1 2027 price doubling; compare cost-per-task against 3.7 Flash.
+- **Expect higher token use on 3.8 Flash** and budget for the Jan 1 2027 price doubling; compare cost-per-task against 3.6 Flash and Argon `low`.
 - The knowledge cutoff advanced to **March 2026** from 3.6 Flash on - you can drop date-anchoring workarounds for facts it now knows, but keep telling it the current date.
 - Re-test: Gemini 3.x is terser and more direct - prompts written for a chattier older model may need an explicit elaboration request.

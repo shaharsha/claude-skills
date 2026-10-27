@@ -81,7 +81,7 @@
     },
     {
       "name": "building-agents",
-      "description": "Expert prompt-engineering reference for AI agents on Claude, GPT, and Gemini APIs, plus authoring CLAUDE.md / AGENTS.md project-instruction files",
+      "description": "Expert prompt-engineering reference for AI agents on Claude, GPT, Gemini, Kimi, and Grok APIs, plus authoring CLAUDE.md / AGENTS.md project-instruction files",
       "source": "./",
       "strict": false,
       "skills": [
