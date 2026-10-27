@@ -1,6 +1,6 @@
 ---
 name: reviving-sessions
-description: Use when a Claude Code session exists on disk but the Claude desktop app does not list, open or name it - a session started with `claude -p` or from a shell script, from the VS Code extension, or under another account; a session that vanished from the sidebar after its worktree was deleted; headless lanes all called "General coding session"; a rename that answers "not found", reports success and changes nothing, or shows different names in two accounts; or when you need what an ENDED or Desktop-invisible session said and its .jsonl transcript is too large for cat or grep. Triggers include "my session disappeared", "why don't I see my sessions in the sidebar", "open this CLI session in the desktop app", "start a session from the shell and show it in Desktop", "name the headless lanes". Not for messaging, listing, reading, starting, renaming or archiving sessions the desktop app already lists - its own session tools do that.
+description: Use when a Claude Code session exists on disk but the Claude desktop app does not list, open or name it - a session started with `claude -p` or from a shell script, from the VS Code extension, or under another account; a session that vanished from the sidebar after its worktree was deleted; headless lanes all called "General coding session"; a rename that answers "not found", reports success and changes nothing, or shows different names in two accounts; or when you need what an ENDED or Desktop-invisible session said and its .jsonl transcript is too large for cat or grep. Triggers include "my session disappeared", "why don't I see my sessions in the sidebar", "open this CLI session in the desktop app", "start a session from the shell and show it in Desktop", "name the headless lanes". Not for routine messaging, listing, reading, starting, renaming or archiving of sessions the desktop app already lists - its own session tools do that; a rename that fails or differs between accounts still belongs here.
 ---
 
 # Reviving sessions
@@ -24,8 +24,9 @@ answer is its current view. (Shahar, 2026-10-20: *"contact it, don't read its tr
 - A rename fails, silently does nothing, or differs between two accounts
 - A session has ended, or the app does not have it, and you need what it said or decided
 
-**Not for:** a session the app already lists — message, read, rename, start or archive it with the
-app's tools. Not for reading your own conversation, or grepping code.
+**Not for:** routine work on a session the app already lists — message, read, rename, start or
+archive it with the app's tools. A rename that fails or differs between accounts is still this
+skill. Not for reading your own conversation, or grepping code.
 
 ## First: is the app really missing it?
 
@@ -156,29 +157,29 @@ the `--resume` picker, though they resume fine by id.
 `mcp__ccd_session_mgmt__set_session_title` renames **another** session; it refuses the one you are
 in, so your own title is the human's job.
 
-### ✅ Pre-flight: is this row the session you mean?
+### ✅ Verify a rename by its effect, never by its return value
 
-When you know the session by its transcript uuid (from `ccread` or the `.jsonl` filename), the
-`local_…` id you rename must carry that uuid. A row you picked by title may be another entry
-entirely — a session the app created itself, or a phantom with no transcript.
+`set_session_title` can answer *"Renamed session …"* and change nothing you can see. Measured
+2026-08-12: four renames, four *"Renamed"* returns, four sessions unchanged — the rows had been
+matched by title and had no transcript behind them. **The warning about this was already in the
+file and its author walked into it anyway**, so the defence is a check, not a warning:
 
 ```bash
+# BEFORE, optional: does the listed id carry the transcript uuid?
 find ~/.claude/projects -name '<uuid-from-list_sessions>*.jsonl' | wc -l
-#   0  -> not the transcript you mean. A rename against it can "succeed" and change nothing
-#         you can see from ccread.
-#   1  -> it IS that session, and the rename will land.
-# CONTROL: run it on a uuid you KNOW is real and require 1.
+#   1  -> it is that transcript's session for certain
+#   0  -> cannot tell from the id: normal for a v5 id the app minted, and for a session the
+#         app created itself. Fall back to cwd + title + isRunning, then rely on AFTER.
+
+# AFTER, required: the tool also writes customTitle into the transcript, so
+ccread <transcript uuid>      # must show the new title; and list_sessions must show it too
 ```
 
-Measured 2026-08-12: four entries → 0 transcripts each, four renames each answered *"Renamed
-session …"*, four sessions unchanged; the four real lane uuids → 1 each. **The warning about this
-was already in the file and its author walked into it anyway** — the control is the defence, not
-the warning.
+If neither changed, the row was not the session you meant — go back to `list_sessions`.
 
 🔴 **A 0 does NOT mean "this session does not exist", and NEVER archive on it.** Run over a whole
 listing the same hour, **12 of 12 desktop-native entries returned 0**, including one reporting
-`isRunning: true` — the app's ids are a different id space, so 0 is the *expected* answer for a row
-the app created itself. The check is a rename pre-flight and nothing else.
+`isRunning: true`.
 
 ### It lands in only one account
 
@@ -304,8 +305,8 @@ handoff's advice. Use a handoff to find what to look at, then look at it.
 | Mistake | What happens | Instead |
 |---|---|---|
 | Adopting on a bare *"not found"* | A second sidebar row for a session that was indexed all along | `list_sessions` first; see the two causes |
-| Renaming by a `local_…` id matched on title | *"Renamed"*, and nothing changes | Pre-flight the id; verify in `list_sessions` |
-| Archiving a row the pre-flight returned 0 for | Stops a live session and deletes its worktree | Leave duplicate rows to the human |
+| Trusting *"Renamed session …"* | Nothing changed: the row was not the session you meant | Verify with `ccread` and `list_sessions` afterwards |
+| Archiving a row the id check returned 0 for | Stops a live session and deletes its worktree | Leave duplicate rows to the human |
 | Starting `claude -p` lanes with no title step | Every lane reads "General coding session" | Adopt, then `set_session_title` |
 | Reading a stale transcript copy | You report outdated conclusions | Take the newest copy per session id (`ccread` does) |
 | `sed`-ing a transcript to repair paths | Rewrites the session's own recorded commands | Parse per line, touch only the top-level `cwd` |
