@@ -80,12 +80,21 @@ codex exec -s read-only -c 'sandbox_mode="read-only"' --skip-git-repo-check \
 
 Tested on the Antigravity CLI (`agy`) 1.4.12 with a Gemini API key, 2026-11-02.
 
-- **API-key mode only.** `--settings` carries `"modelProvider": "gemini"` and the
-  key goes in `GEMINI_API_KEY` (from the environment, else OpenCode's
-  `auth.json`), never in argv. Google's FAQ forbids driving agy from other tools
-  with an Antigravity login and points third-party agents at an AI Studio key;
-  key mode is outside both clauses, though no page says so outright. The
-  signed-in account is never used.
+- **Auth: Vertex AI or an API key, never the Antigravity login.** Google's FAQ
+  forbids driving agy from other tools with that login. `PAIR_AGY_AUTH` picks:
+  - `vertex` (what `auto`, the default, picks when exactly one
+    `~/.config/gcloud/adc-agy-*.json` exists, or `PAIR_AGY_ADC` names one):
+    plain Vertex AI on the GCP project in that ADC copy's `quota_project_id`,
+    billed to that project (startup credits). agy reads the project from that
+    field before `GOOGLE_CLOUD_QUOTA_PROJECT`, and the main
+    `application_default_credentials.json` pins another client's project, so the
+    script refuses it. `meta.json` records `auth: vertex:<project>`. If agy
+    reports `Reauthentication failed`, run `gcloud auth application-default login`
+    and refresh the copy (`~/.local/bin/agy-vertex --refresh-adc` on this Mac);
+  - `key`: `"modelProvider": "gemini"` in `--settings` and the key in
+    `GEMINI_API_KEY` (from the environment, else OpenCode's `auth.json`). Never
+    combine the two: `modelProvider` switches a Vertex run back to the key.
+  Neither secret reaches argv or the output.
 - **Models:** the id carries the effort: `gemini-4-argon-high` (the script adds
   `-<effort>` to `--model gemini-4-argon`), `gemini-3.8-flash-low`,
   `gemini-3.1-pro-high`. `agy models` lists them.
@@ -97,18 +106,26 @@ Tested on the Antigravity CLI (`agy`) 1.4.12 with a Gemini API key, 2026-11-02.
     traps);
   - a PreToolUse hook in that home, `agy_gate.py`, which decides every tool call
     from this run's `agy-policy.json`: reads only under `--cwd` (plus images and
-    the shots folder), no `.env` or key files; shell commands only `pair-fs`,
-    `pair-browser` (with `--domains`) and `pair-fetch` (with `--web live`), with no
-    `; & | $ < >` backticks or backslashes; `search_web` unless `--web off`; every
-    other tool refused. Its decisions land in `RUN_DIR/gate.log`;
-  - a settings floor under the gate: writes, MCP, URL actuation and the
-    metacharacter pattern denied, so a broken gate still cannot write;
+    the shots folder), no `.env` or key files under any name, case or link;
+    shell commands only `pair-fs`, `pair-browser` (with `--domains`) and
+    `pair-fetch` (with `--web live`), and only when zsh would take every word
+    literally (outside quotes just letters, digits and `_./:@,+=%-`; nothing but
+    `$`, backquote, backslash and `!` refused inside double quotes; single quotes
+    free); `search_web` unless `--web off`; every other tool refused, its own
+    `read_url_content` included. Its decisions land in `RUN_DIR/gate.log`;
+  - a settings floor under the gate: writes, MCP, URL reads and actuation, and
+    the metacharacter pattern denied, so a broken gate still cannot write;
   - stream-json in and out, `--print-timeout`, `--disable-slash-commands`,
     `--conversation <id>` to resume.
 - **`pair-fs`** (`pair_fs.py`): `ls`, `find GLOB`, `grep` (ripgrep, gitignore
-  aware, secret files skipped) and `git status|diff|log|show|blame|ls-files`
-  with an allow-list of flags and the repo's fsmonitor, pager, external diff and
-  textconv switched off. Every path is resolved and must stay inside the roots.
+  aware) and `git status|diff|log|show|blame|ls-files` with an allow-list of
+  flags. Every path is resolved and must stay inside the roots. Secret files
+  never print: not through an explicit grep path, a link, `rev:path` or a patch
+  (patches exclude them by pathspec). Git runs only when the repository sits
+  inside the roots (its history would show the rest) and its config names no
+  program (filters, `gpg.program`, pagers, drivers, includes and the like); on
+  top, fsmonitor, pager, external diff, textconv, hooks and signature checks
+  are switched off per call.
 - **`pair-fetch`** (`pair_fetch.py`, `--web live` only): one public http(s) page
   as text, checked on every redirect against loopback, private and metadata
   addresses, wrapped in untrusted-content markers.
@@ -135,6 +152,12 @@ Traps, each seen in testing:
   `read_url(*)` does not stop search; the gate does.
 - **Its own browser tools attach to your real Chrome** (DevTools MCP, logged-in
   profile). The gate refuses them; use `--domains`.
+- **Its shell is zsh.** A command line is expanded before any wrapper sees it,
+  and a glob qualifier such as `*(e:'cmd':)` runs code (measured: `*(.)`
+  expanded). Hence the gate's word-by-word check.
+- **Its own `--print-timeout` returns partial output as SUCCESS, exit 0**; only
+  stderr says "print timeout ... returning partial output". The script reports
+  that as `STATUS=timeout` (exit 124) and keeps the partial answer.
 - **`--sandbox` and `--mode plan` are not read-only:** the first confines only
   shell commands and leaves the project writable, the second is a prompt prefix.
 - **Hangs on stdin**, like the others: the script feeds stream-json from a file.
@@ -143,8 +166,10 @@ Traps, each seen in testing:
 
 The fallback. Same model and key, about three times the input tokens per call
 (OpenCode's system prompt), no web search, and no live browser outside browse.
-In the 2026-11-02 comparison it matched agy on a review, a screenshot and a
-consult, and beat agy on research only because agy then had no page reader.
+In the 2026-11-02 comparison (same model and effort) the two matched on a review,
+a screenshot with five planted defects (both found all five) and a consult.
+OpenCode won research until agy got `pair-fetch`; after that agy read the same
+primary sources (API reference, all six SDK READMEs) and cited them directly.
 
 Tested on OpenCode 2.2.5 with a Gemini API key.
 
@@ -164,9 +189,10 @@ Tested on OpenCode 2.2.5 with a Gemini API key.
   everything, then allow read, glob and grep, plus webfetch unless the mode's web
   setting is `off` (review and browse default to off); deny `.env` files. Tools it
   may not use are not offered to the model at all. In browse mode the only shell
-  command it allows is the generated `pair-browser` wrapper, with redirection and
-  command substitution refused (OpenCode skips `export` and matches raw command
-  text, so the wrapper, not the pattern, does the real checking). `OPENCODE_DISABLE_CLAUDE_CODE=1` keeps Claude's own instructions and
+  command it allows is the generated `pair-browser` wrapper, with redirection,
+  `$`, backquotes, parentheses, braces and `~` refused on the raw text (zsh
+  runs code from a glob qualifier); OpenCode skips `export` and matches raw
+  command text, so the wrapper, not the pattern, does the real checking. `OPENCODE_DISABLE_CLAUDE_CODE=1` keeps Claude's own instructions and
   skills out of its context.
 - **Events:** `step_start`, `text`, `tool_use`, `step_finish` (tokens, cost and a
   `reason`: `tool-calls` mid-turn, `stop` at the end) and `error` (for example

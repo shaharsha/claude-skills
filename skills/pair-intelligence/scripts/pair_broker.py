@@ -45,10 +45,10 @@ def main():
                         break
                     data += chunk
                 req = json.loads(data.decode("utf-8"))
-                argv = req["argv"]
+                argv = req.get("argv") if isinstance(req, dict) else None
                 if not (isinstance(argv, list) and all(isinstance(a, str) for a in argv) and len(argv) <= 40):
-                    raise ValueError("argv must be a list of strings")
-            except (ValueError, KeyError, OSError, UnicodeDecodeError) as e:
+                    raise ValueError("expected {\"argv\": [strings]}")
+            except Exception as e:  # any malformed request: answer it, never die
                 reply = {"rc": 2, "out": "", "err": "pair-browser: bad request (%s)\n" % e}
             else:
                 count += 1
@@ -66,6 +66,8 @@ def main():
                         reply = {"rc": p.returncode, "out": out, "err": err[:MAX_ERR]}
                     except subprocess.TimeoutExpired:
                         reply = {"rc": 124, "out": "", "err": "pair-browser: the command took over %ds\n" % TIMEOUT}
+                    except OSError as e:
+                        reply = {"rc": 2, "out": "", "err": "pair-browser: the wrapper did not run (%s)\n" % e}
             try:
                 conn.sendall((json.dumps(reply) + "\n").encode("utf-8"))
             except OSError:

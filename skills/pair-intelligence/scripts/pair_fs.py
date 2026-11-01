@@ -22,9 +22,18 @@ MAX_LINES = 400
 MAX_BYTES = 60000
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache",
              ".pytest_cache", ".next", ".turbo"}
-# Secret files stay out of search output; the model's file reader refuses them too.
+# Secret files stay out of every output: search, listing of contents and git
+# patches. The model's file reader (agy_gate.py) refuses the same names.
 SECRET_GLOBS = [".env", ".env.*", "*.pem", "*.key", "*.p12", "*.pfx", "id_rsa*", "id_ed25519*",
-                ".netrc", ".npmrc", ".pypirc"]
+                "id_ecdsa*", "id_dsa*", ".netrc", ".npmrc", ".pypirc"]
+SECRET = re.compile(r"^(\.env(\..+)?|.+\.(pem|key|p12|pfx)|id_(rsa|ed25519|ecdsa|dsa)(\.pub)?|\.netrc|\.npmrc|\.pypirc)$",
+                    re.IGNORECASE)
+SECRET_OK = re.compile(r"^\.env\.(example|sample|template|dist)$", re.IGNORECASE)
+
+
+def is_secret(name):
+    name = os.path.basename(name.rstrip("/"))
+    return bool(SECRET.match(name)) and not SECRET_OK.match(name)
 TOOL_PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
 USAGE = """usage: pair-fs <command> ...
@@ -46,14 +55,19 @@ def inside(full, root):
     return full == root or full.startswith(root + os.sep)
 
 
-def resolve(p):
+def resolve(p, contents=False):
+    """The real path of p, which must stay inside the roots. contents: the caller
+    will print what is inside the file, so a secret (by name or link) is refused."""
     if not ROOTS:
         die("no readable folders are configured")
-    full = os.path.realpath(p if os.path.isabs(p) else os.path.join(ROOTS[0], p))
+    given = p if os.path.isabs(p) else os.path.join(ROOTS[0], p)
+    full = os.path.realpath(given)
     if not any(inside(full, r) for r in ROOTS):
         die("%s is outside the folders you may read: %s" % (p, ", ".join(ROOTS)))
     if not os.path.exists(full):
         die("%s: no such file or directory" % p)
+    if contents and (is_secret(given) or is_secret(full)):
+        die("%s is a secret file (.env, keys); its contents are not shown" % p)
     return full
 
 
@@ -142,7 +156,7 @@ def cmd_grep(args):
             i += 1
     if not 1 <= len(rest) <= 2:
         die("grep takes a pattern and an optional path")
-    pattern, path = rest[0], resolve(rest[1] if len(rest) > 1 else ".")
+    pattern, path = rest[0], resolve(rest[1] if len(rest) > 1 else ".", contents=True)
     rg = shutil.which("rg", path=TOOL_PATH)
     if rg:
         # Ignores .gitignore'd files like the model's own tools would; --no-config
@@ -151,7 +165,7 @@ def cmd_grep(args):
                 "--max-columns=300", "--max-columns-preview", "--hidden", "--glob=!.git"] + flags
         if glob:
             argv += ["--glob", glob]
-        argv += ["--glob=!" + g for g in SECRET_GLOBS] + ["-e", pattern, "--", path]
+        argv += ["--iglob=!" + g for g in SECRET_GLOBS] + ["-e", pattern, "--", path]
     else:
         argv = ["/usr/bin/grep", "-rnI", "--exclude-dir=.git", "--exclude-dir=node_modules"] + flags
         if glob:
@@ -179,18 +193,37 @@ GIT_FLAGS = {
 }
 GIT_VALUE = re.compile(r"^(-n|-U|-L|--max-count|--unified|--since|--until|--after|--before|--author|"
                        r"--grep|--format|--pretty|--date)(=.+)?$|^-[0-9]+$|^-U[0-9]+$|^-n[0-9]+$")
+# Repository config that names a program git could run, directly or through a
+# driver: refused outright, since -c can only switch off the keys it names.
+RISKY_CONFIG = re.compile(r"^(include|includeif)\.|program|command|helper|\.(clean|smudge|process)$|pager|editor|"
+                          r"driver|fsmonitor|textconv|showsignature|alternate|hookspath|^alias\.|^uploadpack\.|"
+                          r"^core\.(sshcommand|askpass|gitproxy)", re.IGNORECASE)
 REV = re.compile(r"^[A-Za-z0-9_@^~{}:+-][A-Za-z0-9._/@^~{}:+-]*$")
 GIT_HELP = "pair-fs git <sub> [flags] [revs] [-- paths]\n" + "\n".join(
     "  %-8s %s" % (k, " ".join(sorted(v))) for k, v in GIT_FLAGS.items()) + \
     "\n  value flags: -n N, -N, -U N, -L a,b (blame), --max-count= --since= --until= --author= --grep= --format= --date="
 
 
+GIT_ENV = {"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_OPTIONAL_LOCKS": "0",
+           "GIT_TERMINAL_PROMPT": "0", "GIT_PAGER": "cat"}
+
+
 def git_toplevel():
     git = shutil.which("git", path=TOOL_PATH) or die("git is not installed")
     for r in ROOTS:
-        rc, out, _ = run([git, "-C", r, "rev-parse", "--show-toplevel"], r)
+        rc, out, _ = run([git, "-C", r, "rev-parse", "--show-toplevel"], r, GIT_ENV)
         if rc == 0 and out.strip():
-            return git, os.path.realpath(out.strip())
+            top = os.path.realpath(out.strip())
+            # History covers the whole repository; a root inside it would leak the rest.
+            if not any(inside(top, root) for root in ROOTS):
+                die("git history covers the whole repository at %s, wider than the folders you may read; "
+                    "pair-fs git is off for this run" % top)
+            rc, cfg, _ = run([git, "-C", top, "config", "--list", "--includes", "--name-only"], top, GIT_ENV)
+            risky = sorted({k for k in cfg.split() if RISKY_CONFIG.search(k)})
+            if risky:
+                die("this repository's git config sets %s, which can make git run a program; "
+                    "pair-fs git is off for it" % ", ".join(risky[:5]))
+            return git, top
     die("none of the readable folders is a git repository")
 
 
@@ -208,6 +241,9 @@ def cmd_git(args):
         if a in GIT_FLAGS[sub]:
             out.append(a)
         elif GIT_VALUE.match(a):
+            if re.match(r"^--(format|pretty)", a) and "%G" in a or a in ("--format", "--pretty") and \
+                    i + 1 < len(rest) and "%G" in rest[i + 1]:
+                die("signature placeholders (%G...) are not available")
             if "=" in a or re.match(r"^-[0-9]+$|^-U[0-9]+$|^-n[0-9]+$", a):
                 out.append(a)
             else:
@@ -218,31 +254,39 @@ def cmd_git(args):
         elif a.startswith("-"):
             die("git %s does not accept %s here; run 'pair-fs git' for the flags" % (sub, a))
         elif REV.match(a) and "/../" not in a and not a.endswith("/..") and not a.startswith("../"):
+            if is_secret(a.split(":", 1)[-1]):
+                die("%s names a secret file (.env, keys); its contents are not shown" % a)
             out.append(a)  # a revision, range, rev:path, or a path inside the repo
         else:
             die("%s is not a revision; put file paths after --" % a)
         i += 1
     rel = []
     for p in paths:
-        full = resolve(p)
+        full = resolve(p, contents=True)
         if not inside(full, top):
             die("%s is outside the git repository %s" % (p, top))
         rel.append(os.path.relpath(full, top))
+    patches = sub in ("diff", "show") or (sub == "log" and any(f in out for f in ("-p", "--patch")))
+    if patches and "--follow" not in out:  # --follow takes exactly one pathspec
+        # A tracked secret would otherwise show up inside a patch.
+        rel = (rel or ["."]) + [":(exclude,icase,glob)**/" + g for g in SECRET_GLOBS]
     # Repository config cannot run anything here: the fsmonitor hook, pager,
     # external diff and textconv drivers are all switched off for this call,
     # and GIT_OPTIONAL_LOCKS keeps status from rewriting the index.
     base = [git, "-C", top, "-c", "core.fsmonitor=false", "-c", "core.pager=cat",
             "-c", "diff.external=", "-c", "core.hooksPath=/dev/null", "-c", "color.ui=never",
-            "-c", "diff.ignoreSubmodules=all", "-c", "status.submoduleSummary=false", "--no-pager", sub]
+            "-c", "diff.ignoreSubmodules=all", "-c", "status.submoduleSummary=false",
+            "-c", "log.showSignature=false", "-c", "gpg.program=/usr/bin/false",
+            "-c", "gpg.ssh.program=/usr/bin/false", "-c", "gpg.x509.program=/usr/bin/false", "--no-pager", sub]
     if sub in ("diff", "log", "show"):
         base += ["--no-ext-diff", "--no-textconv"]
+    if sub in ("log", "show"):
+        base += ["--no-show-signature"]
     if sub == "blame":
         base += ["--no-textconv"]
     if sub == "status":
         base += ["--ignore-submodules=all"]
-    rc, so, se = run(base + out + (["--"] + rel if rel else []), top,
-                     {"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null",
-                      "GIT_OPTIONAL_LOCKS": "0", "GIT_TERMINAL_PROMPT": "0", "GIT_PAGER": "cat"})
+    rc, so, se = run(base + out + (["--"] + rel if rel else []), top, GIT_ENV)
     if rc != 0:
         die(se.strip() or "git %s failed" % sub)
     emit(so.splitlines(), "lines")

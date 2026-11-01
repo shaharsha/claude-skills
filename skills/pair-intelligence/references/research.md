@@ -62,10 +62,16 @@ What the script does:
 - pins a local host to its port: `--domains localhost:5173` lets pages load only
   from `localhost:5173`, because the allow-list ignores ports and every
   agent-browser session on this machine listens on loopback (Chrome's debugging
-  port, and a stream socket that accepts mouse and keyboard input). `open` and
-  `read` refuse another local port, a click that lands on one goes back with
-  exit 3, and `eval` is off while a local host is allowed. The dev server's own
-  scripts can still reach other local ports; serve only code you trust;
+  port, and a stream socket that accepts mouse and keyboard input). URLs are
+  compared in Chrome's canonical form (`pair_url.py`: `LOCALHOST`, `127.1` and
+  `2130706433` are all loopback; backslashes, user names and IPv6 hosts are
+  refused). With a local host allowed: `open` refuses another local port;
+  `read <url>` is off (it is a plain fetch that follows redirects), so open the
+  page and `read` it; `eval` is off; and the page is checked before and after
+  every command, so a redirect, click or script that lands on another local
+  port gets its output withheld, the page sent back, and exit 3. The dev
+  server's own scripts can still reach other local ports; serve only code you
+  trust;
 - gives the engine one way in, a generated `pair-browser` command on its PATH. It
   runs as `bash -p` (so an exported `BASH_ENV` cannot run first), pins the
   browser's settings and ignores the caller's environment, and rebuilds every

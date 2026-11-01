@@ -22,9 +22,50 @@ import re
 import shlex
 import sys
 
-METACHARS = set(";&|`$<>\\\n\r")
-SECRET = re.compile(r"^(\.env(\..+)?|.+\.(pem|key|p12|pfx)|id_(rsa|ed25519|ecdsa|dsa)(\.pub)?|\.netrc|\.npmrc|\.pypirc)$")
-SECRET_OK = re.compile(r"^\.env\.(example|sample|template|dist)$")
+# agy runs a command line in zsh (measured: a `*(.)` glob qualifier expanded).
+# Outside quotes only these characters pass, so no glob, glob qualifier
+# (*(e:'cmd':) runs code), brace, tilde, $, redirection or separator reaches it.
+SAFE_BARE = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./:@,+=%-")
+SECRET = re.compile(r"^(\.env(\..+)?|.+\.(pem|key|p12|pfx)|id_(rsa|ed25519|ecdsa|dsa)(\.pub)?|\.netrc|\.npmrc|\.pypirc)$",
+                    re.IGNORECASE)
+SECRET_OK = re.compile(r"^\.env\.(example|sample|template|dist)$", re.IGNORECASE)
+
+
+def shell_plain(line):
+    """True if zsh would run this line as one command with every word taken literally.
+
+    Single quotes are fully literal in zsh; inside double quotes only $, backquote,
+    backslash and ! do anything, so those are refused there. Bare words use
+    SAFE_BARE, and none may start with = (zsh expands =cmd to a path).
+    """
+    state, word_start = "bare", True
+    for c in line:
+        if state == "single":
+            if c in "\n\r":
+                return False
+            if c == "'":
+                state, word_start = "bare", False
+        elif state == "double":
+            if c in "$`\\!\n\r":
+                return False
+            if c == '"':
+                state, word_start = "bare", False
+        elif c == " ":
+            word_start = True
+        elif c == "'":
+            state = "single"
+        elif c == '"':
+            state = "double"
+        elif c not in SAFE_BARE or (word_start and c == "="):
+            return False
+        else:
+            word_start = False
+    return state == "bare"
+
+
+def secret(path):
+    names = {os.path.basename(path), os.path.basename(os.path.realpath(path))}
+    return any(SECRET.match(n) and not SECRET_OK.match(n) for n in names if n)
 
 
 def load_policy():
@@ -71,9 +112,10 @@ def main():
 
     if name == "run_command":
         line = str(args.get("CommandLine", ""))
-        if any(c in METACHARS for c in line):
-            decide("deny", "shell operators, redirection, $ and backslashes are refused: run one %s command"
-                   % " or ".join(commands))
+        if not shell_plain(line):
+            decide("deny", "the shell (zsh) would expand or chain part of that command: use one %s command, "
+                   "only letters, digits and _./:@,+=%%- outside quotes, and put patterns or text in single "
+                   "quotes" % " or ".join(commands))
         try:
             argv = shlex.split(line)
         except ValueError:
@@ -86,9 +128,8 @@ def main():
 
     if name in ("read_file", "view_file"):
         p = str(args.get("Path") or args.get("AbsolutePath") or args.get("path") or "")
-        base = os.path.basename(p)
-        if SECRET.match(base) and not SECRET_OK.match(base):
-            decide("deny", "secret files (.env, keys) are not readable")
+        if secret(p):
+            decide("deny", "secret files (.env, keys) are not readable, under any name or link")
         if readable(p):
             decide("auto_approve")
         decide("deny", "reading is limited to: %s (use absolute paths)" % ", ".join(roots))
@@ -98,9 +139,8 @@ def main():
             decide("auto_approve")
         decide("deny", "web search is off for this run")
     if name == "read_url_content":
-        if web == "live":
-            decide("auto_approve")
-        decide("deny", "fetching URLs is off for this run" + (" (search only)" if web == "cached" else ""))
+        # pair-fetch is the page reader: it refuses local and private addresses.
+        decide("deny", "use `pair-fetch <url>` to read a page" if web == "live" else "reading pages is off for this run")
 
     decide("deny", "%s is not available in this run" % (name or "this tool"))
 

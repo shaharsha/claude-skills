@@ -1,6 +1,6 @@
 ---
 name: pair-intelligence
-description: Use when another model's independent view would help - reviewing a plan or diff before it lands, a second opinion on a decision or diagnosis, brainstorming over several rounds, checking a screenshot, web research, or having the other model drive a browser. Also when the user says ask Codex, GPT or Gemini, second opinion, cross-model or adversarial review, "have Codex look at this", "brainstorm with Gemini", or a brief names the codex-review skill. Needs the codex CLI; Gemini needs agy (Antigravity CLI) or OpenCode, with a Gemini API key.
+description: Use when another model's independent view would help - reviewing a plan or diff before it lands, a second opinion on a decision or diagnosis, brainstorming over several rounds, checking a screenshot, web research, or having the other model drive a browser. Also when the user says ask Codex, GPT or Gemini, second opinion, cross-model or adversarial review, "have Codex look at this", "brainstorm with Gemini", or a brief names the codex-review skill. Needs the codex CLI; Gemini needs agy (Antigravity CLI) or OpenCode.
 ---
 
 # Pair intelligence
@@ -50,7 +50,7 @@ Read the mode's file before you write the prompt. Images work in any mode: add
 | Images | yes | yes |
 | Enforced JSON | `--schema` | no |
 | Live browser | `--domains`, any mode; still read-only outside browse | `--domains`, any mode |
-| Cost | ChatGPT plan quota | API key, per token (Argon has no free tier) |
+| Cost | ChatGPT plan quota | per token: Vertex AI on your GCP project when an agy ADC copy exists, else the API key (Argon has no free tier) |
 
 Use Codex unless the user names Gemini, Codex is unavailable or rate-limited, or
 you want two lineages. **Both engines:** for a high-stakes review or a contested

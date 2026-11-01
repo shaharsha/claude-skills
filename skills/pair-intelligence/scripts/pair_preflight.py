@@ -54,16 +54,23 @@ try:
 except OSError:
     res["repo_read_only"] = True
 
+# Connecting is enough to drive agent-browser, so a successful connect counts
+# as reachable whatever the daemon answers; and with no socket found there is
+# nothing proven, which also fails.
 others = [os.path.join(sockdir, f) for f in os.listdir(sockdir)
           if f.endswith(".sock") and os.path.join(sockdir, f) != broker]
 reachable = []
 for path in others:
+    c = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    c.settimeout(5)
     try:
-        talk(path, b"{}\n")
+        c.connect(path)
         reachable.append(path)
-    except Exception:
+    except OSError:
         pass
-res["browser_socket_unreachable"] = not reachable
+    finally:
+        c.close()
+res["browser_socket_unreachable"] = bool(others) and not reachable
 
 print(json.dumps(res))
 sys.exit(0 if all(res.values()) else 1)

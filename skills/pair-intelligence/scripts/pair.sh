@@ -196,18 +196,48 @@ fi
 [[ "$TIMEOUT" =~ ^[0-9]*$ ]] || { echo "--timeout takes whole seconds" >&2; exit 64; }
 
 GEMINI_KEY=""
+AGY_AUTH=""
+AGY_PROJECT=""
 if [[ "$ENGINE" == "codex" ]]; then
   command -v codex >/dev/null || { echo "codex CLI not found on PATH" >&2; exit 69; }
 elif [[ "$BACKEND" == "agy" ]]; then
   command -v "$AGY" >/dev/null || { echo "agy (Antigravity CLI) not found; brew install --cask antigravity-cli, set PAIR_AGY, or use --backend opencode" >&2; exit 69; }
-  # API-key mode only: Google's terms forbid driving agy from other tools with an
-  # Antigravity login, and point third-party agents at an AI Studio key. The key
-  # never reaches argv or the output; only agy's environment gets it.
-  GEMINI_KEY="${GEMINI_API_KEY:-}"
-  [[ -n "$GEMINI_KEY" ]] || GEMINI_KEY="$(python3 -c 'import json,os
+  # Never the Antigravity login: Google's terms forbid driving agy from other
+  # tools with it. Two routes instead, and neither secret reaches argv or output:
+  #   vertex - plain Vertex AI on a GCP project (startup credits), through an
+  #            ADC copy whose quota_project_id names the project; agy takes the
+  #            project from that field before any environment variable, so the
+  #            main ADC file (pinned to another project) is refused;
+  #   key    - a Gemini API key (AI Studio).
+  # auto picks vertex when exactly one ~/.config/gcloud/adc-agy-*.json exists
+  # (or PAIR_AGY_ADC names one), else key.
+  AGY_AUTH="${PAIR_AGY_AUTH:-auto}"
+  AGY_ADC="${PAIR_AGY_ADC:-}"
+  AGY_PROJECT=""
+  if [[ "$AGY_AUTH" != key && -z "$AGY_ADC" ]]; then
+    _adcs=("$HOME"/.config/gcloud/adc-agy-*.json)
+    [[ ${#_adcs[@]} -eq 1 && -f "${_adcs[0]}" ]] && AGY_ADC="${_adcs[0]}"
+  fi
+  case "$AGY_AUTH" in
+    auto) if [[ -n "$AGY_ADC" && -f "$AGY_ADC" ]]; then AGY_AUTH=vertex; else AGY_AUTH=key; fi ;;
+    vertex) [[ -n "$AGY_ADC" && -f "$AGY_ADC" ]] || { echo "PAIR_AGY_AUTH=vertex needs an ADC copy for agy: set PAIR_AGY_ADC, or create ~/.config/gcloud/adc-agy-<project>.json" >&2; exit 69; } ;;
+    key) ;;
+    *) echo "PAIR_AGY_AUTH must be auto, vertex or key" >&2; exit 64 ;;
+  esac
+  if [[ "$AGY_AUTH" == vertex ]]; then
+    [[ "$(basename "$AGY_ADC")" != application_default_credentials.json ]] \
+      || { echo "refusing the main ADC file for agy: its quota project may bill another client; use a copy (PAIR_AGY_ADC)" >&2; exit 64; }
+    AGY_PROJECT="$(python3 -c 'import json,sys
+try: print(json.load(open(sys.argv[1])).get("quota_project_id", ""))
+except Exception: pass' "$AGY_ADC" 2>/dev/null)"
+    [[ -n "$AGY_PROJECT" ]] || { echo "$AGY_ADC has no quota_project_id, so agy would not know which project to bill" >&2; exit 69; }
+  else
+    GEMINI_KEY="${GEMINI_API_KEY:-}"
+    [[ -n "$GEMINI_KEY" ]] || GEMINI_KEY="$(python3 -c 'import json,os
 try: print(json.load(open(os.path.expanduser("~/.local/share/opencode/auth.json")))["google"]["key"])
 except Exception: pass' 2>/dev/null)"
-  [[ -n "$GEMINI_KEY" ]] || { echo "no Gemini API key: set GEMINI_API_KEY, or log OpenCode in to Google (auth.json)" >&2; exit 69; }
+    [[ -n "$GEMINI_KEY" ]] || { echo "no Gemini API key: set GEMINI_API_KEY, or log OpenCode in to Google (auth.json)" >&2; exit 69; }
+  fi
 else
   [[ -x "$OPENCODE" ]] || { echo "OpenCode v2 CLI not found at $OPENCODE (set PAIR_OPENCODE)" >&2; exit 69; }
   # v1 and v2 share one database but not one flag set; v1 on a v2-migrated
@@ -342,29 +372,39 @@ if [[ -n "$DOMAINS" ]]; then
   # www.example.com. A local host must come with its port: every agent-browser
   # session also listens on loopback (CDP and a stream socket that takes input),
   # so the wrapper pins local pages to the exact host:port given.
+  # pair_url.py canonicalizes each entry the way Chrome will (case, trailing
+  # dot, every IPv4 spelling) and says whether it is local.
+  URLCHECK="$SKILL_DIR/scripts/pair_url.py"
   ALLOWED=""
   IFS=',' read -r -a _doms <<< "$DOMAINS"
   for d in "${_doms[@]}"; do
-    d="${d// /}"; d="${d#*://}"; d="${d%%/*}"; [[ -n "$d" ]] || continue
-    h="${d%:*}"; port=""; [[ "$d" == *:* ]] && port="${d##*:}"
-    case "$h" in
-      localhost|127.0.0.1|0.0.0.0|*.localhost)
-        [[ "$port" =~ ^[0-9]+$ ]] || { echo "--domains: give $h with its port (e.g. $h:5173); a local host is pinned to one port" >&2; exit 64; }
+    d="${d// /}"; [[ -n "$d" ]] || continue
+    kind=""; h=""; port=""
+    read -r kind h port < <(/usr/bin/python3 -I "$URLCHECK" domain "$d" 2>"$RUN_DIR/.domain-err"; true) || true
+    [[ -n "$kind" ]] || { echo "--domains: $(sed 's/^pair-browser: //' "$RUN_DIR/.domain-err")" >&2; exit 64; }
+    case "$kind" in
+      empty) continue ;;
+      local)
         LOCAL_PINS+="${LOCAL_PINS:+ }$h:$port"
         ALLOWED+="${ALLOWED:+,}$h"
         [[ -n "$FIRST" ]] || FIRST="http://$h:$port" ;;
-      *)
+      remote)
         ALLOWED+="${ALLOWED:+,}$h"
         [[ "$h" == \*.* || "$h" =~ ^[0-9.]+$ ]] || ALLOWED+=",*.$h"
+        [[ "$port" == - ]] && port=""
         [[ -n "$FIRST" ]] || FIRST="https://${h#\*.}${port:+:$port}" ;;
     esac
   done
+  rm -f "$RUN_DIR/.domain-err"
   [[ -n "$ALLOWED" ]] || { echo "--domains has no usable domain: $DOMAINS" >&2; exit 64; }
   # Screenshots never land in a repository: in browse they go inside the scratch
   # working directory (an OpenCode agent may not read outside it), otherwise in
   # the run directory.
   if [[ "$MODE" == "browse" ]]; then SHOTS="$CWD/shots"; else SHOTS="$RUN_DIR/shots"; fi
   mkdir -p "$SHOTS"
+  if git -C "$SHOTS" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "screenshots would land in a git repository ($SHOTS); point PAIR_OUT outside it" >&2; exit 64
+  fi
   # A short path: unix socket paths are capped at 103 bytes on macOS. Never
   # ~/.agent-browser, which holds every session's socket and the saved-login key.
   SOCK="$(mktemp -d /tmp/pair.XXXX)"
@@ -389,7 +429,7 @@ if [[ -n "$DOMAINS" ]]; then
     # bash -p: ignore BASH_ENV, ENV and exported functions, which a model can set
     # before calling the wrapper and bash would otherwise run before anything here.
     printf '#!/bin/bash -p\n# pair-browser: generated by pair.sh for one run.\nset -u\n'
-    printf 'SHOTS=%q\nSOCKDIR=%q\nLOCAL_PINS=%q\n' "$SHOTS" "$SOCK" "$LOCAL_PINS"
+    printf 'SHOTS=%q\nSOCKDIR=%q\nLOCAL_PINS=%q\nURLCHECK=%q\nSTART=%q\n' "$SHOTS" "$SOCK" "$LOCAL_PINS" "$URLCHECK" "$FIRST"
     printf 'host() { ( cd "$SOCKDIR" && exec /usr/bin/env -i HOME=%q PATH=%q TMPDIR=%q AGENT_BROWSER_SOCKET_DIR=%q AGENT_BROWSER_SESSION=pair AGENT_BROWSER_ALLOWED_DOMAINS=%q AGENT_BROWSER_CONTENT_BOUNDARIES=1 AGENT_BROWSER_SCREENSHOT_DIR=%q AGENT_BROWSER_DOWNLOAD_PATH=%q %q "$@" ); }\n' \
       "$HOME" "$AB_DIR:/usr/bin:/bin" "${TMPDIR:-/tmp}" "$SOCK" "$ALLOWED" "$SHOTS" "$SHOTS" "$AB"
     cat <<'WRAPPER'
@@ -400,21 +440,20 @@ no()    { echo "pair-browser: $*" >&2; exit 2; }
 plain() { [[ -n "${1:-}" && "${1:-}" != -* ]] || no "expected a value, got '${1:-}'"; }
 text()  { [[ "${1:-}" != -* ]] || no "text may not start with a dash: '${1:-}'"; }  # may be empty: fill "" clears a field
 num()   { [[ "${1:-}" =~ ^[0-9]+([.][0-9]+)?$ ]] || no "expected a number, got '${1:-}'"; }
-url()   { [[ "${1:-}" =~ ^https?:// ]] || no "expected an http(s) URL, got '${1:-}'"; pinned "$1"; }
-# host:port of a URL, with the scheme's default port filled in.
-hostport() { local s="${1%%://*}" u="${1#*://}"; u="${u%%[/?#]*}"; u="${u##*@}"
-  if [[ "$u" == *:* ]]; then printf '%s' "$u"; elif [[ "$s" == https ]]; then printf '%s:443' "$u"; else printf '%s:80' "$u"; fi; }
-is_local() { case "${1%:*}" in localhost|127.0.0.1|0.0.0.0|*.localhost) return 0 ;; esac; return 1; }
-pinned() { local hp; hp="$(hostport "$1")"; is_local "$hp" || return 0
-  [[ " $LOCAL_PINS " == *" $hp "* ]] || no "local pages are limited to ${LOCAL_PINS:-none}; $hp is not one of them"; }
-# A click can still navigate to another local port; go back and refuse.
-check_page() { local cur hp
-  cur="$(host get url 2>/dev/null | grep -Eo 'https?://[^[:space:]]+' | head -1)"; [[ -n "$cur" ]] || return 0
-  hp="$(hostport "$cur")"; is_local "$hp" || return 0
-  if [[ " $LOCAL_PINS " != *" $hp "* ]]; then
-    host back >/dev/null 2>&1
-    echo "pair-browser: the page moved to $hp, outside the pinned local pages ($LOCAL_PINS); went back" >&2; exit 3
-  fi; }
+# URLs are judged in Chrome's canonical form (pair_url.py): LOCALHOST, 127.1 and
+# a backslash all mean something else to Chrome than to a string match.
+url()   { /usr/bin/python3 -I "$URLCHECK" check "${1:-}" $LOCAL_PINS || exit 2; }
+# Is the current page on an unpinned local origin? A redirect, a click or page
+# script can move it there; nothing may read such a page.
+page_off_pin() { local cur where
+  cur="$(host get url 2>/dev/null | grep -Eo 'https?://[^[:space:]]+' | head -1)"; [[ -n "$cur" ]] || return 1
+  where="$(/usr/bin/python3 -I "$URLCHECK" where "$cur")"
+  case "$where" in
+    "local "*) [[ " $LOCAL_PINS " != *" ${where#local } "* ]] ;;
+    unknown) return 0 ;;
+    *) return 1 ;;
+  esac; }
+recover() { host back >/dev/null 2>&1; page_off_pin && host open "$START" >/dev/null 2>&1; }
 sub="${1:-}"; [[ $# -gt 0 ]] && shift
 out=()
 case "$sub" in
@@ -424,7 +463,12 @@ case "$sub" in
     [[ $# -eq 1 ]] || no "open takes one URL"; url "$1"; out=("$1") ;;
   read)
     [[ $# -le 1 ]] || no "read takes at most one URL"
-    if [[ $# -eq 1 ]]; then url "$1"; out=("$1"); fi ;;
+    # read <url> is a plain HTTP fetch that follows redirects on its own, past
+    # any port pin; with a local host allowed, open the page and read it instead.
+    if [[ $# -eq 1 ]]; then
+      [[ -z "$LOCAL_PINS" ]] || no "read <url> is off while local pages are allowed: open the URL, then read"
+      url "$1"; out=("$1")
+    fi ;;
   eval)
     # Page JavaScript on an allowed local page could reach the other loopback
     # sockets of any agent-browser session on this machine.
@@ -482,9 +526,24 @@ case "$sub" in
     out+=("$SHOTS/$base") ;;
   *) no "'$sub' is not an allowed command" ;;
 esac
-host "$sub" ${out[@]+"${out[@]}"}
-rc=$?
-[[ -z "$LOCAL_PINS" ]] || check_page
+if [[ -z "$LOCAL_PINS" ]]; then
+  host "$sub" ${out[@]+"${out[@]}"}
+  exit $?
+fi
+# With local pages allowed, check the page before the command (only `open` may
+# leave an off-pin page) and after it, holding the output back until the page
+# is known to be on a pinned origin.
+if page_off_pin && [[ "$sub" != open ]]; then
+  recover
+  no "the page is on an unpinned local origin; it was sent back - open a pinned URL"
+fi
+result="$(host "$sub" ${out[@]+"${out[@]}"} 2>&1)"; rc=$?
+if page_off_pin; then
+  recover
+  echo "pair-browser: the page moved outside the pinned local pages ($LOCAL_PINS); its output was withheld and the page sent back" >&2
+  exit 3
+fi
+[[ -z "$result" ]] || printf '%s\n' "$result"
 exit $rc
 WRAPPER
   } > "$WRAP"
@@ -586,7 +645,7 @@ fi
     printf '<harness>\nThe project is the folder %s. Read files with your file-reading tool, using absolute paths under it.\n' "$CWD"
     printf 'To list folders, find files by name, search contents or read git history, run the `pair-fs` command (on your PATH):\n'
     printf '  pair-fs ls [PATH] | pair-fs find GLOB [PATH] | pair-fs grep [-i] [-F] [-l] [--glob G] PATTERN [PATH] | pair-fs git status|diff|log|show|blame [ARGS]\n'
-    printf 'PATH is absolute or relative to the project folder; `pair-fs git` with no subcommand prints the accepted flags. Nothing else runs: other shell commands, writing files and reading outside the project are refused with a reason. %s\n</harness>\n\n' "$WEBLINE"
+    printf 'PATH is absolute or relative to the project folder; `pair-fs git` with no subcommand prints the accepted flags. Put search patterns and any text with spaces or symbols in single quotes: outside quotes the shell accepts only letters, digits and _./:@,+=%%-. Nothing else runs: other shell commands, writing files and reading outside the project or secret files are refused with a reason. %s\n</harness>\n\n' "$WEBLINE"
   fi
   cat "$PROMPT_FILE"
   # Codex opens images with its view_image tool and agy with its file reader;
@@ -673,22 +732,28 @@ os.replace(tmp, dest)
 PY
   # The settings floor under the gate: agy enforces these even if the gate fails.
   SETTINGS="$RUN_DIR/agy-settings.json"
-  python3 - "$SETTINGS" "$WEB" "${AGY_CMDS[*]:-}" <<'PY'
+  python3 - "$SETTINGS" "$WEB" "${AGY_CMDS[*]:-}" "$AGY_AUTH" <<'PY'
 import json, sys
-path, web, cmds = sys.argv[1], sys.argv[2], sys.argv[3].split()
-deny = ["write_file(*)", "execute_url(*)", "mcp(*)", "command(regex:.*[;&|`$<>\\n\\r].*)"]
-if web != "live":
-    deny.append("read_url(*)")
-json.dump({"modelProvider": "gemini",
-           "permissions": {"allow": ["command(%s)" % c for c in cmds], "deny": deny}}, open(path, "w"), indent=2)
+path, web, cmds, auth = sys.argv[1], sys.argv[2], sys.argv[3].split(), sys.argv[4]
+deny = ["write_file(*)", "execute_url(*)", "read_url(*)", "mcp(*)", "command(regex:.*[;&|`$<>\\n\\r].*)"]
+settings = {"permissions": {"allow": ["command(%s)" % c for c in cmds], "deny": deny}}
+if auth == "key":
+    settings["modelProvider"] = "gemini"   # on the Vertex route this would switch back to key mode
+json.dump(settings, open(path, "w"), indent=2)
 PY
   python3 -c 'import json,sys; print(json.dumps({"event": "user", "message": {"content": open(sys.argv[1]).read()}}))' \
     "$PROMPT" > "$RUN_DIR/agy-input.jsonl"
   ARGS=(--settings "$SETTINGS" --model "$MODEL" --input-format stream-json --output-format stream-json
         --print-timeout "$(( TIMEOUT > 20 ? TIMEOUT - 10 : TIMEOUT ))s" --disable-slash-commands)
   [[ -n "$RESUME_ID" ]] && ARGS+=(--conversation "$RESUME_ID")
-  (cd "$AGY_WS" && HOME="$AGY_HOME" GEMINI_API_KEY="$GEMINI_KEY" PAIR_GATE_POLICY="$POLICY" PATH="$RUN_DIR/bin:$PATH" \
-     run_limited "$AGY" "${ARGS[@]}" < "$RUN_DIR/agy-input.jsonl") > "$EVENTS" 2> "$ERRLOG"
+  if [[ "$AGY_AUTH" == vertex ]]; then
+    AUTH_ENV=(AGY_ADC_AUTH=true GOOGLE_CLOUD_LOCATION=global GOOGLE_APPLICATION_CREDENTIALS="$AGY_ADC")
+  else
+    AUTH_ENV=(GEMINI_API_KEY="$GEMINI_KEY")
+  fi
+  (cd "$AGY_WS" && unset GEMINI_API_KEY GOOGLE_API_KEY GOOGLE_CLOUD_QUOTA_PROJECT AGY_ADC_AUTH GOOGLE_APPLICATION_CREDENTIALS \
+     && export HOME="$AGY_HOME" PAIR_GATE_POLICY="$POLICY" PATH="$RUN_DIR/bin:$PATH" "${AUTH_ENV[@]}" \
+     && run_limited "$AGY" "${ARGS[@]}" < "$RUN_DIR/agy-input.jsonl") > "$EVENTS" 2> "$ERRLOG"
   RC=$?
 else
   # A read-only agent: deny everything, then allow reading and fetching. Tools it
@@ -707,13 +772,15 @@ else
   if [[ "$MODE" == "browse" ]]; then
     # OpenCode has no OS sandbox, so its shell is confined by rule: the generated
     # pair-browser wrapper is the only command allowed (agent-browser itself is
-    # not), and the wrapper validates everything after it. Redirection and
-    # command substitution are refused on the raw text, because the shell, not
-    # the wrapper, would carry them out. Any deny wins.
+    # not), and the wrapper validates everything after it. What the shell itself
+    # would carry out is refused on the raw text: redirection, $ expansion,
+    # command substitution, and the parentheses, braces and tilde through which
+    # zsh runs code from a glob qualifier (*(e:'cmd':)) or expands other text.
+    # Any deny wins.
     for cmd in pair-browser "$WRAP"; do
       AGENT_CFG+=",
     {\"action\":\"shell\",\"resource\":\"$cmd *\",\"effect\":\"allow\"}"
-      for pat in '*>*' '*<*' '*$(*' '*`*'; do
+      for pat in '*>*' '*<*' '*$*' '*`*' '*(*' '*)*' '*{*' '*}*' '*~*'; do
         AGENT_CFG+=",
     {\"action\":\"shell\",\"resource\":\"$cmd $pat\",\"effect\":\"deny\"}"
       done
@@ -738,9 +805,10 @@ SECS=$(( $(date +%s) - START ))
 STATUS="failed"; SESSION_ID="-"
 # Written to a file, not read through <(...): bash mis-parses a heredoc this long
 # inside a process substitution.
-python3 - "${BACKEND:-$ENGINE}" "$EVENTS" "$ANSWER" "$RC" "$RUN_DIR/tools.txt" > "$RUN_DIR/.status" <<'PY'
+python3 - "${BACKEND:-$ENGINE}" "$EVENTS" "$ANSWER" "$RC" "$RUN_DIR/tools.txt" "$ERRLOG" > "$RUN_DIR/.status" <<'PY'
 import json, sys, pathlib
 engine, events, answer, rc = sys.argv[1], pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3]), int(sys.argv[4])
+errlog = pathlib.Path(sys.argv[6])
 evs = []
 for line in events.read_text(errors="replace").splitlines() if events.exists() else []:
     try: evs.append(json.loads(line))
@@ -791,7 +859,10 @@ else:
         elif t == "step_finish": completed = part.get("reason", "stop") == "stop"
     if texts:
         answer.write_text("\n\n".join(x for x in texts if x).strip() + "\n")
-if rc in (124, 137, 142):
+# agy's own --print-timeout returns what it has so far as SUCCESS with exit 0;
+# only its stderr says the turn was cut (measured).
+agy_cut = engine == "agy" and errlog.exists() and "print timeout after" in errlog.read_text(errors="replace")
+if rc in (124, 137, 142) or agy_cut:
     status = "timeout"
 elif denied:
     status = "denied"
@@ -833,10 +904,10 @@ PY
 fi
 
 python3 - "$RUN_DIR/meta.json" "$ENGINE" "$MODE" "$MODEL" "$EFFORT" "$WEB" "$CWD" "$STATUS" \
-  "$RC" "$SECS" "$SESSION_ID" "${NAME:-$RESUME}" "$DOMAINS" "$BACKEND" <<'PY'
+  "$RC" "$SECS" "$SESSION_ID" "${NAME:-$RESUME}" "$DOMAINS" "$BACKEND" "${AGY_AUTH:+$AGY_AUTH${AGY_PROJECT:+:$AGY_PROJECT}}" <<'PY'
 import json, sys
 keys = ["engine", "mode", "model", "effort", "web", "cwd", "status", "exit_code",
-        "seconds", "session_id", "session_name", "domains", "backend"]
+        "seconds", "session_id", "session_name", "domains", "backend", "auth"]
 meta = dict(zip(keys, sys.argv[2:]))
 meta["exit_code"], meta["seconds"] = int(meta["exit_code"]), int(meta["seconds"])
 json.dump(meta, open(sys.argv[1], "w"), indent=2)
@@ -850,7 +921,7 @@ echo "STATUS=$STATUS"
 echo "ANSWER=$ANSWER"
 case "$STATUS" in
   ok)      exit 0 ;;
-  timeout) echo "timed out after ${TIMEOUT}s; see $ERRLOG" >&2; exit 124 ;;
+  timeout) echo "timed out after ${TIMEOUT}s; $ANSWER holds partial output if there is any; see $ERRLOG" >&2; exit 124 ;;
   empty)   echo "no answer; see $ERRLOG and $EVENTS" >&2; exit 70 ;;
   incomplete) echo "the turn ended without a final step; $ANSWER holds only what arrived" >&2; exit 71 ;;
   denied)  echo "agy ended the turn on a permission it could not ask for; see $RUN_DIR/tools.txt and $ERRLOG" >&2; exit 71 ;;

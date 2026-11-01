@@ -14,9 +14,11 @@ untrusted, capped in size.
 Runs under /usr/bin/python3 -I (3.9 on macOS), so no newer syntax.
 """
 import html.parser
+import http.client
 import ipaddress
 import re
 import socket
+import ssl
 import sys
 import urllib.error
 import urllib.parse
@@ -47,6 +49,56 @@ def check_public(url):
         ip = ipaddress.ip_address(info[4][0].split("%")[0])
         if not ip.is_global or ip.is_multicast:
             die("%s resolves to a non-public address (%s); local and private hosts are refused" % (parts.hostname, ip))
+
+
+def public_addresses(host, port):
+    """Resolve once and keep only public addresses; the connection uses exactly these."""
+    try:
+        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except socket.gaierror as e:
+        raise OSError("cannot resolve %s (%s)" % (host, e))
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0].split("%")[0])
+        if not ip.is_global or ip.is_multicast:
+            raise OSError("%s resolves to a non-public address (%s)" % (host, ip))
+    return infos
+
+
+def pinned_socket(host, port, timeout):
+    # Connect to an address from the same lookup that was checked: a second
+    # lookup (what urllib does on its own) could answer with a private one.
+    last = OSError("no address for %s" % host)
+    for family, stype, proto, _, addr in public_addresses(host, port):
+        s = socket.socket(family, stype, proto)
+        s.settimeout(timeout)
+        try:
+            s.connect(addr)
+            return s
+        except OSError as e:
+            s.close()
+            last = e
+    raise last
+
+
+class PinnedHTTP(http.client.HTTPConnection):
+    def connect(self):
+        self.sock = pinned_socket(self.host, self.port, self.timeout)
+
+
+class PinnedHTTPS(http.client.HTTPSConnection):
+    def connect(self):
+        raw = pinned_socket(self.host, self.port, self.timeout)
+        self.sock = self._context.wrap_socket(raw, server_hostname=self.host)
+
+
+class PinnedHTTPHandler(urllib.request.HTTPHandler):
+    def http_open(self, req):
+        return self.do_open(PinnedHTTP, req)
+
+
+class PinnedHTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, req):
+        return self.do_open(PinnedHTTPS, req, context=ssl.create_default_context())
 
 
 class Redirects(urllib.request.HTTPRedirectHandler):
@@ -104,7 +156,8 @@ def main():
         die(USAGE)
     url = args[0]
     check_public(url)
-    opener = urllib.request.build_opener(Redirects())
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), PinnedHTTPHandler(),
+                                         PinnedHTTPSHandler(), Redirects())
     req = urllib.request.Request(url, headers={"User-Agent": "pair-intelligence-fetch/1.0",
                                                "Accept": "text/html,text/plain,text/markdown,application/json,*/*;q=0.5"})
     try:
