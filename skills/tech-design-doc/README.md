@@ -132,7 +132,7 @@ See [SKILL.md](SKILL.md) for full guidance and [reference/anti-patterns.md](refe
 ## Related skills
 
 - [gdoc-sync](../gdoc-sync) — push the finished doc to a live Google Doc for stakeholder comments (step 11 of the workflow).
-- [codex-review](../codex-review) — get an independent read on the plan before implementing it.
+- [pair-intelligence](../pair-intelligence) — get an independent read on the plan from Codex or Gemini before implementing it.
 - [presentation-generator](../presentation-generator) — derive an exec-summary deck from the doc's Summary + Goals + Alternatives.
 
 ## Research foundation

@@ -79,7 +79,7 @@ Until October 2026 this skill was `working-with-other-sessions` and also carried
 ## Related skills
 
 - [`writing-project-instructions`](../writing-project-instructions) — for turning what you learn from a transcript into a durable rule
-- [`codex-review`](../codex-review) — a second opinion on work a transcript describes
+- [`pair-intelligence`](../pair-intelligence) — a second opinion from Codex or Gemini on work a transcript describes
 
 ## License
 
