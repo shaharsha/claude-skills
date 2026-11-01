@@ -20,7 +20,7 @@ This installs all 24 skills as one plugin. Or pick a subset:
 ```bash
 /plugin install documents-and-decks@shaharsha-skills    # gdoc-sync + gslides-sync + gsheets + presentation-generator + elevenlabs-tts + narrating-pptx + deck-to-video + self-presenting-decks
 /plugin install brand-and-visuals@shaharsha-skills      # brand-system + brand-assets + image-generation + excalidraw-diagrams
-/plugin install engineering-decisions@shaharsha-skills  # tech-design-doc + codex-review
+/plugin install engineering-decisions@shaharsha-skills  # tech-design-doc + pair-intelligence
 /plugin install building-agents@shaharsha-skills        # prompt-engineer + writing-project-instructions + reviving-sessions
 /plugin install utilities@shaharsha-skills              # namecheap-domains + office-render + viewing-videos + proton-pass + tavily-extract
 /plugin install video-production@shaharsha-skills       # generating-video-clips + producing-animated-episodes
@@ -69,7 +69,7 @@ Each links to its own README — what it does, why it exists, install, and the g
 | Skill | What it does |
 |---|---|
 | [tech-design-doc](skills/tech-design-doc) | RFCs, ADRs, KEPs, and partner-mode TDRs, triaged to the right format first and audited against documented anti-patterns. |
-| [codex-review](skills/codex-review) | An independent read-only second opinion on a plan or diff from OpenAI Codex — then adjudicate every finding against the source. |
+| [pair-intelligence](skills/pair-intelligence) | Consult a second model (Codex or Gemini) to review, advise, brainstorm, research or browse, then judge every claim against the source. Replaces codex-review. |
 
 ### Building agents
 

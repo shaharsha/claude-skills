@@ -6,12 +6,12 @@
   },
   "metadata": {
     "description": "Agent skills by Shahar Shavit for Claude Code, Codex, Cursor, and other Agent-Skills-compatible harnesses",
-    "version": "1.13.0"
+    "version": "1.14.0"
   },
   "plugins": [
     {
       "name": "shaharsha-skills",
-      "description": "All 24 agent skills - gdoc-sync, gslides-sync, gsheets, presentation-generator, elevenlabs-tts, narrating-pptx, deck-to-video, self-presenting-decks, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-instructions, tech-design-doc, namecheap-domains, office-render, viewing-videos, proton-pass, excalidraw-diagrams, tavily-extract, codex-review, reviving-sessions, generating-video-clips, producing-animated-episodes",
+      "description": "All 24 agent skills - gdoc-sync, gslides-sync, gsheets, presentation-generator, elevenlabs-tts, narrating-pptx, deck-to-video, self-presenting-decks, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-instructions, tech-design-doc, namecheap-domains, office-render, viewing-videos, proton-pass, excalidraw-diagrams, tavily-extract, pair-intelligence, reviving-sessions, generating-video-clips, producing-animated-episodes",
       "source": "./",
       "strict": false,
       "skills": [
@@ -35,7 +35,7 @@
         "./skills/proton-pass",
         "./skills/excalidraw-diagrams",
         "./skills/tavily-extract",
-        "./skills/codex-review",
+        "./skills/pair-intelligence",
         "./skills/reviving-sessions",
         "./skills/generating-video-clips",
         "./skills/producing-animated-episodes"
@@ -71,12 +71,12 @@
     },
     {
       "name": "engineering-decisions",
-      "description": "Author and audit technical design docs, RFCs, and ADRs, and get an independent read-only cross-model review of a plan or a diff from OpenAI Codex before it lands",
+      "description": "Author and audit technical design docs, RFCs, and ADRs, and consult a second model (OpenAI Codex or Google Gemini) to review a plan or diff, give a second opinion, brainstorm, research, or browse before it lands",
       "source": "./",
       "strict": false,
       "skills": [
         "./skills/tech-design-doc",
-        "./skills/codex-review"
+        "./skills/pair-intelligence"
       ]
     },
     {
