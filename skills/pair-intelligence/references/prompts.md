@@ -145,6 +145,36 @@ Return your result as JSON conforming to the supplied schema.
 
 ---
 
+## Mode: small change
+
+For a config, docs or few-line diff where the full template costs more than the
+round is worth. Run it at `--effort medium`, one round.
+
+```
+Review this small change for defects. This is a pre-merge review of the author's
+own repository, requested by the author.
+
+<scope>
+{{SCOPE}}   (for example: git diff main...HEAD -- infra/dns/)
+</scope>
+
+<intent>
+What the change is for, in two sentences. Any value the reviewer cannot fetch
+itself (live DNS answers, the current setting in production), pasted verbatim.
+</intent>
+
+<check>
+The specific things most worth checking, for example: every record value against
+the pasted live data; tests or fixtures elsewhere that pin a value this change
+edits; rules elsewhere in the same document that this text contradicts.
+</check>
+
+Report only defects with a concrete wrong outcome. An empty findings list is a
+valid answer. Return JSON conforming to the supplied schema.
+```
+
+---
+
 ## Mode: plan
 
 For reviewing a plan, design doc, spec, or RFC before implementation. The
@@ -340,7 +370,7 @@ evidence and reasoning; the new reviewer should re-derive rather than inherit.
 python3 -c '
 import json,sys
 for f in json.load(open(sys.argv[1]))["findings"]:
-    print(f"- {f[\"title\"]} ({f[\"file\"]}:{f[\"line_start\"]})")
+    print("- {} ({}:{})".format(f["title"], f["file"], f["line_start"]))
 ' .codex-review/<previous>.json
 ```
 

@@ -14,6 +14,10 @@
 
 set -euo pipefail
 
+# One brace group, so bash reads the whole script before running it: an edit to
+# this file during a long round (a skills-repo pull) otherwise makes bash resume at
+# a shifted offset and fail after the review has already been paid for.
+{
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 MODEL="${CODEX_REVIEW_MODEL:-gpt-6.1-sol}"
@@ -26,6 +30,7 @@ RESUME=""
 SCHEMA="$SKILL_DIR/assets/findings.schema.json"
 EPHEMERAL=0
 SEARCH=0
+OUT_OVERRIDE=""
 
 usage() {
   cat >&2 <<'USAGE'
@@ -44,6 +49,9 @@ usage: codex_review.sh --repo <dir> --prompt-file <file> [options]
   --search              Give the reviewer web search. Runs server-side, so it
                         works under the read-only sandbox with no local network.
   --ephemeral           Don't persist the session (cannot be resumed later)
+  --out-dir <dir>       Write artifacts here instead of <repo>/.codex-review/.
+                        Use a durable directory when the repo is a worktree that
+                        will be removed: the evidence goes with it otherwise.
   --list                Print known session labels for --repo and exit
 
 Prints the paths it wrote, with REVIEW_MD=<path> last.
@@ -65,6 +73,7 @@ while [[ $# -gt 0 ]]; do
     --no-schema)   SCHEMA=""; shift ;;
     --search)      SEARCH=1; shift ;;
     --ephemeral)   EPHEMERAL=1; shift ;;
+    --out-dir)     OUT_OVERRIDE="${2:-}"; shift 2 ;;
     --list)        LIST_ONLY=1; shift ;;
     -h|--help)     usage ;;
     *) echo "unknown argument: $1" >&2; usage ;;
@@ -74,7 +83,12 @@ done
 [[ -n "$REPO" ]] || usage
 [[ -d "$REPO" ]] || { echo "not a directory: $REPO" >&2; exit 66; }
 REPO="$(cd "$REPO" && pwd)"
-OUT_DIR="$REPO/.codex-review"
+OUT_DIR="${OUT_OVERRIDE:-$REPO/.codex-review}"
+[[ -d "$OUT_DIR" ]] && OUT_DIR="$(cd "$OUT_DIR" && pwd)"
+# A non-git directory is allowed (a staged legal or creative review, say): codex
+# refuses it unless told, and provenance then records "unknown" for the sha.
+IS_GIT=1
+git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1 || IS_GIT=0
 SESSIONS="$OUT_DIR/sessions.json"
 
 # --- attribution ---------------------------------------------------------------
@@ -119,6 +133,7 @@ command -v codex >/dev/null || { echo "codex CLI not found on PATH" >&2; exit 69
 [[ -n "$RESUME" && "$EPHEMERAL" -eq 1 ]] && { echo "--resume and --ephemeral are incompatible" >&2; exit 64; }
 
 mkdir -p "$OUT_DIR"
+OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 
 # Keep review artifacts out of git without touching the tracked .gitignore.
 # .git/info/exclude is local to this clone, so it never shows up as a change.
@@ -146,7 +161,7 @@ PY
   if [[ -z "$RESUME_ID" ]]; then
     echo "unknown session label: $RESUME" >&2
     echo "known labels:" >&2
-    "$0" --repo "$REPO" --list >&2
+    "$0" --repo "$REPO" ${OUT_OVERRIDE:+--out-dir "$OUT_OVERRIDE"} --list >&2
     exit 66
   fi
 fi
@@ -301,7 +316,9 @@ else
 fi
 REVIEW_SHA="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || echo unknown)"
 REVIEW_BRANCH="$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
-if [[ -n "$(git -C "$REPO" status --porcelain 2>/dev/null)" ]]; then
+if [[ $IS_GIT -eq 0 ]]; then
+  REVIEW_DIRTY="not a git repository — this verdict covers the files as they were read"
+elif [[ -n "$(git -C "$REPO" status --porcelain 2>/dev/null)" ]]; then
   REVIEW_DIRTY="DIRTY — uncommitted changes present; this verdict covers the WORKING TREE, not $REVIEW_SHA"
 else
   REVIEW_DIRTY="clean"
@@ -323,6 +340,7 @@ COMMON=(
   -o "$RAW"
 )
 [[ -n "$SCHEMA" ]] && COMMON+=(--output-schema "$SCHEMA")
+[[ $IS_GIT -eq 0 ]] && COMMON+=(--skip-git-repo-check)
 # `codex exec` rejects the --search flag; the config key is the only route. The
 # search runs server-side at OpenAI, so it needs no egress from the sandbox --
 # which is the only way to get web access here at all, since read-only blocks
@@ -386,7 +404,7 @@ fi
 if [[ -n "$SCHEMA" && -f "$MD" ]]; then
   PROV="$(printf '> **Reviewed:** `%s` on `%s` — working tree %s\n> **Prompt artifact:** `%s`  sha256 `%s`\n> **Prompt origin:** `%s`\n> **Label:** `%s` · **Session:** `%s`\n>\n> *A verdict covers the bytes it read — the repo sha AND the prompt hash. For a PLAN\n> round the repo sha is nearly meaningless and the prompt hash is the whole claim.\n> Cite them, or the citation is about a revision nobody has.*\n\n' \
       "$REVIEW_SHA" "$REVIEW_BRANCH" "$REVIEW_DIRTY" "$PROMPT_CITE" "$PROMPT_SHA" "$PROMPT_ORIGIN" "$LABEL" "${SESSION_ID:-unknown}")"
-  printf '%s' "$PROV" | cat - "$MD" > "$MD.tmp" && mv "$MD.tmp" "$MD"
+  printf '%s\n\n' "$PROV" | cat - "$MD" > "$MD.tmp" && mv "$MD.tmp" "$MD"
 fi
 # Hash of the artifact AS IT FINALLY STANDS. Two things about this are load-bearing.
 #
@@ -451,3 +469,5 @@ echo "REVIEWED_TREE=$REVIEW_DIRTY"
 [[ -n "$SESSION_ID" ]] && echo "SESSION_ID=$SESSION_ID"
 [[ -n "${SESSION_KEY:-}" ]] && echo "SESSION_NAME=$SESSION_KEY"
 echo "REVIEW_MD=$MD"
+exit 0
+}

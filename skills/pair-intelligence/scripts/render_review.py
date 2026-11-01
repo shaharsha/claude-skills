@@ -65,15 +65,17 @@ def render(data, meta):
     ]
 
     if findings:
-        out += ["## Adjudication", "",
-                "| # | Sev | Finding | Location | Conf | Verdict | Action |",
-                "|---|-----|---------|----------|------|---------|--------|"]
+        # No Verdict/Action columns: they shipped as "_tbd_" and nobody ever
+        # filled them in; adjudication lives in the report and the PR body.
+        out += ["## Findings at a glance", "",
+                "| # | Sev | Finding | Location | Conf |",
+                "|---|-----|---------|----------|------|"]
         for i, f in enumerate(findings, 1):
             sev = f.get("severity", "low")
             loc = f"{f.get('file', '?')}:{f.get('line_start', '?')}"
             title = str(f.get("title", "")).replace("|", "\\|")
             out.append(f"| {i} | {SEVERITY_MARK.get(sev, '')} {sev} | {title} | "
-                       f"`{loc}` | {f.get('confidence', '?')} | _tbd_ | _tbd_ |")
+                       f"`{loc}` | {f.get('confidence', '?')} |")
         out.append("")
 
         out += ["## Findings", ""]
