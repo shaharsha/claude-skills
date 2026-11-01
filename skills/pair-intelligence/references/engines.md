@@ -14,6 +14,21 @@ Tested on codex-cli 0.165.0, signed in with a ChatGPT plan.
   `-c sandbox_mode=...`, `approval_policy="never"`, `web_search`
   (`disabled` / `cached` / `live`), CLAUDE.md as a fallback instruction file, and
   the prompt on stdin.
+- **`--ignore-user-config`, on every call (codex_review.sh too).** This machine's
+  `~/.codex/config.toml` loads the Linear MCP server (with write tools) and the
+  ChatGPT app's browser, Chrome and computer-use plugins, all running outside the
+  sandbox. A reviewer of untrusted code gets none of them. Auth still comes from
+  `~/.codex`; the script restates `project_doc_max_bytes=400000`, which that
+  config raised so torque's ~394 KB CLAUDE.md is not cut at 32 KiB.
+- **A live browser outside browse** (`--domains` in review, consult, ideate,
+  research) swaps the sandbox flags for a permission profile:
+  `default_permissions="pair_browse"` extending `:read-only`, with
+  `network.enabled=true`, `--enable network_proxy` (no domain rules, so the proxy
+  refuses every host) and one `network.unix_sockets` entry, the broker's. Tested
+  with `codex sandbox`: the broker answers; the internet gets 403 at the proxy;
+  other sockets, the repo and `/tmp` refuse; reads still work. `network_proxy` is
+  marked experimental, so `pair_preflight.py` re-checks all four inside the same
+  profile before every such run, and Codex does not start if one fails (exit 71).
 - **Success** is a `turn.completed` event with a non-empty answer file. Codex exits
   0 when its tools failed, so the exit code alone means nothing.
 - **Sessions:** `codex exec resume <id>` continues one; the script maps your
@@ -39,8 +54,14 @@ Traps, each seen in testing:
 - **Nested sandboxes fail.** Started inside another tool's sandbox it reports
   `sandbox_apply: Operation not permitted` or that "the shell host failed during
   handshake", and may still exit 0 with an apology for an answer. Run it outside.
-- **Chrome will not start inside its sandbox**, and its built-in browser and
-  computer-use tools need the Codex desktop app. Browse mode works around both.
+- **Chrome will not start inside its sandbox**, and its built-in browser cannot
+  run from `codex exec` ("The browser access host is unavailable": it needs a
+  pipe only the desktop app provides, and its Chrome backend is your logged-in
+  Chrome). The script's own browser works around both.
+- **agent-browser's socket is not safe to hand over.** A client with different
+  settings makes the daemon relaunch Chrome its way, allow-list gone (measured).
+  Hence the broker: Codex's `pair-browser` sends its arguments to
+  `pair_broker.py`, which runs the grammar wrapper outside the sandbox.
 - **`codex mcp-server` was removed** (0.154). Its replacement, `codex app-server`,
   is marked experimental, so this skill keeps to `codex exec`.
 - **PDFs are not accepted as input.** Convert them first.
@@ -55,7 +76,75 @@ codex exec -s read-only -c 'sandbox_mode="read-only"' --skip-git-repo-check \
   --json -o /abs/answer.md - < /abs/prompt.md > /abs/events.jsonl
 ```
 
-## Gemini (Google), through OpenCode v2
+## Gemini (Google), through agy (the default)
+
+Tested on the Antigravity CLI (`agy`) 1.4.12 with a Gemini API key, 2026-11-02.
+
+- **API-key mode only.** `--settings` carries `"modelProvider": "gemini"` and the
+  key goes in `GEMINI_API_KEY` (from the environment, else OpenCode's
+  `auth.json`), never in argv. Google's FAQ forbids driving agy from other tools
+  with an Antigravity login and points third-party agents at an AI Studio key;
+  key mode is outside both clauses, though no page says so outright. The
+  signed-in account is never used.
+- **Models:** the id carries the effort: `gemini-4-argon-high` (the script adds
+  `-<effort>` to `--model gemini-4-argon`), `gemini-3.8-flash-low`,
+  `gemini-3.1-pro-high`. `agy models` lists them.
+- **What the script sets up:**
+  - a private HOME (`~/.local/share/pair-intelligence/agy-home`, `PAIR_AGY_HOME`)
+    so your agy settings, login, hooks and MCP servers stay out;
+  - an empty workspace under `$TMPDIR`, outside any repository, removed after
+    the run. The project is a folder agy may read, never its workspace (see
+    traps);
+  - a PreToolUse hook in that home, `agy_gate.py`, which decides every tool call
+    from this run's `agy-policy.json`: reads only under `--cwd` (plus images and
+    the shots folder), no `.env` or key files; shell commands only `pair-fs`,
+    `pair-browser` (with `--domains`) and `pair-fetch` (with `--web live`), with no
+    `; & | $ < >` backticks or backslashes; `search_web` unless `--web off`; every
+    other tool refused. Its decisions land in `RUN_DIR/gate.log`;
+  - a settings floor under the gate: writes, MCP, URL actuation and the
+    metacharacter pattern denied, so a broken gate still cannot write;
+  - stream-json in and out, `--print-timeout`, `--disable-slash-commands`,
+    `--conversation <id>` to resume.
+- **`pair-fs`** (`pair_fs.py`): `ls`, `find GLOB`, `grep` (ripgrep, gitignore
+  aware, secret files skipped) and `git status|diff|log|show|blame|ls-files`
+  with an allow-list of flags and the repo's fsmonitor, pager, external diff and
+  textconv switched off. Every path is resolved and must stay inside the roots.
+- **`pair-fetch`** (`pair_fetch.py`, `--web live` only): one public http(s) page
+  as text, checked on every redirect against loopback, private and metadata
+  addresses, wrapped in untrusted-content markers.
+- **Success** is a `result` event with status SUCCESS, a non-empty response and
+  no `denied_actions`. `RUN_DIR/tools.txt` lists every tool call with the gate's
+  refusals, which is how you see what Gemini read and searched.
+
+Traps, each seen in testing:
+
+- **A project as workspace runs its code.** agy loads `.agents/` hooks, MCP
+  servers, rules and agents from its workspace and each parent up to the repo
+  root, and it started a repo's `mcp_config.json` server even with `mcp(*)`
+  denied. Hence the scratch workspace. A side effect: the repo's AGENTS.md is
+  not loaded; put the conventions that matter in the prompt.
+- **An Ask ends the run silently.** Anything its rules leave at "ask" is
+  auto-denied in headless mode, and the run then ends with an empty response,
+  status SUCCESS and exit 0. The gate answers every call so this does not happen;
+  if it does, the script reports `STATUS=denied`.
+- **No list, grep or page tools in key mode.** The model gets read, write, shell,
+  search and agent-management tools only; `pair-fs` and `pair-fetch` fill the
+  gap. Without a fetcher it ran 12 searches and opened no page.
+- **Rules cannot govern search or scheduling.** `search_web`, `schedule`,
+  `send_message` and the subagent tools have no permission action, and
+  `read_url(*)` does not stop search; the gate does.
+- **Its own browser tools attach to your real Chrome** (DevTools MCP, logged-in
+  profile). The gate refuses them; use `--domains`.
+- **`--sandbox` and `--mode plan` are not read-only:** the first confines only
+  shell commands and leaves the project writable, the second is a prompt prefix.
+- **Hangs on stdin**, like the others: the script feeds stream-json from a file.
+
+## Gemini, through OpenCode v2 (`--backend opencode`)
+
+The fallback. Same model and key, about three times the input tokens per call
+(OpenCode's system prompt), no web search, and no live browser outside browse.
+In the 2026-11-02 comparison it matched agy on a review, a screenshot and a
+consult, and beat agy on research only because agy then had no page reader.
 
 Tested on OpenCode 2.2.5 with a Gemini API key.
 
@@ -101,5 +190,5 @@ Traps:
   background service.
 
 Not wired, but worth knowing: calling the Gemini API directly gives Google Search
-grounding, enforced JSON and PDF input with none of OpenCode's overhead, at the
-cost of having no local file tools.
+grounding, enforced JSON and PDF input with no agent overhead, at the cost of
+having no local file tools.

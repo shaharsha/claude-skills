@@ -14,12 +14,19 @@ an authority.
 `scripts/codex_review.sh`, which adds the findings schema and the provenance
 sidecar the verify scripts check. To review with Gemini, use the same prompt
 templates with `bash scripts/pair.sh --engine gemini --mode review --cwd <repo>
---prompt-file <abs>`: read-only by agent rules instead of a sandbox, no enforced
-schema (ask for the findings layout in prose), no provenance sidecar. Gemini has
-no shell, so it cannot run `git diff`: stage the diff and the before and after
-files in its working directory, and drop the templates' git and JSON lines.
-A Gemini review at high effort took about 6 minutes and $0.50 in testing. For a
-two-engine review, send the identical prompt to both and adjudicate the union.
+--prompt-file <abs>`: read-only by a tool gate instead of a sandbox, no enforced
+schema (ask for the findings layout in prose; drop the templates' JSON lines), no
+provenance sidecar. Its only command is `pair-fs`, which covers `git diff`, `log`
+and `show` with a fixed set of flags, so name the base as usual. A Gemini review
+at high effort took 2 to 6 minutes in testing. For a two-engine review, send the
+identical prompt to both and adjudicate the union.
+
+**Reviewing against the running page.** When the change is visual, add
+`--domains` (a local dev server needs its port, `localhost:5173`) and run the
+review through `pair.sh --mode review` on either engine; Codex keeps its
+read-only sandbox and reaches the browser through a broker
+(`references/research.md`). `codex_review.sh` has no browser, so such a round has
+no provenance sidecar; pass `--schema` for the findings layout.
 
 ## Quick path
 

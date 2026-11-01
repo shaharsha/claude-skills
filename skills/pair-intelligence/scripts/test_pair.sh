@@ -23,9 +23,19 @@ check() { if eval "$2"; then ok "$1"; else bad "$1" "$2"; fi; }
 # --- fakes ------------------------------------------------------------------------
 cat > "$FAKE/codex" <<'FAKE'
 #!/usr/bin/env python3
-import json, os, sys, time
+import json, os, subprocess, sys, time
 log = os.environ["FAKE_LOG"]
 args = sys.argv[1:]
+if args[:1] == ["sandbox"]:
+    # `codex sandbox <profile flags> <cmd...>`: record the flags; FAKE_SANDBOX=run
+    # runs the command unsandboxed (so a preflight sees the open network and fails).
+    open(f"{log}/codex-sandbox.json", "w").write(json.dumps(args))
+    if os.environ.get("FAKE_SANDBOX", "pass") == "run":
+        i = args.index("/usr/bin/python3")
+        sys.exit(subprocess.run(args[i:]).returncode)
+    print(json.dumps({"broker_answers": True, "internet_refused": True, "repo_read_only": True,
+                      "browser_socket_unreachable": True}))
+    sys.exit(0)
 n = len([f for f in os.listdir(log) if f.startswith("codex-args")])
 json.dump({"args": args, "cwd": os.getcwd(),
            "env_ab": {k: v for k, v in os.environ.items() if k.startswith("AGENT_BROWSER_")}},
@@ -43,6 +53,10 @@ else:
     print(f"session id: {tid}")
 if mode == "failed":
     print(json.dumps({"type": "turn.failed", "error": {"message": "boom"}})); sys.exit(1)
+if mode == "browse-client":
+    r = subprocess.run(["pair-browser", "open", "https://example.com/page"], capture_output=True, text=True)
+    open(f"{log}/codex-browse.txt", "w").write(f"rc={r.returncode}\n{r.stdout}{r.stderr}")
+    mode = "ok"
 if mode == "review" and out:
     json.dump({"scan_notes": "read a.txt", "overall_verdict": "sound", "overall_explanation": "fine",
                "overall_confidence": 0.9, "findings": []}, open(out, "w"))
@@ -80,16 +94,64 @@ ev(type="step_finish", part={"reason": "stop", "tokens": {}})
 sys.exit(1 if mode == "tool-error" else 0)
 FAKE
 
+# A fake agy that does what the real one does with hooks: for each scripted tool
+# call (FAKE_AGY_TOOLS, a JSON list of [name, args]) it runs the PreToolUse hook
+# from $HOME/.gemini/config/hooks.json, and runs an approved command in a shell.
+cat > "$FAKE/agy" <<'FAKE'
+#!/usr/bin/env python3
+import json, os, subprocess, sys, time
+log = os.environ["FAKE_LOG"]
+args = sys.argv[1:]
+n = len([f for f in os.listdir(log) if f.startswith("agy-args")])
+json.dump({"args": args, "cwd": os.getcwd(), "home": os.environ.get("HOME", ""),
+           "policy": os.environ.get("PAIR_GATE_POLICY", ""),
+           "key": os.environ.get("GEMINI_API_KEY", "")}, open(f"{log}/agy-args-{n}.json", "w"))
+stdin = sys.stdin.read()
+open(f"{log}/agy-stdin-{n}.txt", "w").write(stdin)
+mode = os.environ.get("FAKE_AGY", "ok")
+if mode == "hang":
+    time.sleep(30)
+ev = lambda **k: print(json.dumps(k), flush=True)
+hooks = json.load(open(os.path.join(os.environ["HOME"], ".gemini/config/hooks.json")))
+cmd = [h["command"] for v in hooks.values() for m in v.get("PreToolUse", []) for h in m["hooks"]][0]
+for name, targs in json.loads(os.environ.get("FAKE_AGY_TOOLS", "[]")):
+    p = subprocess.run(["/bin/sh", "-c", cmd], input=json.dumps({"toolCall": {"name": name, "args": targs}}),
+                       capture_output=True, text=True)
+    d = json.loads(p.stdout or '{"decision": "none"}')
+    info = {"parameters": targs}
+    if d["decision"] in ("allow", "auto_approve"):
+        if name == "run_command":
+            r = subprocess.run(["/bin/sh", "-c", targs["CommandLine"]], capture_output=True, text=True)
+            info["output"] = r.stdout + r.stderr
+        state = "DONE"
+    else:
+        state, info["error"] = "ERROR", {"message": "tool call denied by pre-tool hook: " + d.get("reason", "")}
+    with open(f"{log}/agy-tools-{n}.jsonl", "a") as f:
+        f.write(json.dumps({"tool": name, "decision": d["decision"], "output": info.get("output", "")}) + "\n")
+    ev(event="step_update", step_update={"step_type": "tool", "tool_name": name, "state": state, "tool_info": info})
+if mode == "nores":
+    sys.exit(0)
+res = {"conversation_id": "conv-fake-1", "status": "SUCCESS", "response": "agy answer", "usage": {}}
+if mode == "denied":
+    res.update(response="", denied_actions=[{"action": "read_file", "display_name": "ReadFile"}])
+if mode == "error":
+    res.update(status="ERROR", response="")
+ev(event="result", result=res)
+FAKE
+
 cat > "$FAKE/agent-browser" <<FAKE
 #!/bin/bash
-echo "\$* | sock=\${AGENT_BROWSER_SOCKET_DIR:-} allowed=\${AGENT_BROWSER_ALLOWED_DOMAINS:-} boundaries=\${AGENT_BROWSER_CONTENT_BOUNDARIES:-} shots=\${AGENT_BROWSER_SCREENSHOT_DIR:-} downloads=\${AGENT_BROWSER_DOWNLOAD_PATH:-}" >> "$LOG/ab.log"
+echo "\$* | sock=\${AGENT_BROWSER_SOCKET_DIR:-} allowed=\${AGENT_BROWSER_ALLOWED_DOMAINS:-} boundaries=\${AGENT_BROWSER_CONTENT_BOUNDARIES:-} shots=\${AGENT_BROWSER_SCREENSHOT_DIR:-} downloads=\${AGENT_BROWSER_DOWNLOAD_PATH:-} cwd=\$PWD" >> "$LOG/ab.log"
 case "\$1" in
+  get) if [[ "\${2:-}" == url && -f "$T/ab-url" ]]; then cat "$T/ab-url"; fi ;;
   open) if [[ ! -e "\$AGENT_BROWSER_SOCKET_DIR/pair.pid" ]]; then /bin/sleep 300 & echo \$! > "\$AGENT_BROWSER_SOCKET_DIR/pair.pid"; echo \$! > "$LOG/ab.pid"; fi ;;
 esac
 FAKE
 chmod +x "$FAKE"/*
 
 export PATH="$FAKE:$PATH" FAKE_LOG="$LOG" PAIR_OUT="$T/out" PAIR_OPENCODE="$FAKE/opencode-cli"
+# The OpenCode sections below predate agy; the agy section passes --backend agy.
+export PAIR_GEMINI_BACKEND=opencode PAIR_AGY="$FAKE/agy" PAIR_AGY_HOME="$T/agyhome" GEMINI_API_KEY="fake-key-123"
 P="$SCRIPTS/pair.sh"
 printf 'What is 2+2?\n' > "$T/prompt.md"
 last_args() { ls -t "$LOG"/"$1"-args-*.json | head -1; }
@@ -105,6 +167,7 @@ check "codex ok: ANSWER is the last line"         '[[ "$(tail -1 <<<"$out")" == 
 check "codex ok: read-only via -s and -c"         '[[ "$(jq_py "$A" "\" \".join(d[\"args\"])")" == *"-s read-only"*"sandbox_mode=\"read-only\""* ]]'
 check "codex ok: consult uses cached web search"  '[[ "$(jq_py "$A" "\" \".join(d[\"args\"])")" == *"web_search=\"cached\""* ]]'
 check "codex ok: prompt arrives on stdin"         'grep -q "2+2" "$LOG/codex-stdin-0.txt"'
+check "codex: user config ignored (MCP, plugins), doc limit kept" '[[ "$(jq_py "$A" "\" \".join(d[\"args\"])")" == *"--ignore-user-config"*"project_doc_max_bytes=400000"* ]]'
 RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
 check "codex ok: meta.json is valid JSON"         'python3 -c "import json;json.load(open(\"$RUN/meta.json\"))"'
 
@@ -167,6 +230,92 @@ check "gemini tool error with an answer: exit 0"  '[[ $rc -eq 0 && "$out" == *"S
 out="$(FAKE_OC=ok bash "$P" --engine gemini --model google/gemini-3.8-flash --effort low --prompt-file "$T/prompt.md" 2>&1)"
 check "gemini: google/ prefix not doubled"        '[[ "$(jq_py "$(last_args oc)" "\" \".join(d[\"args\"])")" == *"-m google/gemini-3.8-flash#low"* ]]'
 
+# --- pair.sh: gemini on agy -------------------------------------------------------
+reset_log
+mkdir -p "$T/arepo/.agents" && git -C "$T/arepo" init -q && printf 'marker: plum-7\n' > "$T/arepo/notes.txt"
+printf '{"mcpServers":{"x":{"command":"/usr/bin/touch","args":["%s/mcp_ran"]}}}' "$T" > "$T/arepo/.agents/mcp_config.json"
+AREPO="$(cd "$T/arepo" && pwd -P)"
+TOOLS='[["run_command",{"CommandLine":"pair-fs ls"}],["run_command",{"CommandLine":"ls -la"}],
+ ["read_file",{"Path":"'"$AREPO"'/notes.txt"}],["read_file",{"Path":"/etc/hosts"}],
+ ["search_web",{"query":"q"}],["read_url_content",{"Url":"https://example.com"}],
+ ["schedule",{"DurationSeconds":60,"Prompt":"hi"}],["run_command",{"CommandLine":"pair-fs ls; id"}]]'
+out="$(cd "$T/arepo" && FAKE_AGY=ok FAKE_AGY_TOOLS="$TOOLS" bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" --name a1 2>&1)"; rc=$?
+A="$(last_args agy)"; RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
+dec() { python3 -c "import json,sys; print(' '.join(json.loads(l)['decision'] for l in open(sys.argv[1])))" "$LOG/agy-tools-0.jsonl"; }
+check "agy ok: exit 0, answer and conversation id"  '[[ $rc -eq 0 && "$out" == *"SESSION_ID=conv-fake-1"* ]] && grep -q "agy answer" "$RUN/answer.md"'
+check "agy: workspace is a scratch dir, not the repo" '[[ "$(jq_py "$A" "d[\"cwd\"]")" != "$AREPO"* && "$(jq_py "$A" "d[\"cwd\"]")" == *pair-agy.* ]]'
+check "agy: scratch workspace removed after the run" '[[ ! -e "$(jq_py "$A" "d[\"cwd\"]")" ]]'
+check "agy: the repo's .agents MCP server never starts" '[[ ! -e "$T/mcp_ran" ]]'
+check "agy: private HOME with the gate as its hook"  '[[ "$(jq_py "$A" "d[\"home\"]")" == "$T/agyhome" ]] && grep -q "agy_gate.py" "$T/agyhome/.gemini/config/hooks.json"'
+check "agy: key in the environment, not argv"      '[[ "$(jq_py "$A" "d[\"key\"]")" == fake-key-123 && "$(jq_py "$A" "\" \".join(d[\"args\"])")" != *fake-key-123* ]]'
+check "agy: prompt on stdin with the harness block" 'grep -q "2+2" "$LOG/agy-stdin-0.txt" && grep -q "pair-fs" "$LOG/agy-stdin-0.txt" && [[ "$(jq_py "$A" "\" \".join(d[\"args\"])")" != *"2+2"* ]]'
+check "agy: consult model id carries the effort"   '[[ "$(jq_py "$A" "\" \".join(d[\"args\"])")" == *"--model gemini-4-argon-high"* ]]'
+check "agy: settings floor denies writes, MCP, URL actions" '[[ "$(cat "$(jq_py "$A" "d[\"args\"][d[\"args\"].index(\"--settings\")+1]")")" == *"write_file(*)"*"execute_url(*)"*"mcp(*)"*"read_url(*)"* ]]'
+check "agy gate (consult): wrapper yes, ls no, repo read yes, /etc no, search yes, fetch no, schedule no, chain no" \
+  '[[ "$(dec)" == "auto_approve deny auto_approve deny auto_approve deny deny deny" ]]'
+check "agy: pair-fs ran inside the repo"           'grep -q "notes.txt" "$LOG/agy-tools-0.jsonl"'
+check "agy: tools.txt lists each call and refusal" 'grep -q "^DONE  read_file" "$RUN/tools.txt" && grep -q "^ERROR schedule" "$RUN/tools.txt"'
+check "agy: gate decisions logged in the run dir"  '[[ $(wc -l < "$RUN/gate.log") -eq 8 ]]'
+out="$(cd "$T/arepo" && FAKE_AGY=ok bash "$P" --engine gemini --prompt-file "$T/prompt.md" --resume a1 2>&1)"; rc=$?
+check "agy resume: --conversation, backend inherited" '[[ $rc -eq 0 && "$(jq_py "$(last_args agy)" "\" \".join(d[\"args\"])")" == *"--conversation conv-fake-1"* ]]'
+out="$(cd "$T/arepo" && FAKE_AGY=ok bash "$P" --engine gemini --backend opencode --prompt-file "$T/prompt.md" --resume a1 2>&1)"; rc=$?
+check "agy resume refuses another backend: exit 64" '[[ $rc -eq 64 ]]'
+reset_log
+out="$(cd "$T/arepo" && FAKE_AGY=ok FAKE_AGY_TOOLS='[["search_web",{"query":"q"}]]' bash "$P" --engine gemini --backend agy --mode review --prompt-file "$T/prompt.md" 2>&1)"
+check "agy review: web search refused"             '[[ "$(dec)" == deny ]]'
+reset_log
+out="$(FAKE_AGY=ok FAKE_AGY_TOOLS='[["read_url_content",{"Url":"https://example.com"}]]' bash "$P" --engine gemini --backend agy --mode research --prompt-file "$T/prompt.md" 2>&1)"
+check "agy research: page fetches allowed (web live)" '[[ "$(dec)" == auto_approve && "$(cat "$(jq_py "$(last_args agy)" "d[\"args\"][d[\"args\"].index(\"--settings\")+1]")")" != *"read_url(*)"* ]]'
+out="$(cd "$T/arepo" && FAKE_AGY=ok bash "$P" --engine gemini --backend agy --model gemini-3.8-flash-low --prompt-file "$T/prompt.md" 2>&1)"
+RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
+check "agy: a model id with an effort is kept as is" '[[ "$(jq_py "$(last_args agy)" "\" \".join(d[\"args\"])")" == *"--model gemini-3.8-flash-low "* && "$(jq_py "$RUN/meta.json" "d[\"effort\"]")" == low ]]'
+out="$(cd "$T/arepo" && FAKE_AGY=denied bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+check "agy soft-denied run (SUCCESS, empty): exit 71, STATUS=denied" '[[ $rc -eq 71 && "$out" == *"STATUS=denied"* ]]'
+out="$(cd "$T/arepo" && FAKE_AGY=error bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+check "agy error result: exit 71"                  '[[ $rc -eq 71 && "$out" == *"STATUS=failed"* ]]'
+out="$(cd "$T/arepo" && FAKE_AGY=nores bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+check "agy stream without a result: not ok"        '[[ $rc -ne 0 && "$out" != *"STATUS=ok"* ]]'
+out="$(cd "$T/arepo" && FAKE_AGY=hang bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" --timeout 2 2>&1)"; rc=$?
+check "agy hang: exit 124"                         '[[ $rc -eq 124 ]]'
+bash "$P" --engine gemini --backend agy --cwd "$HOME" --prompt-file "$T/prompt.md" >/dev/null 2>&1
+check "agy refuses the home directory as --cwd: exit 64" '[[ $? -eq 64 ]]'
+(unset GEMINI_API_KEY; HOME="$T/nohome" bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" >/dev/null 2>&1)
+check "agy without an API key: exit 69"            '[[ $? -eq 69 ]]'
+bash "$P" --backend agy --prompt-file "$T/prompt.md" >/dev/null 2>&1
+check "--backend with codex: exit 64"              '[[ $? -eq 64 ]]'
+
+# --- pair_fs.py and agy_gate.py, directly -------------------------------------------
+FS() { PAIR_FS_ROOTS="[\"$AREPO\"]" /usr/bin/python3 -I "$SCRIPTS/pair_fs.py" "$@"; }
+printf 'SECRET123\n' > "$AREPO/.env"; ln -s /etc "$AREPO/etclink"; printf 'a\n' > "$AREPO/a.txt"
+git -C "$AREPO" add a.txt notes.txt >/dev/null && git -C "$AREPO" -c user.email=t@t -c user.name=t commit -qm init
+git -C "$AREPO" config core.fsmonitor "touch $T/fsmonitor_ran"
+git -C "$AREPO" config core.pager "touch $T/pager_ran"
+check "pair-fs ls and find inside the root"        'FS ls | grep -q notes.txt && FS find "*.txt" | grep -q a.txt'
+check "pair-fs grep finds content"                 'FS grep plum | grep -q "notes.txt:1:marker: plum-7"'
+check "pair-fs refuses a path outside the roots"   '! FS ls /etc >/dev/null 2>&1 && ! FS grep root /etc/passwd >/dev/null 2>&1 && ! FS ls ../.. >/dev/null 2>&1'
+check "pair-fs refuses a symlink out of the root"  '! FS ls etclink >/dev/null 2>&1 && ! FS grep root etclink >/dev/null 2>&1'
+check "pair-fs grep skips secret files"            '[[ "$(FS grep SECRET123)" == "no matches" ]]'
+check "pair-fs grep refuses unknown flags"         '! FS grep --pre=/bin/sh x >/dev/null 2>&1 && FS grep -- -x >/dev/null 2>&1; [[ $? -le 1 ]]'
+check "pair-fs git log and show work"              'FS git log --oneline | grep -q init && FS git show HEAD:a.txt | grep -q "^a$"'
+FS git status >/dev/null 2>&1; FS git diff >/dev/null 2>&1
+check "pair-fs git runs no repo-configured fsmonitor or pager" '[[ ! -e "$T/fsmonitor_ran" && ! -e "$T/pager_ran" ]]'
+check "pair-fs git refuses --output and no-index paths" '! FS git log --output=/tmp/pair-x >/dev/null 2>&1 && ! FS git diff /etc/hosts /etc/passwd >/dev/null 2>&1 && ! FS git diff -- /etc/hosts >/dev/null 2>&1'
+mkdir -p "$AREPO/many" && (cd "$AREPO/many" && for i in $(seq 1 450); do : > "f$i.txt"; done)
+check "pair-fs caps long output"                   'FS find "*.txt" many | grep -q "output cut"'
+# G <policy> <tool> <key> <value>: the gate's decision for one call.
+G() { python3 -c 'import json,sys; print(json.dumps({"toolCall": {"name": sys.argv[1], "args": {sys.argv[2]: sys.argv[3]}}}))' "$2" "$3" "$4" \
+        | PAIR_GATE_POLICY="$1" /usr/bin/python3 -I "$SCRIPTS/agy_gate.py" | python3 -c 'import json,sys; print(json.load(sys.stdin)["decision"])'; }
+printf '{"roots":["%s"],"web":"off","commands":["pair-fs"],"bin":"/x/bin"}' "$AREPO" > "$T/pol.json"
+check "gate: no policy refuses everything"         '[[ "$(G /nonexistent read_file Path "$AREPO/a.txt")" == deny ]]'
+check "gate: wrapper by absolute path is allowed"  '[[ "$(G "$T/pol.json" run_command CommandLine "/x/bin/pair-fs ls")" == auto_approve ]]'
+check "gate: a lookalike command is refused"       '[[ "$(G "$T/pol.json" run_command CommandLine "pair-fsx ls")" == deny && "$(G "$T/pol.json" run_command CommandLine "env pair-fs ls")" == deny ]]'
+check "gate: \$, backslash and newline refused"    '[[ "$(G "$T/pol.json" run_command CommandLine "pair-fs grep \$HOME")" == deny && "$(G "$T/pol.json" run_command CommandLine "pair-fs ls \\")" == deny && "$(G "$T/pol.json" run_command CommandLine "pair-fs ls
+id")" == deny ]]'
+check "gate: .env inside the root refused"         '[[ "$(G "$T/pol.json" read_file Path "$AREPO/.env")" == deny ]]'
+check "gate: read through a symlink out of the root refused" '[[ "$(G "$T/pol.json" read_file Path "$AREPO/etclink/hosts")" == deny ]]'
+check "gate: relative read paths refused"          '[[ "$(G "$T/pol.json" read_file Path "notes.txt")" == deny ]]'
+check "gate: unknown tools refused"                '[[ "$(G "$T/pol.json" invoke_subagent Prompt x)" == deny ]]'
+
 # --- pair.sh: browse --------------------------------------------------------------
 reset_log
 mkdir -p "$T/empty"
@@ -183,6 +332,7 @@ check "browse: no browser variables exported to codex" '[[ "$(jq_py "$A" "len(d[
 check "browse: codex gets workspace-write + network" '[[ "$(jq_py "$A" "\" \".join(d[\"args\"])")" == *"-s workspace-write"*"network_access=true"* ]]'
 check "browse: browser closed and killed"         'grep -q "^close" "$LOG/ab.log" && ! kill -0 "$(cat "$LOG/ab.pid")" 2>/dev/null'
 check "browse: private socket dir removed"        '[[ -n "$SOCK" && ! -e "$SOCK" ]]'
+check "browse: browser host runs from the empty socket dir" 'grep -Eq "^open https://example.com \| .* cwd=(/private)?$SOCK$" "$LOG/ab.log"'
 
 # The generated wrapper, exercised directly (its socket dir is gone, which the fake ignores).
 mkdir -p "$SOCK"
@@ -266,6 +416,71 @@ pol="$(python3 "$POLICY" "$(last_args oc)" "$GRUN/bin/pair-browser" 2>&1)"
 check "gemini browse: only the wrapper allowed, escapes refused" '[[ -z "$pol" ]]'
 [[ -n "$pol" ]] && printf '      misjudged: %s\n' "$pol"
 
+# --- pair.sh: a live browser in review and consult ---------------------------------
+reset_log
+out="$(cd "$T/repo" && FAKE_CODEX=browse-client bash "$P" --mode review --domains example.com --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+A="$(last_args codex)"; RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
+check "codex review + domains: exit 0"             '[[ $rc -eq 0 ]]'
+check "codex review + domains: broker profile, no -s" '[[ "$(jq_py "$A" "\" \".join(d[\"args\"])")" == *"default_permissions=\"pair_browse\""*"network_proxy"* && "$(jq_py "$A" "\" \".join(d[\"args\"])")" != *" -s "* ]]'
+check "codex review + domains: only the broker socket allowed" '[[ "$(jq_py "$A" "\" \".join(d[\"args\"])")" == *"unix_sockets={\""*"/broker.sock\"=\"allow\"}"* ]]'
+check "codex review + domains: preflight ran in the same profile" 'grep -q "pair_browse" "$LOG/codex-sandbox.json" && grep -q preflight.py "$LOG/codex-sandbox.json"'
+check "codex review + domains: model's pair-browser reaches the browser via the broker" 'grep -q "^rc=0" "$LOG/codex-browse.txt" && grep -q "^open https://example.com/page | " "$LOG/ab.log"'
+check "codex review + domains: screenshots go to the run dir, not the repo" 'grep -q "shots=$RUN/shots " "$LOG/ab.log" && [[ ! -e "$T/repo/shots" ]]'
+check "codex review + domains: real wrapper kept off the model's PATH" '[[ -x "$RUN/host/pair-browser-host" && "$(head -2 "$RUN/bin/pair-browser")" == *python3* ]]'
+reset_log
+out="$(cd "$T/repo" && FAKE_SANDBOX=run FAKE_CODEX=ok bash "$P" --mode consult --domains example.com --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+check "failed preflight: exit 71 and Codex never starts" '[[ $rc -eq 71 && "$out" == *"preflight failed"* ]] && ! ls "$LOG"/codex-args-*.json >/dev/null 2>&1'
+bash "$P" --mode review --domains localhost --cwd "$T/repo" --prompt-file "$T/prompt.md" >/dev/null 2>&1
+check "a local host without a port: exit 64"       '[[ $? -eq 64 ]]'
+reset_log
+out="$(FAKE_CODEX=ok bash "$P" --mode browse --domains localhost:5173,example.com --cwd "$T/empty" --prompt-file "$T/prompt.md" 2>&1)"
+RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"; WR="$RUN/bin/pair-browser"
+SOCK="$(sed -n 's/.*sock=\([^ ]*\).*/\1/p' "$LOG/ab.log" | head -1)"; mkdir -p "$SOCK"
+check "local host: allow-list gets the bare host, start page keeps the port" 'grep -q "^open http://localhost:5173 | .*allowed=localhost,example.com,\*.example.com" "$LOG/ab.log"'
+"$WR" open http://localhost:5173/app >/dev/null 2>&1; r1=$?
+"$WR" open http://localhost:9222/json >/dev/null 2>&1; r2=$?
+"$WR" eval "1+1" >/dev/null 2>&1; r3=$?
+check "local host: pinned port opens, another port and eval refused" '[[ $r1 -eq 0 && $r2 -eq 2 && $r3 -eq 2 ]]'
+printf 'http://localhost:6000/\n' > "$T/ab-url"
+"$WR" click @e1 >/dev/null 2>&1; r4=$?
+check "local host: a click that lands on another port goes back, exit 3" '[[ $r4 -eq 3 ]] && grep -q "^back |" "$LOG/ab.log"'
+rm -f "$T/ab-url"; rm -rf "$SOCK"
+grep -q "eval" "$RUN/prompt.md"
+check "local host: the harness does not offer eval" '[[ $? -ne 0 ]]'
+reset_log
+out="$(cd "$T/arepo" && FAKE_AGY=ok FAKE_AGY_TOOLS='[["run_command",{"CommandLine":"pair-browser snapshot -i"}],["run_command",{"CommandLine":"pair-fs ls"}]]' bash "$P" --engine gemini --backend agy --domains example.com --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
+check "agy consult + domains: browser and pair-fs both allowed" '[[ $rc -eq 0 && "$(dec)" == "auto_approve auto_approve" ]] && grep -q "^snapshot -i |" "$LOG/ab.log"'
+check "agy consult + domains: may read its screenshots in the run dir" 'grep -q "$RUN/shots" "$RUN/agy-policy.json"'
+bash "$P" --engine gemini --backend opencode --domains example.com --cwd "$T/arepo" --prompt-file "$T/prompt.md" >/dev/null 2>&1
+check "opencode + domains outside browse: exit 64"  '[[ $? -eq 64 ]]'
+reset_log
+out="$(FAKE_AGY=ok FAKE_AGY_TOOLS='[["run_command",{"CommandLine":"pair-fetch https://example.com"}]]' bash "$P" --engine gemini --backend agy --mode research --prompt-file "$T/prompt.md" 2>&1)"
+check "agy research: pair-fetch offered and allowed" '[[ "$(dec)" == auto_approve ]] && grep -q "pair-fetch <url>" "$LOG/agy-stdin-0.txt"'
+reset_log
+out="$(cd "$T/arepo" && FAKE_AGY=ok FAKE_AGY_TOOLS='[["run_command",{"CommandLine":"pair-fetch https://example.com"}]]' bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"
+check "agy consult (search only): pair-fetch refused" '[[ "$(dec)" == deny ]]'
+
+# --- broker and pair-fetch, directly ------------------------------------------------
+BS="$(mktemp -d /tmp/pbt.XXXX)"
+printf '#!/bin/bash\necho "wrapped: $*"\n' > "$BS/wrap"; chmod +x "$BS/wrap"
+python3 -I "$SCRIPTS/pair_broker.py" "$BS/b.sock" "$BS/wrap" "$BS" & BPID=$!
+for _ in $(seq 1 50); do [[ -S "$BS/b.sock" ]] && break; sleep 0.1; done
+breq() { python3 -c 'import json,socket,sys
+c=socket.socket(socket.AF_UNIX); c.connect(sys.argv[1]); c.sendall(sys.argv[2].encode()+b"\n"); d=b""
+while True:
+    b=c.recv(65536)
+    if not b: break
+    d+=b
+print(json.loads(d)["rc"], json.loads(d)["out"].strip())' "$BS/b.sock" "$1"; }
+check "broker runs the wrapper with the model's arguments" '[[ "$(breq "{\"argv\": [\"get\", \"url\"]}")" == "0 wrapped: get url" ]]'
+check "broker refuses a malformed request"         '[[ "$(breq "{\"argv\": \"get url\"}")" == 2* && "$(breq "not json")" == 2* ]]'
+check "broker socket is private to this user"      '[[ "$(stat -f %Lp "$BS/b.sock")" == 600 ]]'
+kill $BPID 2>/dev/null; rm -rf "$BS"
+PF() { /usr/bin/python3 -I "$SCRIPTS/pair_fetch.py" "$@" >/dev/null 2>&1; }
+check "pair-fetch refuses local, private and metadata hosts" '! PF http://localhost:8080/ && ! PF http://127.0.0.1/ && ! PF http://10.0.0.1/ && ! PF http://169.254.169.254/latest/meta-data/ && ! PF "http://[::1]/"'
+check "pair-fetch refuses other schemes and credentials" '! PF file:///etc/passwd && ! PF ftp://example.com/ && ! PF https://user:pw@example.com/ && ! PF --max-chars'
+
 # --- pair.sh: argument checks -----------------------------------------------------
 bash "$P" --help >/dev/null 2>&1;                                         check "--help exits 0" '[[ $? -eq 0 ]]'
 bash "$P" --prompt-file prompt.md >/dev/null 2>&1;                        check "relative prompt path: exit 64" '[[ $? -eq 64 ]]'
@@ -298,6 +513,7 @@ mkdir -p "$T/docs" "$T/evidence" && printf 'hello\n' > "$T/docs/a.txt"
 out="$(FAKE_CODEX=review bash "$SCRIPTS/codex_review.sh" --repo "$T/docs" --prompt-file "$T/prompt.md" --label t1 --out-dir "$T/evidence" 2>&1)"; rc=$?
 MD="$(sed -n 's/^REVIEW_MD=//p' <<<"$out")"
 check "codex_review: non-git repo accepted, exit 0" '[[ $rc -eq 0 && -f "$MD" ]]'
+check "codex_review: ignores the user config"     '[[ "$(jq_py "$(last_args codex)" "\" \".join(d[\"args\"])")" == *"--ignore-user-config"*"project_doc_max_bytes=400000"* ]]'
 check "codex_review: passes --skip-git-repo-check" '[[ "$(jq_py "$(last_args codex)" "\" \".join(d[\"args\"])")" == *"--skip-git-repo-check"* ]]'
 check "codex_review: artifacts under --out-dir only" '[[ "$MD" == "$T/evidence/"* && ! -e "$T/docs/.codex-review" ]]'
 check "codex_review: provenance says not a git repo" 'grep -q "^tree=not a git repository" "$T"/evidence/*.provenance'
