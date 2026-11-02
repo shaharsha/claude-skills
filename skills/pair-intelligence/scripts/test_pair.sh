@@ -40,7 +40,7 @@ n = len([f for f in os.listdir(log) if f.startswith("codex-args")])
 json.dump({"args": args, "cwd": os.getcwd(),
            "marker": open("MARKER.txt").read() if os.path.exists("MARKER.txt") else "",
            "files": sorted(os.listdir(".")),
-           "nested": sorted(r for r in ("sub/node_modules", "apps/web/node_modules") if os.path.islink(r)),
+           "nested": sorted(r for r in ("sub/node_modules", ".tools/venv") if os.path.islink(r)),
            "staged": subprocess.run(["git", "diff", "--cached", "--name-only"], capture_output=True, text=True).stdout.split()
                      if os.path.exists(".git") else [],
            "env_ab": {k: v for k, v in os.environ.items() if k.startswith("AGENT_BROWSER_")}},
@@ -334,11 +334,11 @@ check "vertex auto: ADC copy found, no API key passed" '[[ $rc -eq 0 && "$(jq_py
 check "vertex: settings carry no modelProvider (it would switch to key mode)" '! grep -q modelProvider "$(jq_py "$A" "d[\"args\"][d[\"args\"].index(\"--settings\")+1]")"'
 check "vertex: meta.json names the billed project" '[[ "$(jq_py "$RUN/meta.json" "d[\"auth\"]")" == vertex:proj-x ]]'
 out="$(cd "$T/arepo" && HOME="$T/vhome" PAIR_AGY_AUTH=key FAKE_AGY=ok bash "$P" --engine gemini --backend agy --cwd "$T/arepo" --prompt-file "$T/prompt.md" 2>&1)"
+check "PAIR_AGY_AUTH=key wins over an ADC copy" '[[ "$(jq_py "$(last_args agy)" "d[\"key\"]")" == fake-key-123 && -z "$(jq_py "$(last_args agy)" "d[\"adc_auth\"]")" ]]'
 out="$(cd "$T/arepo" && HOME="$T/vhome" PAIR_AGY_AUTH=auto PAIR_AGY_ADC_CHECK=expired FAKE_AGY=ok bash "$P" --engine gemini --backend agy --cwd "$T/arepo" --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
 check "expired Vertex login, auto: falls back to the API key, says how to log in again" '[[ $rc -eq 0 && "$out" == *"has expired"*"gcloud auth application-default login"* && "$(jq_py "$(last_args agy)" "d[\"key\"]")" == fake-key-123 && -z "$(jq_py "$(last_args agy)" "d[\"adc_auth\"]")" ]]'
 (cd "$T/arepo" && HOME="$T/vhome" PAIR_AGY_AUTH=vertex PAIR_AGY_ADC_CHECK=expired bash "$P" --engine gemini --backend agy --cwd "$T/arepo" --prompt-file "$T/prompt.md" >/dev/null 2>&1)
 check "expired Vertex login, vertex forced: exit 69" '[[ $? -eq 69 ]]'
-check "PAIR_AGY_AUTH=key wins over an ADC copy" '[[ "$(jq_py "$(last_args agy)" "d[\"key\"]")" == fake-key-123 && -z "$(jq_py "$(last_args agy)" "d[\"adc_auth\"]")" ]]'
 (cd "$T/arepo" && PAIR_AGY_AUTH=vertex PAIR_AGY_ADC="$T/none.json" bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" >/dev/null 2>&1)
 check "PAIR_AGY_AUTH=vertex without an ADC copy: exit 69" '[[ $? -eq 69 ]]'
 cp "$T/vhome/.config/gcloud/adc-agy-proj-x.json" "$T/application_default_credentials.json"
@@ -623,18 +623,18 @@ check "pair-fetch refuses other schemes and credentials" '! PF file:///etc/passw
 HT="$(mktemp -d "$HOME/.cache/pair-intelligence/test.XXXXXX")"
 trap 'rm -rf "$T" "$HT"' EXIT
 mkdir -p "$HT/rrepo/sub" && git -C "$HT/rrepo" init -q && printf 'committed\n' > "$HT/rrepo/MARKER.txt"
-printf 'node_modules/\n.venv/\n' > "$HT/rrepo/.gitignore"
+printf 'node_modules/\n.venv/\n.tools/\n' > "$HT/rrepo/.gitignore"
 git -C "$HT/rrepo" add MARKER.txt .gitignore && git -C "$HT/rrepo" -c user.email=t@t -c user.name=t commit -qm init
 printf 'uncommitted\n' > "$HT/rrepo/MARKER.txt"; printf 'x\n' > "$HT/rrepo/untracked.txt"
 printf 'staged\n' > "$HT/rrepo/staged.txt"; git -C "$HT/rrepo" add staged.txt
-mkdir -p "$HT/rrepo/.venv" "$HT/rrepo/sub/node_modules"; : > "$HT/rrepo/sub/node_modules/dep.js"
+mkdir -p "$HT/rrepo/.venv" "$HT/rrepo/sub/node_modules" "$HT/rrepo/.tools/venv/bin"; : > "$HT/rrepo/sub/node_modules/dep.js"
 RREPO="$(cd "$HT/rrepo" && pwd -P)"
 reset_log
 out="$(cd "$HT/rrepo" && PAIR_OUT="$HT/out" FAKE_CODEX=write bash "$P" --mode review --runnable --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
 A="$(last_args codex)"
 check "runnable: exit 0, Codex works in a copy, not the repo" '[[ $rc -eq 0 && "$(jq_py "$A" "d[\"cwd\"]")" != "$RREPO" && "$(jq_py "$A" "d[\"cwd\"]")" == */pair-run.*/repo ]]'
 check "runnable: the copy holds the unstaged, staged and untracked changes" '[[ "$(jq_py "$A" "d[\"marker\"]")" == uncommitted && "$(jq_py "$A" "\" \".join(d[\"staged\"])")" == *staged.txt* && "$(jq_py "$A" "\" \".join(d[\"files\"])")" == *untracked.txt* ]]'
-check "runnable: ignored dependency folders are linked in, nested ones too" '[[ "$(jq_py "$A" "\" \".join(d[\"files\"])")" == *.venv* && "$(jq_py "$A" "\" \".join(d[\"nested\"])")" == *sub/node_modules* ]]'
+check "runnable: ignored dependency folders are linked in, nested and under ignored folders too" '[[ "$(jq_py "$A" "\" \".join(d[\"files\"])")" == *.venv* && "$(jq_py "$A" "\" \".join(d[\"nested\"])")" == ".tools/venv sub/node_modules" ]]'
 check "runnable: workspace-write with the network off"      '[[ "$(jq_py "$A" "\" \".join(d[\"args\"])")" == *"-s workspace-write"*"network_access=false"* ]]'
 check "runnable: Codex's writes stay in the copy; the repo is untouched" '[[ ! -e "$HT/rrepo/codex_was_here.txt" && "$(cat "$HT/rrepo/MARKER.txt")" == uncommitted ]]'
 check "runnable: the copy and its worktree are gone after"  '[[ ! -e "$(jq_py "$A" "d[\"cwd\"]")" ]] && ! git -C "$HT/rrepo" worktree list | grep -q pair-run'

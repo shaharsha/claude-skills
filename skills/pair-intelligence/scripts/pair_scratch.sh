@@ -87,15 +87,31 @@ import os, sys
 top, copy = sys.argv[1], sys.argv[2]
 names = {"node_modules", ".venv", "venv"}
 found = []
+def outermost(rel):
+    parts = rel.split("/")
+    for i, part in enumerate(parts):
+        if part in names:
+            return "/".join(parts[:i + 1])
+    return None
 for rel in sys.stdin.buffer.read().split(b"\0"):
     rel = os.fsdecode(rel).rstrip("/")
     if not rel:
         continue
-    parts = rel.split("/")
-    for i, part in enumerate(parts):  # the outermost dependency folder on the path
-        if part in names:
-            found.append("/".join(parts[:i + 1]))
-            break
+    hit = outermost(rel)
+    if hit:
+        found.append(hit)
+    elif os.path.isdir(os.path.join(top, rel)):
+        # git collapses a wholly ignored folder (.tools/): look a few levels into it.
+        base = os.path.join(top, rel)
+        for dp, dns, _ in os.walk(base):
+            depth = dp[len(base):].count(os.sep)
+            keep = []
+            for d in dns:
+                if d in names:
+                    found.append(os.path.relpath(os.path.join(dp, d), top))
+                elif depth < 3 and not os.path.islink(os.path.join(dp, d)):
+                    keep.append(d)
+            dns[:] = keep
 for rel in sorted(set(found)):
     src, dst = os.path.join(top, rel), os.path.join(copy, rel)
     if os.path.isdir(src) and not os.path.lexists(dst):
