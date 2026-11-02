@@ -258,8 +258,8 @@ PY
     AGY_ADC="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$AGY_ADC")"
     [[ "$(basename "$AGY_ADC")" != application_default_credentials.json ]] \
       || { echo "refusing the main ADC file for agy: its quota project may bill another client; use a copy (PAIR_AGY_ADC)" >&2; exit 64; }
-    # A user ADC copy names its project in quota_project_id; a service-account key
-    # in project_id (its own project, the one it is granted Vertex AI on).
+    # agy bills quota_project_id when the file has one (a user ADC copy always
+    # does), else a service-account key's project_id: record the same project.
     AGY_PROJECT="$(python3 -c 'import json,sys
 try:
     d = json.load(open(sys.argv[1]))

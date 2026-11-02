@@ -100,7 +100,8 @@ Tested on the Antigravity CLI (`agy`) 1.4.12 with a Gemini API key, 2026-11-02.
     or the `~/.config/gcloud/adc-agy-*.json` files hold exactly one
     service-account key, or there is exactly one such file): plain Vertex AI,
     billed to the project (startup credits). Best is a service-account key with
-    only `roles/aiplatform.user` (project from its `project_id`), which never
+    only `roles/aiplatform.user` (billed to its `quota_project_id` if it has one,
+    else its `project_id`), which never
     expires; this Mac has `adc-agy-sa-shahar-personal.json`. A copy of your own
     ADC (project from its `quota_project_id`) works too but expires, see below. agy reads the project from that
     field before `GOOGLE_CLOUD_QUOTA_PROJECT`, and the main

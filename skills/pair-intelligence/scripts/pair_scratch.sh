@@ -101,7 +101,7 @@ for rel in sys.stdin.buffer.read().split(b"\0"):
     if hit:
         found.append(hit)
     elif os.path.isdir(os.path.join(top, rel)):
-        # git collapses a wholly ignored folder (.tools/): look a few levels into it.
+        # git collapses a wholly ignored folder (.tools/): look up to six levels into it.
         base = os.path.join(top, rel)
         for dp, dns, _ in os.walk(base):
             depth = dp[len(base):].count(os.sep)
@@ -109,7 +109,7 @@ for rel in sys.stdin.buffer.read().split(b"\0"):
             for d in dns:
                 if d in names:
                     found.append(os.path.relpath(os.path.join(dp, d), top))
-                elif depth < 3 and not os.path.islink(os.path.join(dp, d)):
+                elif depth < 6 and not os.path.islink(os.path.join(dp, d)):
                     keep.append(d)
             dns[:] = keep
 for rel in sorted(set(found)):
