@@ -27,14 +27,17 @@ identical prompt to both and adjudicate the union.
 review with `codex_review.sh --domains ...` (or `pair.sh --mode review` on either
 engine). Codex keeps its read-only sandbox and reaches the browser through a
 broker (`references/research.md`); screenshots are kept beside the review as
-`<base>.shots/`, and the provenance sidecar records `browser_domains=`.
+`<base>.shots/` (the review text may cite the run's temporary path; same file
+name), and the provenance sidecar records `browser_domains=`.
 
 **Reviewing with the tests run.** Read-only Codex cannot run tests, so its "tests
 could not run" is not evidence. Add `--runnable` (to `codex_review.sh` or
 `pair.sh`): Codex works in a disposable copy of the repo with your uncommitted
 changes, may run the test suite and write there, has no network, and the copy
 is removed afterwards. The sidecar records `runnable=yes`. Name the test command
-in the prompt; dependencies must already be installed in the real repo.
+in the prompt; dependencies must already be installed in the real repo. It runs
+the repository's code, so keep it for code you would run yourself, and keep the
+repo and `--out-dir` out of temp folders (Codex can write there; refused).
 
 ## Quick path
 

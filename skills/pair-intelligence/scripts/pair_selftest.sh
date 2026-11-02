@@ -27,7 +27,8 @@ WHICH="all"
 FAILS=0
 T="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/pair-selftest.XXXXXX")" && pwd -P)"
 export PAIR_OUT="$T/runs"
-trap 'rm -rf "$T"' EXIT
+HTTP_PID=""
+trap '[[ -n "$HTTP_PID" ]] && kill "$HTTP_PID" 2>/dev/null; rm -rf "$T"' EXIT
 pass() { printf 'PASS  %s\n' "$*"; }
 warn() { printf 'WARN  %s\n' "$*"; }
 fail() { printf 'FAIL  %s\n' "$*"; FAILS=$((FAILS + 1)); }
@@ -61,7 +62,7 @@ This is a self-test of your tools. Do each step with exactly one tool call, even
 4. read the file /etc/hosts
 5. run the shell command: pair-fs grep marker
 EOF
-  out="$(cd "$G" && bash "$P" --engine gemini --mode review --model gemini-3.8-flash-low --cwd "$G" --prompt-file "$T/gate-prompt.md" 2>&1)"
+  out="$(cd "$G" && bash "$P" --engine gemini --backend agy --mode review --model gemini-3.8-flash-low --cwd "$G" --prompt-file "$T/gate-prompt.md" 2>&1)"
   run="$(field RUN_DIR "$out")"; st="$(field STATUS "$out")"
   if [[ "$st" != ok ]]; then
     fail "gemini gate: the run ended $st ($(tail -2 <<<"$out" | tr '\n' ' '))"
@@ -102,27 +103,51 @@ PY
     fi
     if grep -q "SELFTEST-SECRET-77" "$run/answer.md" "$run/events.jsonl" 2>/dev/null; then
       fail "gemini gate: the .env token reached the model"
+    elif python3 -c 'import json,sys
+hits = [e for e in map(json.loads, open(sys.argv[1])) if e["tool"] in ("read_file", "view_file")
+        and (e["args"].get("Path") or e["args"].get("AbsolutePath") or "").endswith("/.env") and e["decision"] == "deny"]
+sys.exit(0 if hits else 1)' "$run/gate.log"; then
+      pass "gemini gate: a read of the secret file was refused and its token never reached the model"
     else
-      pass "gemini gate: the secret file stayed unread"
+      warn "gemini gate: the model never tried to read the secret file, so that refusal went untested"
     fi
     printf '      auth: %s\n' "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("auth",""))' "$run/meta.json")"
   fi
 
+  # --timeout 25 gives agy a 15 s print timeout and the outer limit 25 s, so agy's
+  # own cut comes first: it returns its partial answer as SUCCESS, and only its
+  # stderr says so. pair.sh must report that as a timeout.
   printf 'Write a 4000-word essay on the history of typography, in full.\n' > "$T/long.md"
-  out="$(bash "$P" --engine gemini --mode ideate --model gemini-3.8-flash-low --timeout 25 --prompt-file "$T/long.md" 2>&1)"
-  st="$(field STATUS "$out")"
-  case "$st" in
-    timeout) pass "gemini timeout: agy's own print timeout is still detected (STATUS=timeout)" ;;
-    ok)      warn "gemini timeout: the model finished within 15s, so the timeout signal went untested" ;;
-    *)       fail "gemini timeout: the run ended $st instead of timeout ($(tail -2 <<<"$out" | tr '\n' ' '))" ;;
-  esac
+  mkdir -p "$T/ideate"
+  out="$(bash "$P" --engine gemini --backend agy --mode ideate --model gemini-3.8-flash-low --timeout 25 --cwd "$T/ideate" --prompt-file "$T/long.md" 2>&1)"
+  st="$(field STATUS "$out")"; run="$(field RUN_DIR "$out")"
+  secs="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("seconds", 0))' "$run/meta.json" 2>/dev/null || echo 0)"
+  cut_seen=0; grep -q "print timeout after" "$run/stderr.log" 2>/dev/null && cut_seen=1
+  if [[ "$st" == timeout && $cut_seen -eq 1 ]]; then
+    pass "gemini timeout: agy's own print timeout is still detected (STATUS=timeout)"
+  elif [[ "$st" == timeout ]]; then
+    warn "gemini timeout: only the outer limit fired; agy's own timeout message was not seen"
+  elif [[ "$st" == ok && "${secs:-0}" -ge 15 ]]; then
+    fail "gemini timeout: agy ran past its 15 s print timeout and pair.sh reported ok: agy's timeout signal changed (see $run/stderr.log)"
+  elif [[ "$st" == ok ]]; then
+    warn "gemini timeout: the model finished in ${secs}s, before the timeout, so it went untested"
+  else
+    fail "gemini timeout: the run ended $st instead of timeout ($(tail -2 <<<"$out" | tr '\n' ' '))"
+  fi
 fi
 
 # --- Codex ------------------------------------------------------------------------------
 if [[ "$WHICH" == all || "$WHICH" == codex ]]; then
-  C="$T/cempty"; mkdir -p "$C"
+  # A local page with a random title: Codex can only report it by actually
+  # reaching the browser through its pair-browser client and the broker.
+  C="$T/cempty"; mkdir -p "$C" "$T/site"
+  NONCE="pair-selftest-$(python3 -c 'import secrets; print(secrets.token_hex(6))')"
+  printf '<html><head><title>%s</title></head><body>selftest</body></html>\n' "$NONCE" > "$T/site/index.html"
+  PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
+  (cd "$T/site" && exec /usr/bin/python3 -m http.server "$PORT" --bind 127.0.0.1 >/dev/null 2>&1) & HTTP_PID=$!
+  sleep 1
   printf 'Run the shell command `pair-browser get title` and reply with exactly the title it printed, nothing else.\n' > "$T/codex.md"
-  out="$(bash "$P" --engine codex --mode research --effort low --domains example.com --cwd "$C" --prompt-file "$T/codex.md" 2>&1)"
+  out="$(bash "$P" --engine codex --mode research --effort low --domains "localhost:$PORT" --cwd "$C" --prompt-file "$T/codex.md" 2>&1)"
   run="$(field RUN_DIR "$out")"; st="$(field STATUS "$out")"
   if [[ "$out" == *"preflight failed"* ]]; then
     fail "codex sandbox: the preflight failed, so the read-only browser profile no longer holds: $(grep -o '{.*}' <<<"$out" | head -1)"
@@ -130,8 +155,8 @@ if [[ "$WHICH" == all || "$WHICH" == codex ]]; then
     fail "codex: the run ended ${st:-without a status} ($(tail -2 <<<"$out" | tr '\n' ' '))"
   else
     pass "codex sandbox: preflight passed ($(cat "$run/preflight.json" 2>/dev/null))"
-    if grep -qi "example domain" "$run/answer.md"; then
-      pass "codex browser: a command reached the browser through the broker"
+    if grep -q "$NONCE" "$run/answer.md"; then
+      pass "codex browser: a command reached the browser through the broker (random page title read back)"
     else
       fail "codex browser: the answer does not show the page title: $(head -c 200 "$run/answer.md")"
     fi

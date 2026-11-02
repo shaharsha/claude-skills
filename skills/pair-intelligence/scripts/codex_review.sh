@@ -366,6 +366,9 @@ fi
 
 # --- runnable copy and live browser (both optional) --------------------------
 if [[ $RUNNABLE -eq 1 ]]; then
+  # A runnable Codex may write to temp folders: the real repo, this skill (the
+  # host runs its scripts later) and the review's artifacts must not be in one.
+  bash "$SKILL_DIR/scripts/pair_scratch.sh" check "$(git -C "$REPO" rev-parse --show-toplevel)" "$SKILL_DIR" "$OUT_DIR" || exit 64
   SCRATCH_PARENT="$(mktemp -d "${TMPDIR:-/tmp}/pair-run.XXXXXX")"
   RUN_REPO="$(bash "$SKILL_DIR/scripts/pair_scratch.sh" create "$REPO" "$SCRATCH_PARENT")" \
     || { echo "could not make a runnable copy of $REPO" >&2; exit 71; }

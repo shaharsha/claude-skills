@@ -32,8 +32,12 @@ Tested on codex-cli 0.165.0, signed in with a ChatGPT plan.
 - **`--runnable`** (review, consult; `codex_review.sh` too): Codex runs in a
   detached git worktree of the repo with the uncommitted changes applied and the
   untracked files copied (`pair_scratch.sh`), as `workspace-write` with
-  `network_access=false`, and the copy is removed after the run. `:workspace`
-  also lets it write to `/tmp` and `$TMPDIR` (measured), so with a browser too,
+  `network_access=false`, and the copy is removed after the run (staged changes
+  land in its index, so `git diff --cached` inside works too). It runs the
+  repository's own code, so use it on code you would run yourself. `:workspace`
+  also lets it write to `/tmp` and `$TMPDIR` (measured), so the real repo, this
+  skill and the run's output may not live there (refused, exit 64): Codex could
+  edit the repo, or a script the host runs later. With a browser too,
   nothing the browser host runs or writes may live there: its socket folder sits
   in `~/.cache/pair-intelligence/sock`, and run files under a temp `PAIR_OUT` are
   refused (exit 64), or Codex could rewrite the host wrapper or plant a link

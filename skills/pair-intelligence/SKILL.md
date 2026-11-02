@@ -116,6 +116,7 @@ Models, flags and traps per engine: `references/engines.md`.
   disposable git worktree of the repo with the uncommitted changes, may write
   there and run tests, has no network, and the copy is removed afterwards.
   Dependency folders are linked read-only; a test that downloads anything fails.
+  It runs the repository's own code: use it on code you would run yourself.
 
 Never grant `--add-dir ~/.agent-browser` (it holds every session's browser socket
 and the saved-login key), never use `danger-full-access` or a bypass flag, never

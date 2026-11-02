@@ -364,6 +364,9 @@ cleanup() {
 source "$SKILL_DIR/scripts/pair_browser.sh"
 trap cleanup EXIT
 if [[ $RUNNABLE -eq 1 ]]; then
+  # A runnable Codex may write to temp folders: the real repo, this skill (the
+  # host runs its scripts later) and the run's files must not be in one.
+  bash "$SKILL_DIR/scripts/pair_scratch.sh" check "$(git -C "$CWD" rev-parse --show-toplevel)" "$SKILL_DIR" "$RUN_DIR" || exit 64
   SCRATCH_PARENT="$(mktemp -d "${TMPDIR:-/tmp}/pair-run.XXXXXX")"
   RUN_CWD="$(bash "$SKILL_DIR/scripts/pair_scratch.sh" create "$CWD" "$SCRATCH_PARENT")" \
     || { echo "could not make a runnable copy of $CWD" >&2; exit 71; }
@@ -560,9 +563,16 @@ if last and last.get("status") != "SUCCESS" and "RESOURCE_EXHAUSTED" in (last.ge
     print(last.get("conversation_id", ""))
 PY
   QUOTA_CONV="$(cat "$RUN_DIR/.quota")"; rm -f "$RUN_DIR/.quota"
-  if [[ -n "$QUOTA_CONV" && "$AGY_AUTH" == vertex && $(( TIMEOUT - ($(date +%s) - START) )) -gt 240 ]]; then
-    echo "agy: Vertex AI quota exhausted; retrying once in 60s (conversation $QUOTA_CONV)" >> "$ERRLOG"
-    sleep "${PAIR_AGY_RETRY_WAIT:-60}"
+  RETRY_WAIT="${PAIR_AGY_RETRY_WAIT:-60}"
+  LEFT=$(( TIMEOUT - ($(date +%s) - START) - RETRY_WAIT ))
+  if [[ -n "$QUOTA_CONV" && "$AGY_AUTH" == vertex && $LEFT -gt 120 ]]; then
+    echo "agy: Vertex AI quota exhausted; retrying once in ${RETRY_WAIT}s with the ${LEFT}s left (conversation $QUOTA_CONV)" >> "$ERRLOG"
+    sleep "$RETRY_WAIT"
+    # The retry gets what is left of the budget, not a fresh one.
+    TIMEOUT=$LEFT
+    for i in "${!ARGS[@]}"; do
+      [[ "${ARGS[$i]}" == --print-timeout ]] && ARGS[$((i + 1))]="$(( LEFT > 20 ? LEFT - 10 : LEFT ))s"
+    done
     python3 -c 'import json; print(json.dumps({"event": "user", "message": {"content": "Your last turn was cut off by a rate limit. Finish the task and give your complete final answer."}}))' \
       > "$RUN_DIR/agy-retry.jsonl"
     [[ -n "$RESUME_ID" ]] || ARGS+=(--conversation "$QUOTA_CONV")
@@ -656,8 +666,12 @@ elif engine == "agy":
             completed = r.get("status") == "SUCCESS"
             failed = not completed
             denied = bool(r.get("denied_actions"))
+            # The answer is the LAST result's: after a retry, an empty retry must
+            # not pass off the cut-off first turn as the answer.
             if (r.get("response") or "").strip():
                 answer.write_text(r["response"].strip() + "\n")
+            elif answer.exists():
+                answer.unlink()
             if r.get("error"):
                 # agy keeps the reason inside the result, not on stderr.
                 hint = (" (Vertex AI quota: retry later, or PAIR_AGY_AUTH=key)"
