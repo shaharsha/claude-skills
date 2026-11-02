@@ -136,10 +136,11 @@ suggested fix may include one test of that behaviour through the code's entry
 point, never one per member of a list. A refactor that keeps behaviour needs no
 new test.
 
-Do report a test this change adds or edits that a harmless edit would turn red:
-it pins line numbers, source text or a digest of code, copies a value from
-another file or layer, keeps a hand-made list in step with the code, or repeats
-an assertion an existing test already makes. Title it "Brittle test: ...", file
+Do report a test this change adds, or an assertion it adds or re-stamps in an
+existing test, that a harmless edit would turn red: it pins line numbers,
+source text or a digest of code, copies a value from another file or layer,
+keeps a hand-made list in step with the code, or repeats an assertion an
+existing test already makes. Title it "Brittle test: ...", file
 it as maintainability, put the harmless edit that breaks it in
 failure_scenario, and in suggested_fix the behaviour to test instead or the
 existing test to extend.
@@ -183,9 +184,11 @@ edits; rules elsewhere in the same document that this text contradicts.
 </check>
 
 Report only defects with a concrete wrong outcome. An empty findings list is a
-valid answer. A missing test is not a defect; a test this change adds that pins
-line numbers, source text or a digest of code is one: title it "Brittle test:
-...". Return JSON conforming to the supplied schema.
+valid answer. A missing test is not a defect. A test this change adds, or an
+assertion it adds or re-stamps, that a harmless edit would turn red (it pins line
+numbers, source text or a digest of code) is one: title it "Brittle test: ...",
+with that edit as the failure scenario. Return JSON conforming to the supplied
+schema.
 ```
 
 ---
@@ -229,10 +232,10 @@ you can name the simpler approach that meets the same requirements.
 Tests count toward that complexity. Do not ask the plan for more tests or
 coverage. Report a planned test that a harmless edit would turn red (it pins
 line numbers, source text or a digest of code, copies a value from another file,
-or keeps a hand-made list in step with the code), a planned registry, census or
-allowlist that needs updating by hand on unrelated edits, and a planned
-addition to a required or always-run test set that does not say which failure
-it catches. Name the behavioural check that would replace it.
+or keeps a hand-made list in step with the code), and a planned registry,
+census or allowlist that needs updating by hand on unrelated edits, with the
+harmless edit that would break it. Name the behavioural check that would
+replace it.
 
 Do not report alternative designs that are merely different, or preferences
 about structure and wording. Judge the plan against its own stated goal, not
@@ -291,9 +294,10 @@ requirements are satisfied, not only which are not; a plan fully implemented is
 a valid and useful outcome.
 
 A missing test is an unmet requirement only when the plan names that test.
-Report a test the change adds that a harmless edit would turn red (it pins line
-numbers, source text or a digest of code, copies a value from another file,
-keeps a hand-made list in step with the code, or repeats an existing test's
+Report a test the change adds, or an assertion it adds or re-stamps in an
+existing test, that a harmless edit would turn red (it pins line numbers,
+source text or a digest of code, copies a value from another file, keeps a
+hand-made list in step with the code, or repeats an existing test's
 assertion): title it "Brittle test: ...", with the harmless edit in
 failure_scenario and the behaviour to test instead in suggested_fix.
 </what_counts>
@@ -391,10 +395,11 @@ suggested fix may include one test of that behaviour through the code's entry
 point, never one per member of a list. A refactor that keeps behaviour needs no
 new test.
 
-Do report a test this change adds or edits that a harmless edit would turn red:
-it pins line numbers, source text or a digest of code, copies a value from
-another file or layer, keeps a hand-made list in step with the code, or repeats
-an assertion an existing test already makes. Title it "Brittle test: ...", file
+Do report a test this change adds, or an assertion it adds or re-stamps in an
+existing test, that a harmless edit would turn red: it pins line numbers,
+source text or a digest of code, copies a value from another file or layer,
+keeps a hand-made list in step with the code, or repeats an assertion an
+existing test already makes. Title it "Brittle test: ...", file
 it as maintainability, put the harmless edit that breaks it in
 failure_scenario, and in suggested_fix the behaviour to test instead or the
 existing test to extend.
