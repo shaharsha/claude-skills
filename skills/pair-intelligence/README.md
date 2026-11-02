@@ -28,13 +28,18 @@ good at all of them and the review-only tooling was in the way every time.
 | research | web search, docs, images | read-only, empty working dir |
 | browse | opening, clicking and screenshotting real pages | isolated browser, allow-listed domains |
 
-Engines: **Codex** (`gpt-6.1-sol`, OS sandbox, web search) and **Gemini**
-(`gemini-4-argon` through OpenCode v2, read-only by agent rules). Ask one, or both
-in parallel for two independent reads.
+Any mode can add a live browser with `--domains`: a review can open the running
+page and compare it with the code, and the model stays read-only.
 
-`scripts/pair.sh` runs any mode on either engine and handles the traps both CLIs
-share: hangs on an open stdin, exit 0 after a failed turn, a resumed session that
-silently drops its sandbox, no timeout. `scripts/codex_review.sh` stays the Codex
+Engines: **Codex** (`gpt-6.1-sol`, OS sandbox, web search) and **Gemini**
+(`gemini-4-argon` through the Antigravity CLI `agy`, behind a default-deny tool
+gate, with Google search; OpenCode as a fallback). Ask one, or both in parallel
+for two independent reads.
+
+`scripts/pair.sh` runs any mode on either engine and handles the traps these CLIs
+share: hangs on an open stdin, exit 0 after a failed turn (agy even reports a
+timed-out partial answer as success), a resumed session that silently drops its
+sandbox, no timeout. `scripts/codex_review.sh` stays the Codex
 review runner, with schema-enforced findings and a provenance sidecar.
 
 ## Install
@@ -56,10 +61,62 @@ ln -s "$PWD/claude-skills/skills/pair-intelligence" ~/.claude/skills/pair-intell
 ## Requirements
 
 - **Codex:** the `codex` CLI on `$PATH`, signed in (tested on 0.165.0).
-- **Gemini:** the OpenCode desktop app (its v2 CLI, tested on 2.2.5) with a Gemini
-  API key added to OpenCode.
-- **Browse:** the `agent-browser` CLI.
+- **Gemini:** the Antigravity CLI `agy` (tested on 1.4.12) with either Vertex AI
+  credentials (an `~/.config/gcloud/adc-agy-<project>.json` copy of your ADC file
+  whose `quota_project_id` is the project to bill) or a Gemini API key in
+  `GEMINI_API_KEY`. Never your Antigravity login. Or `--backend opencode` with the
+  OpenCode desktop app (its v2 CLI, tested on 2.2.5).
+- **A live browser:** the `agent-browser` CLI.
 - `python3` and macOS or Linux. No API key of its own.
+
+## Setup
+
+What a run needs inside the run (agy's private home and tool gate, the browser
+host, its socket and the Codex broker), `pair.sh` builds itself and removes
+afterwards. Set up once only what you will use:
+
+**Codex**
+
+```bash
+brew install --cask codex      # or: npm install -g @openai/codex
+codex login                    # a ChatGPT plan
+```
+
+**Gemini, with an API key** (the quick route)
+
+```bash
+brew install --cask antigravity-cli
+export GEMINI_API_KEY=...      # from Google AI Studio; OpenCode's saved Google key also works
+```
+
+**Gemini, on Vertex AI** (bills a GCP project, so startup credits apply). agy
+takes the project from the ADC file's `quota_project_id`, so give it a copy pinned
+to the project you mean:
+
+```bash
+gcloud services enable aiplatform.googleapis.com --project MY_PROJECT
+gcloud auth application-default login
+python3 -c 'import json, os
+d = os.path.expanduser("~/.config/gcloud")
+adc = json.load(open(d + "/application_default_credentials.json"))
+adc["quota_project_id"] = "MY_PROJECT"
+os.umask(0o077)
+json.dump(adc, open(d + "/adc-agy-MY_PROJECT.json", "w"))'
+```
+
+With exactly one `adc-agy-*.json` present, Gemini runs on Vertex AI (a run's
+`meta.json` records `auth: vertex:<project>`); `PAIR_AGY_AUTH=key` forces the API
+key. If agy reports `Reauthentication failed`, log in again and redo the copy.
+
+**A live browser**
+
+```bash
+npm install -g agent-browser
+agent-browser install          # downloads its browser
+```
+
+**Check it**: `bash scripts/test_pair.sh` runs offline; a missing CLI or
+credential makes `pair.sh` exit 69 with a message naming what to install or set.
 
 ## Quick start
 
@@ -79,6 +136,10 @@ bash scripts/pair.sh --mode ideate --prompt-file /abs/round2.md --resume names
 # Have Codex browse an allow-listed site and take screenshots
 bash scripts/pair.sh --mode browse --domains example.com --prompt-file /abs/task.md
 
+# A review that checks the code against the running page (Codex stays read-only)
+bash scripts/pair.sh --mode review --cwd /abs/repo --domains localhost:5173 \
+  --prompt-file /abs/review.md
+
 # A Codex code review with structured findings
 bash scripts/codex_review.sh --repo /abs/repo --prompt-file /abs/review.md --label my-change
 ```
@@ -89,19 +150,24 @@ for how to write each prompt and judge the answer.
 
 ## Testing changes
 
-`bash scripts/test_pair.sh` runs offline against fake `codex`, `opencode` and
-`agent-browser` binaries: sandbox flags on every call (resume included), exit codes
-for each way a turn ends, Gemini's prompt on stdin, browse teardown, and the review
-runner's non-git and `--out-dir` paths. It spends no model quota.
+`bash scripts/test_pair.sh` runs offline against fake `codex`, `agy`, `opencode`
+and `agent-browser` binaries: sandbox flags on every call (resume included), exit
+codes for each way a turn ends, the agy tool gate against zsh expansion and secret
+files, `pair-fs` confinement and its git rules, the browser wrapper's grammar and
+local-port pinning, the Codex broker and preflight, and the review runner's
+non-git and `--out-dir` paths. It spends no model quota.
 
 ## Gotchas
 
 - Both engines can read files beyond the ones you name and send what they read to
   their vendor. Redact secrets, and keep answer keys away from them.
-- Browsing with Codex needs network access in its sandbox, so it can reach other
-  hosts with curl; the domain allow-list binds only the browser.
-- Gemini through OpenCode has no web search, and your global OpenCode config
-  (including its MCP servers) still loads.
+- In browse mode Codex has network access in its sandbox, so it can reach other
+  hosts with curl; the domain allow-list binds only the browser. With `--domains`
+  in the other modes it stays read-only and reaches the browser through a broker.
+- Gemini's secret-file protection works by file name (`.env`, key files); a
+  secret pasted into an ordinary file is just text to it.
+- A Vertex AI project's tokens-per-minute quota can run out on a long Gemini
+  review (`429 RESOURCE_EXHAUSTED`); retry later or set `PAIR_AGY_AUTH=key`.
 - Two models agreeing is weak evidence; they share many errors. Where they
   disagree is where to look.
 

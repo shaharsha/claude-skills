@@ -337,6 +337,13 @@ COMMON=(
   # first-class instruction file for the run, so the reviewer is held to the same
   # project rules the author was, with no AGENTS.md needed anywhere.
   -c 'project_doc_fallback_filenames=["CLAUDE.md"]'
+  # The user's config.toml loads MCP servers (Linear, with write tools) and the
+  # ChatGPT app's browser and computer-use plugins, all outside the sandbox; a
+  # reviewer of untrusted code gets none of them. Auth still comes from
+  # CODEX_HOME. The project-doc limit that config raised is restated, or a long
+  # CLAUDE.md (torque's is ~394 KB) is cut at 32 KiB.
+  --ignore-user-config
+  -c 'project_doc_max_bytes=400000'
   -o "$RAW"
 )
 [[ -n "$SCHEMA" ]] && COMMON+=(--output-schema "$SCHEMA")
