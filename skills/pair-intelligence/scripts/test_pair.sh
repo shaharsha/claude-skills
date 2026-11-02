@@ -38,6 +38,7 @@ if args[:1] == ["sandbox"]:
     sys.exit(0)
 n = len([f for f in os.listdir(log) if f.startswith("codex-args")])
 json.dump({"args": args, "cwd": os.getcwd(),
+           "marker": open("MARKER.txt").read() if os.path.exists("MARKER.txt") else "",
            "env_ab": {k: v for k, v in os.environ.items() if k.startswith("AGENT_BROWSER_")}},
           open(f"{log}/codex-args-{n}.json", "w"))
 prompt = sys.stdin.read()
@@ -56,6 +57,7 @@ if mode == "failed":
 if mode == "browse-client":
     r = subprocess.run(["pair-browser", "open", "https://example.com/page"], capture_output=True, text=True)
     open(f"{log}/codex-browse.txt", "w").write(f"rc={r.returncode}\n{r.stdout}{r.stderr}")
+    subprocess.run(["pair-browser", "screenshot", "page.png"], capture_output=True)
     mode = "ok"
 if mode == "review" and out:
     json.dump({"scan_notes": "read a.txt", "overall_verdict": "sound", "overall_explanation": "fine",
@@ -149,6 +151,8 @@ if mode == "denied":
     res.update(response="", denied_actions=[{"action": "read_file", "display_name": "ReadFile"}])
 if mode == "error":
     res.update(status="ERROR", response="")
+if mode == "quota-once" and n == 0:
+    res.update(status="ERROR", conversation_id="conv-q", error="API error (attempt 1): RESOURCE_EXHAUSTED (code 429): TPM quota exhausted.")
 if mode == "quota":
     res.update(status="ERROR", error="API error (attempt 1): RESOURCE_EXHAUSTED (code 429): TPM quota exhausted.")
 if mode == "cut":
@@ -163,6 +167,7 @@ echo "\$* | sock=\${AGENT_BROWSER_SOCKET_DIR:-} allowed=\${AGENT_BROWSER_ALLOWED
 case "\$1" in
   get) if [[ "\${2:-}" == url && -f "$T/ab-url" ]]; then cat "$T/ab-url"; fi ;;
   click) if [[ -f "$T/ab-url-after-click" ]]; then mv "$T/ab-url-after-click" "$T/ab-url"; fi ;;
+  screenshot) [[ -d "\$(dirname "\${!#}")" ]] && : > "\${!#}" ;;
   open) if [[ ! -e "\$AGENT_BROWSER_SOCKET_DIR/pair.pid" ]]; then /bin/sleep 300 & echo \$! > "\$AGENT_BROWSER_SOCKET_DIR/pair.pid"; echo \$! > "$LOG/ab.pid"; fi ;;
 esac
 FAKE
@@ -415,14 +420,16 @@ mkdir -p "$T/empty"
 out="$(FAKE_CODEX=ok bash "$P" --mode browse --domains example.com --cwd "$T/empty" --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
 A="$(last_args codex)"
 RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
-WR="$RUN/bin/pair-browser"
+# Codex reaches the browser through the broker; the grammar wrapper itself is
+# the host-side file, exercised directly below.
+WR="$RUN/host/pair-browser-host"
 SOCK="$(sed -n 's/.*sock=\([^ ]*\).*/\1/p' "$LOG/ab.log" | head -1)"
 check "browse: exit 0"                            '[[ $rc -eq 0 ]]'
 check "browse: subdomains added to the allow-list" 'grep -q "allowed=example.com,\*.example.com" "$LOG/ab.log"'
 check "browse: page text marked untrusted"        'grep -q "boundaries=1" "$LOG/ab.log"'
 check "browse: screenshots and downloads pinned to shots" 'grep -q "shots=$T/empty/shots downloads=$T/empty/shots" "$LOG/ab.log"'
 check "browse: no browser variables exported to codex" '[[ "$(jq_py "$A" "len(d[\"env_ab\"])")" == 0 ]]'
-check "browse: codex gets workspace-write + network" '[[ "$(jq_py "$A" "\" \".join(d[\"args\"])")" == *"-s workspace-write"*"network_access=true"* ]]'
+check "browse: codex stays read-only, one socket open (the broker's)" '[[ "$(jq_py "$A" "\" \".join(d[\"args\"])")" == *"default_permissions=\"pair_browse\""*":read-only"*"/broker.sock"*"network_proxy"* && "$(jq_py "$A" "\" \".join(d[\"args\"])")" != *"workspace-write"* && "$(jq_py "$A" "\" \".join(d[\"args\"])")" != *"network_access=true"* ]]'
 check "browse: browser closed and killed"         'grep -q "^close" "$LOG/ab.log" && ! kill -0 "$(cat "$LOG/ab.pid")" 2>/dev/null'
 check "browse: private socket dir removed"        '[[ -n "$SOCK" && ! -e "$SOCK" ]]'
 check "browse: browser host runs from the empty socket dir" 'grep -Eq "^open https://example.com \| .* cwd=(/private)?$SOCK$" "$LOG/ab.log"'
@@ -529,7 +536,7 @@ check "a local host without a port: exit 64"       '[[ $? -eq 64 ]]'
 check "screenshots inside a git repository: exit 64" '[[ $? -eq 64 ]]'
 reset_log
 out="$(FAKE_CODEX=ok bash "$P" --mode browse --domains localhost:5173,example.com --cwd "$T/empty" --prompt-file "$T/prompt.md" 2>&1)"
-RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"; WR="$RUN/bin/pair-browser"
+RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"; WR="$RUN/host/pair-browser-host"
 SOCK="$(sed -n 's/.*sock=\([^ ]*\).*/\1/p' "$LOG/ab.log" | head -1)"; mkdir -p "$SOCK"
 check "local host: allow-list gets the bare host, start page keeps the port" 'grep -q "^open http://localhost:5173 | .*allowed=localhost,example.com,\*.example.com" "$LOG/ab.log"'
 "$WR" open http://localhost:5173/app >/dev/null 2>&1; r1=$?
@@ -592,6 +599,60 @@ kill $LPID $BPID 2>/dev/null; rm -rf "$BS"
 PF() { /usr/bin/python3 -I "$SCRIPTS/pair_fetch.py" "$@" >/dev/null 2>&1; }
 check "pair-fetch refuses local, private and metadata hosts" '! PF http://localhost:8080/ && ! PF http://127.0.0.1/ && ! PF http://10.0.0.1/ && ! PF http://169.254.169.254/latest/meta-data/ && ! PF "http://[::1]/"'
 check "pair-fetch refuses other schemes and credentials" '! PF file:///etc/passwd && ! PF ftp://example.com/ && ! PF https://user:pw@example.com/ && ! PF --max-chars'
+
+# --- runnable copies ----------------------------------------------------------------
+mkdir -p "$T/rrepo" && git -C "$T/rrepo" init -q && printf 'committed\n' > "$T/rrepo/MARKER.txt"
+git -C "$T/rrepo" add MARKER.txt && git -C "$T/rrepo" -c user.email=t@t -c user.name=t commit -qm init
+printf 'uncommitted\n' > "$T/rrepo/MARKER.txt"; printf 'x\n' > "$T/rrepo/untracked.txt"
+RREPO="$(cd "$T/rrepo" && pwd -P)"
+reset_log
+out="$(cd "$T/rrepo" && FAKE_CODEX=ok bash "$P" --mode review --runnable --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+A="$(last_args codex)"
+check "runnable: exit 0, Codex works in a copy, not the repo" '[[ $rc -eq 0 && "$(jq_py "$A" "d[\"cwd\"]")" != "$RREPO" && "$(jq_py "$A" "d[\"cwd\"]")" == */pair-run.*/repo ]]'
+check "runnable: the copy holds the uncommitted change"   '[[ "$(jq_py "$A" "d[\"marker\"]")" == uncommitted ]]'
+check "runnable: workspace-write with the network off"     '[[ "$(jq_py "$A" "\" \".join(d[\"args\"])")" == *"-s workspace-write"*"network_access=false"* ]]'
+check "runnable: the copy and its worktree are gone after" '[[ ! -e "$(jq_py "$A" "d[\"cwd\"]")" ]] && ! git -C "$T/rrepo" worktree list | grep -q pair-run'
+check "runnable: the real repo is untouched"               '[[ "$(cat "$T/rrepo/MARKER.txt")" == uncommitted && -z "$(git -C "$T/rrepo" stash list)" ]]'
+bash "$P" --engine gemini --runnable --cwd "$T/rrepo" --prompt-file "$T/prompt.md" >/dev/null 2>&1; r1=$?
+bash "$P" --mode ideate --runnable --prompt-file "$T/prompt.md" >/dev/null 2>&1; r2=$?
+(cd "$T/rrepo" && bash "$P" --runnable --name x --prompt-file "$T/prompt.md" >/dev/null 2>&1); r3=$?
+bash "$P" --runnable --cwd "$T/empty" --prompt-file "$T/prompt.md" >/dev/null 2>&1; r4=$?
+check "runnable refuses Gemini, ideate, --name and a non-git dir: exit 64" '[[ $r1 -eq 64 && $r2 -eq 64 && $r3 -eq 64 && $r4 -eq 64 ]]'
+(cd "$T/rrepo" && FAKE_CODEX=ok bash "$P" --mode review --runnable --domains example.com --prompt-file "$T/prompt.md" >/dev/null 2>&1); r5=$?
+check "runnable + browser refuses run files in a temp folder (the copy may write there): exit 64" '[[ $r5 -eq 64 ]]'
+SAFE_OUT="$(mktemp -d "$HOME/.cache/pair-intelligence/test.XXXXXX")"
+reset_log
+out="$(cd "$T/rrepo" && PAIR_OUT="$SAFE_OUT" FAKE_CODEX=ok bash "$P" --mode review --runnable --domains example.com --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+check "runnable + browser: writable copy profile, broker socket, private socket dir" '[[ $rc -eq 0 && "$(jq_py "$(last_args codex)" "\" \".join(d[\"args\"])")" == *":workspace"*"/broker.sock"* && "$(grep -o "sock=[^ ]*" "$LOG/ab.log" | head -1)" == "sock=$HOME/.cache/pair-intelligence/sock/"* ]]'
+rm -rf "$SAFE_OUT"
+
+# --- codex_review.sh: browser and runnable ---------------------------------------------
+reset_log
+mkdir -p "$T/rev-out"
+out="$(FAKE_CODEX=browse-client bash "$SCRIPTS/codex_review.sh" --repo "$T/rrepo" --prompt-file "$T/prompt.md" --label web --domains example.com --out-dir "$T/rev-out" 2>&1)"; rc=$?
+A="$(last_args codex)"; MD="$(sed -n 's/^REVIEW_MD=//p' <<<"$out")"; PROV="${MD%.md}.provenance"
+check "codex_review --domains: exit 0, broker profile, no read-only sandbox_mode" '[[ $rc -eq 0 && "$(jq_py "$A" "\" \".join(d[\"args\"])")" == *"pair_browse"*"/broker.sock"* && "$(jq_py "$A" "\" \".join(d[\"args\"])")" != *"sandbox_mode"* ]]'
+check "codex_review --domains: the model reached the browser" 'grep -q "^rc=0" "$LOG/codex-browse.txt" && grep -q "^open https://example.com/page |" "$LOG/ab.log"'
+check "codex_review --domains: screenshots kept beside the review" '[[ -f "${MD%.md}.shots/page.png" && "$out" == *"SHOTS=${MD%.md}.shots"* ]]'
+check "codex_review --domains: provenance names the browser" 'grep -q "^browser_domains=example.com$" "$PROV" && grep -q "^runnable=no$" "$PROV"'
+check "codex_review --domains: the prompt hash is the caller's prompt" 'grep -q "^prompt_sha256=$(shasum -a 256 "$T/prompt.md" | cut -d" " -f1)$" "$PROV"'
+check "codex_review --domains: its browser folder is removed" '[[ -z "$(ls -d "$HOME"/.cache/pair-intelligence/review.* 2>/dev/null)" ]]'
+reset_log
+out="$(FAKE_CODEX=review bash "$SCRIPTS/codex_review.sh" --repo "$T/rrepo" --prompt-file "$T/prompt.md" --label run --runnable --out-dir "$T/rev-out" 2>&1)"; rc=$?
+A="$(last_args codex)"; PROV="$(sed -n 's/^REVIEW_MD=//p' <<<"$out")"; PROV="${PROV%.md}.provenance"
+check "codex_review --runnable: in a copy with the change, writable, network off" '[[ $rc -eq 0 && "$(jq_py "$A" "d[\"marker\"]")" == uncommitted && "$(jq_py "$A" "\" \".join(d[\"args\"])")" == *"-s workspace-write"*"network_access=false"* && "$(jq_py "$A" "\" \".join(d[\"args\"])")" == *"--ephemeral"* ]]'
+check "codex_review --runnable: provenance says so; the copy is gone" 'grep -q "^runnable=yes$" "$PROV" && grep -q "disposable copy" "$PROV" && ! git -C "$T/rrepo" worktree list | grep -q pair-run'
+bash "$SCRIPTS/codex_review.sh" --repo "$T/rrepo" --prompt-file "$T/prompt.md" --runnable --resume 11111111-2222-3333-4444-555555555555 >/dev/null 2>&1
+check "codex_review --runnable --resume: exit 64" '[[ $? -eq 64 ]]'
+
+# --- agy: one retry on a Vertex 429 -----------------------------------------------------
+reset_log
+cp "$T/vhome/.config/gcloud/adc-agy-proj-x.json" "$T/adc-q.json"
+out="$(cd "$T/arepo" && PAIR_AGY_AUTH=vertex PAIR_AGY_ADC="$T/adc-q.json" PAIR_AGY_RETRY_WAIT=0 FAKE_AGY=quota-once bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+check "vertex 429: one retry continues the same conversation, then ok" '[[ $rc -eq 0 && "$out" == *"STATUS=ok"* && "$(jq_py "$(last_args agy)" "\" \".join(d[\"args\"])")" == *"--conversation conv-q"* ]]'
+reset_log
+out="$(cd "$T/arepo" && PAIR_AGY_AUTH=key PAIR_AGY_RETRY_WAIT=0 FAKE_AGY=quota-once bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+check "429 on the API key: no retry, reported"  '[[ $rc -eq 71 && $(ls "$LOG"/agy-args-*.json | wc -l) -eq 1 ]]'
 
 # --- pair.sh: argument checks -----------------------------------------------------
 bash "$P" --help >/dev/null 2>&1;                                         check "--help exits 0" '[[ $? -eq 0 ]]'

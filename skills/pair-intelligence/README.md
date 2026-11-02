@@ -115,8 +115,11 @@ npm install -g agent-browser
 agent-browser install          # downloads its browser
 ```
 
-**Check it**: `bash scripts/test_pair.sh` runs offline; a missing CLI or
-credential makes `pair.sh` exit 69 with a message naming what to install or set.
+**Check it**: `bash scripts/test_pair.sh` runs offline; `bash scripts/pair.sh
+--selftest` checks the live CLIs (a few cents: two short Gemini turns and one
+short Codex turn), worth rerunning after an agy or codex upgrade. A missing CLI
+or credential makes `pair.sh` exit 69 with a message naming what to install or
+set.
 
 ## Quick start
 
@@ -137,8 +140,12 @@ bash scripts/pair.sh --mode ideate --prompt-file /abs/round2.md --resume names
 bash scripts/pair.sh --mode browse --domains example.com --prompt-file /abs/task.md
 
 # A review that checks the code against the running page (Codex stays read-only)
-bash scripts/pair.sh --mode review --cwd /abs/repo --domains localhost:5173 \
-  --prompt-file /abs/review.md
+bash scripts/codex_review.sh --repo /abs/repo --domains localhost:5173 \
+  --prompt-file /abs/review.md --label ui-change
+
+# A review where Codex may run the tests, in a disposable copy with no network
+bash scripts/codex_review.sh --repo /abs/repo --runnable \
+  --prompt-file /abs/review.md --label with-tests
 
 # A Codex code review with structured findings
 bash scripts/codex_review.sh --repo /abs/repo --prompt-file /abs/review.md --label my-change
@@ -161,9 +168,9 @@ non-git and `--out-dir` paths. It spends no model quota.
 
 - Both engines can read files beyond the ones you name and send what they read to
   their vendor. Redact secrets, and keep answer keys away from them.
-- In browse mode Codex has network access in its sandbox, so it can reach other
-  hosts with curl; the domain allow-list binds only the browser. With `--domains`
-  in the other modes it stays read-only and reaches the browser through a broker.
+- Codex reaches the browser through a broker socket and otherwise has no network,
+  in every mode. With `--runnable` it can run tests in a disposable copy of the
+  repo, still without network, so tests that download anything fail.
 - Gemini's secret-file protection works by file name (`.env`, key files); a
   secret pasted into an ordinary file is just text to it.
 - A Vertex AI project's tokens-per-minute quota can run out on a long Gemini

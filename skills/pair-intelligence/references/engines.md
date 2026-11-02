@@ -20,15 +20,24 @@ Tested on codex-cli 0.165.0, signed in with a ChatGPT plan.
   sandbox. A reviewer of untrusted code gets none of them. Auth still comes from
   `~/.codex`; the script restates `project_doc_max_bytes=400000`, which that
   config raised so torque's ~394 KB CLAUDE.md is not cut at 32 KiB.
-- **A live browser outside browse** (`--domains` in review, consult, ideate,
-  research) swaps the sandbox flags for a permission profile:
-  `default_permissions="pair_browse"` extending `:read-only`, with
+- **A live browser** (`--domains`, any mode, browse included) swaps the sandbox
+  flags for a permission profile: `default_permissions="pair_browse"` extending
+  `:read-only` (`:workspace` with `--runnable`), with
   `network.enabled=true`, `--enable network_proxy` (no domain rules, so the proxy
   refuses every host) and one `network.unix_sockets` entry, the broker's. Tested
   with `codex sandbox`: the broker answers; the internet gets 403 at the proxy;
   other sockets, the repo and `/tmp` refuse; reads still work. `network_proxy` is
   marked experimental, so `pair_preflight.py` re-checks all four inside the same
   profile before every such run, and Codex does not start if one fails (exit 71).
+- **`--runnable`** (review, consult; `codex_review.sh` too): Codex runs in a
+  detached git worktree of the repo with the uncommitted changes applied and the
+  untracked files copied (`pair_scratch.sh`), as `workspace-write` with
+  `network_access=false`, and the copy is removed after the run. `:workspace`
+  also lets it write to `/tmp` and `$TMPDIR` (measured), so with a browser too,
+  nothing the browser host runs or writes may live there: its socket folder sits
+  in `~/.cache/pair-intelligence/sock`, and run files under a temp `PAIR_OUT` are
+  refused (exit 64), or Codex could rewrite the host wrapper or plant a link
+  where a screenshot lands.
 - **Success** is a `turn.completed` event with a non-empty answer file. Codex exits
   0 when its tools failed, so the exit code alone means nothing.
 - **Sessions:** `codex exec resume <id>` continues one; the script maps your
@@ -68,6 +77,7 @@ Traps, each seen in testing:
 - **It cannot run code read-only on macOS:** `python3` dies on its temp and cache
   directories (`couldn't create cache file ... Operation not permitted`), and the
   turn still ends `ok`. Its runtime claims are deductions; it usually says so.
+  Use `--runnable` when the review should run the tests.
 
 By hand, read-only:
 
@@ -94,7 +104,8 @@ Tested on the Antigravity CLI (`agy`) 1.4.12 with a Gemini API key, 2026-11-02.
     A project's tokens-per-minute quota can run out on a long Argon review
     (seen: `429 RESOURCE_EXHAUSTED` after 10 minutes, answer written but the
     turn marked ERROR); the script prints agy's error with a hint: retry later,
-    or `PAIR_AGY_AUTH=key`;
+    or `PAIR_AGY_AUTH=key`. On the Vertex route the script waits a minute and
+    continues the same conversation once (`PAIR_AGY_RETRY_WAIT` sets the wait);
   - `key`: `"modelProvider": "gemini"` in `--settings` and the key in
     `GEMINI_API_KEY` (from the environment, else OpenCode's `auth.json`). Never
     combine the two: `modelProvider` switches a Vertex run back to the key.
