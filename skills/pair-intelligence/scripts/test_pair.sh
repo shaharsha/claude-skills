@@ -151,14 +151,14 @@ for name, targs in json.loads(os.environ.get("FAKE_AGY_TOOLS", "[]")):
     with open(f"{log}/agy-tools-{n}.jsonl", "a") as f:
         f.write(json.dumps({"tool": name, "decision": d["decision"], "output": info.get("output", "")}) + "\n")
     ev(event="step_update", step_update={"step_type": "tool", "tool_name": name, "state": state, "tool_info": info})
-if mode == "nores":
+if mode == "nores" or (mode == "quota-nores" and n == 1):
     sys.exit(0)
 res = {"conversation_id": "conv-fake-1", "status": "SUCCESS", "response": "agy answer", "usage": {}}
 if mode == "denied":
     res.update(response="", denied_actions=[{"action": "read_file", "display_name": "ReadFile"}])
 if mode == "error":
     res.update(status="ERROR", response="")
-if mode == "quota-once" and n == 0:
+if mode in ("quota-once", "quota-nores") and n == 0:
     res.update(status="ERROR", conversation_id="conv-q", error="API error (attempt 1): RESOURCE_EXHAUSTED (code 429): TPM quota exhausted.")
 if mode == "quota-empty":
     if n == 0:
@@ -309,15 +309,21 @@ check "agy resume: --conversation, backend inherited" '[[ $rc -eq 0 && "$(jq_py 
 out="$(cd "$T/arepo" && FAKE_AGY=ok bash "$P" --engine gemini --backend opencode --prompt-file "$T/prompt.md" --resume a1 2>&1)"; rc=$?
 check "agy resume refuses another backend: exit 64" '[[ $rc -eq 64 ]]'
 reset_log
-out="$(cd "$T/arepo" && FAKE_AGY=ok FAKE_AGY_TOOLS='[["search_web",{"query":"q"}]]' bash "$P" --engine gemini --backend agy --mode review --prompt-file "$T/prompt.md" 2>&1)"
+t0=$(date +%s)
+out="$(cd "$T/arepo" && FAKE_AGY=ok FAKE_AGY_TOOLS='[["search_web",{"query":"q"}]]' bash "$P" --engine gemini --backend agy --mode review --web-budget 17 --prompt-file "$T/prompt.md" 2>&1)"
+t1=$(date +%s)
 check "agy review: web search refused"             '[[ "$(dec)" == deny ]]'
 RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
-check "agy review: told its time, not a web budget (web is off)" 'grep -q "You have about 20 minutes for this turn. After about 14 minutes every tool call is refused" "$LOG/agy-stdin-0.txt" && ! grep -q "Web searches and page reads are limited" "$LOG/agy-stdin-0.txt"'
-check "agy: policy stops tools at 70% of the timeout" '[[ $(( $(jq_py "$RUN/agy-policy.json" "d[\"tools_until\"]") - $(stat -f %m "$RUN/prompt.md") )) -ge 835 && $(( $(jq_py "$RUN/agy-policy.json" "d[\"tools_until\"]") - $(stat -f %m "$RUN/prompt.md") )) -le 842 ]]'
+# The prompt agy got (its stdin is one stream-json line), checked for the numbers
+# the model is told, not the sentences around them.
+agy_prompt() { python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).readline())["message"]["content"])' "$1"; }
+check "agy review: told its 20 minutes and the 14-minute tool cutoff; with web off, not its web budget (17)" 'agy_prompt "$LOG/agy-stdin-0.txt" | grep -qE "(^|[^0-9])20 minutes" && agy_prompt "$LOG/agy-stdin-0.txt" | grep -qE "(^|[^0-9])14 minutes" && ! agy_prompt "$LOG/agy-stdin-0.txt" | grep -qw 17'
+until_s="$(jq_py "$RUN/agy-policy.json" "d[\"tools_until\"]")"
+check "agy: policy stops tools at 70% of the 1200 s timeout" '[[ $until_s -ge $((t0 + 840)) && $until_s -le $((t1 + 840)) ]]'
 reset_log
 out="$(cd "$T/arepo" && FAKE_AGY=ok FAKE_AGY_TOOLS='[["search_web",{"query":"a"}],["search_web",{"query":"b"}],["search_web",{"query":"c"}]]' bash "$P" --engine gemini --backend agy --web-budget 2 --prompt-file "$T/prompt.md" 2>&1)"
 RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
-check "agy --web-budget 2: two searches, the third refused; the prompt says 2" '[[ "$(dec)" == "auto_approve auto_approve deny" && "$(jq_py "$RUN/agy-policy.json" "d[\"web_budget\"]")" == 2 ]] && grep -q "limited to 2 in all" "$LOG/agy-stdin-0.txt"'
+check "agy --web-budget 2: two searches, the third refused; the prompt says 2" '[[ "$(dec)" == "auto_approve auto_approve deny" && "$(jq_py "$RUN/agy-policy.json" "d[\"web_budget\"]")" == 2 ]] && agy_prompt "$LOG/agy-stdin-0.txt" | grep -i web | grep -qw 2'
 out="$(FAKE_AGY=ok bash "$P" --engine gemini --backend agy --mode research --prompt-file "$T/prompt.md" 2>&1)"
 RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
 check "agy research: web budget 40 by default"     '[[ "$(jq_py "$RUN/agy-policy.json" "d[\"web_budget\"]")" == 40 ]]'
@@ -741,6 +747,9 @@ reset_log
 out="$(cd "$T/arepo" && "${VX[@]}" PAIR_AGY_RETRY_WAIT=0 FAKE_AGY=quota-empty bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
 RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
 check "vertex 429 then an empty retry: STATUS=empty, not the cut-off first answer" '[[ $rc -eq 70 && ! -s "$RUN/answer.md" ]]'
+reset_log
+out="$(cd "$T/arepo" && "${VX[@]}" PAIR_AGY_RETRY_WAIT=0 FAKE_AGY=quota-nores bash "$P" --engine gemini --backend agy --timeout 300 --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+check "vertex 429, then a retry with no result: judged by the retry (no answer), not as another quota failure" '[[ $rc -eq 70 && "$out" == *"STATUS=empty"* && $(ls "$LOG"/agy-args-*.json | wc -l) -eq 2 ]]'
 reset_log
 out="$(cd "$T/arepo" && "${VX[@]}" PAIR_AGY_RETRY_WAIT=0 FAKE_AGY=quota-once bash "$P" --engine gemini --backend agy --timeout 100 --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
 check "vertex 429 with too little time left: no retry, exit 75 saying why"  '[[ $rc -eq 75 && $(ls "$LOG"/agy-args-*.json | wc -l) -eq 1 && "$out" == *"too little of the time limit was left"* ]]'

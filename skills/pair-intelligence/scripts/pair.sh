@@ -530,6 +530,7 @@ run_limited() {
 # --- run ------------------------------------------------------------------------
 START="$(date +%s)"
 RETRIED=0
+RETRY_FROM=0
 set +e
 if [[ "$ENGINE" == "codex" ]]; then
   if [[ $USE_BROKER -eq 1 ]]; then
@@ -663,6 +664,9 @@ PY
     python3 -c 'import json; print(json.dumps({"event": "user", "message": {"content": "Your last turn was cut off by a rate limit. Finish the task and give your complete final answer."}}))' \
       > "$RUN_DIR/agy-retry.jsonl"
     [[ -n "$RESUME_ID" ]] || ARGS+=(--conversation "$QUOTA_CONV")
+    # The outcome is the retry's alone: a retry that ends with no result must not
+    # be read as the first attempt's quota error again.
+    RETRY_FROM="$(python3 -c 'import sys; print(len(open(sys.argv[1], errors="replace").read().splitlines()))' "$EVENTS")"
     run_agy "$RUN_DIR/agy-retry.jsonl"
     RC=$?
   fi
@@ -716,14 +720,17 @@ SECS=$(( $(date +%s) - START ))
 STATUS="failed"; SESSION_ID="-"
 # Written to a file, not read through <(...): bash mis-parses a heredoc this long
 # inside a process substitution.
-python3 - "${BACKEND:-$ENGINE}" "$EVENTS" "$ANSWER" "$RC" "$RUN_DIR/tools.txt" "$ERRLOG" > "$RUN_DIR/.status" <<'PY'
+python3 - "${BACKEND:-$ENGINE}" "$EVENTS" "$ANSWER" "$RC" "$RUN_DIR/tools.txt" "$ERRLOG" "$RETRY_FROM" > "$RUN_DIR/.status" <<'PY'
 import json, sys, pathlib
 engine, events, answer, rc = sys.argv[1], pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3]), int(sys.argv[4])
 errlog = pathlib.Path(sys.argv[6])
-evs = []
-for line in events.read_text(errors="replace").splitlines() if events.exists() else []:
+retry_from = int(sys.argv[7])   # agy: events before this line belong to the attempt before a retry
+evs, before_retry = [], set()
+for i, line in enumerate(events.read_text(errors="replace").splitlines() if events.exists() else []):
     try: evs.append(json.loads(line))
-    except ValueError: pass
+    except ValueError: continue
+    if i < retry_from:
+        before_retry.add(len(evs) - 1)
 sid, failed, completed, denied, quota = "", False, False, False, False
 if engine == "codex":
     for e in evs:
@@ -737,7 +744,7 @@ elif engine == "agy":
     # only in denied_actions. tools.txt lists every tool call and the gate's
     # verdict, so the caller can see what Gemini read and searched.
     lines = []
-    for e in evs:
+    for n, e in enumerate(evs):
         if e.get("event") == "step_update":
             s = e.get("step_update") or {}
             if s.get("step_type") == "tool" and s.get("state") in ("DONE", "ERROR"):
@@ -750,22 +757,24 @@ elif engine == "agy":
         elif e.get("event") == "result":
             r = e.get("result") or {}
             sid = r.get("conversation_id", "") or sid
-            completed = r.get("status") == "SUCCESS"
-            failed = not completed
-            denied = bool(r.get("denied_actions"))
-            quota = failed and "RESOURCE_EXHAUSTED" in (r.get("error") or "")
-            # The answer is the LAST result's: after a retry, an empty retry must
-            # not pass off the cut-off first turn as the answer.
-            if (r.get("response") or "").strip():
-                answer.write_text(r["response"].strip() + "\n")
-            elif answer.exists():
-                answer.unlink()
             if r.get("error"):
                 # agy keeps the reason inside the result, not on stderr.
                 hint = (" (Vertex AI quota: retry later, or PAIR_AGY_AUTH=key)"
                         if "RESOURCE_EXHAUSTED" in r["error"] else "")
                 with open(sys.argv[6], "a") as f:
                     f.write("agy: %s%s\n" % (r["error"], hint))
+            # After a retry the outcome and the answer are the retry's: neither the
+            # cut-off first turn's text nor its error may stand in for them.
+            if n in before_retry:
+                continue
+            completed = r.get("status") == "SUCCESS"
+            failed = not completed
+            denied = bool(r.get("denied_actions"))
+            quota = failed and "RESOURCE_EXHAUSTED" in (r.get("error") or "")
+            if (r.get("response") or "").strip():
+                answer.write_text(r["response"].strip() + "\n")
+            elif answer.exists():
+                answer.unlink()
     pathlib.Path(sys.argv[5]).write_text("\n".join(lines) + ("\n" if lines else ""))
 else:
     texts = []
@@ -866,7 +875,13 @@ case "$STATUS" in
     HAVE="there is no answer"; [[ -s "$ANSWER" ]] && HAVE="$ANSWER holds what Gemini wrote before that, possibly cut short"
     echo "the Gemini quota ran out (429 RESOURCE_EXHAUSTED) and $WHY; $HAVE. Wait a few minutes and rerun; a narrower prompt or a lower --web-budget sends fewer tokens per minute. See $ERRLOG" >&2
     exit 75 ;;
-  empty)   echo "no answer; see $ERRLOG and $EVENTS" >&2; exit 70 ;;
+  empty)
+    if [[ $RETRIED -eq 1 ]]; then
+      echo "no answer: the one retry after the Vertex AI quota error ended without one; see $ERRLOG and $EVENTS" >&2
+    else
+      echo "no answer; see $ERRLOG and $EVENTS" >&2
+    fi
+    exit 70 ;;
   incomplete) echo "the turn ended without a final step; $ANSWER holds only what arrived" >&2; exit 71 ;;
   denied)  echo "agy ended the turn on a permission it could not ask for; see $RUN_DIR/tools.txt and $ERRLOG" >&2; exit 71 ;;
   *)       echo "the turn failed; see $ERRLOG and $EVENTS" >&2; tail -5 "$ERRLOG" >&2; exit 71 ;;

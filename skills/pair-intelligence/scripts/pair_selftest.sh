@@ -135,12 +135,12 @@ print(ok, no)' "$run/gate.log" 2>/dev/null || echo "0 0")"
   ok_n="${counts% *}"; no_n="${counts#* }"
   if [[ "$ok_n" -gt 2 ]]; then
     fail "gemini web budget: $ok_n searches approved against a budget of 2"
+  elif [[ "$st" != ok ]]; then
+    fail "gemini web budget: the run ended $st, not with an answer, after $ok_n approved and $no_n refused searches ($(tail -2 <<<"$out" | tr '\n' ' '))"
   elif [[ "$no_n" -eq 0 ]]; then
     warn "gemini web budget: the model stopped at $ok_n searches, so no refusal was tested"
-  elif [[ "$st" == ok ]]; then
-    pass "gemini web budget: 2 searches approved, $no_n refused for the budget, and the model still answered"
   else
-    fail "gemini web budget: after the refusal the run ended $st, not with an answer ($(tail -2 <<<"$out" | tr '\n' ' '))"
+    pass "gemini web budget: 2 searches approved, $no_n refused for the budget, and the model still answered"
   fi
 
   # --timeout 25 gives agy a 15 s print timeout and the outer limit 25 s, so agy's
