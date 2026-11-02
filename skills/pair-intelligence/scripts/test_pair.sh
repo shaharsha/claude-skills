@@ -376,11 +376,15 @@ check "pair-fs git: no :0:path, -L file, --follow, -U leak, or blob id" '! FS gi
 git -C "$AREPO" -c user.email=t@t -c user.name=t tag -a saved-env -m x "$(git -C "$AREPO" rev-parse HEAD:.env)"
 check "pair-fs git: no detached values, no tag to a blob" '! FS git show --pretty HEAD:.env >/dev/null 2>&1 && ! FS git show -U HEAD:.env >/dev/null 2>&1 && ! FS git show --unified HEAD:.env >/dev/null 2>&1 && ! FS git log --format %H >/dev/null 2>&1 && ! FS git show saved-env 2>/dev/null | grep -q SECRET123 && FS git log -U3 -n1 >/dev/null 2>&1'
 git -C "$AREPO" tag -d saved-env >/dev/null
+git -C "$AREPO" -c user.email=t@t -c user.name=t commit -q --allow-empty -m mark
+mv "$AREPO/a.txt" "$AREPO/a.txt.keep"; printf 'other\n' > "$AREPO/b-other.txt"; ln -s b-other.txt "$AREPO/a.txt"
+check "pair-fs git cat reads history by path, not through a current symlink" '[[ "$(FS git cat HEAD a.txt)" == a && "$(FS git cat HEAD "$AREPO/a.txt")" == a ]]'
+rm -f "$AREPO/a.txt" "$AREPO/b-other.txt"; mv "$AREPO/a.txt.keep" "$AREPO/a.txt"
 check "pair-fs git cat reads a file at a revision, never a secret" '[[ "$(FS git cat HEAD a.txt)" == a ]] && ! FS git cat HEAD .env >/dev/null 2>&1 && ! FS git cat HEAD ../x >/dev/null 2>&1'
 printf 'TOKEN=SECRET77\n' > "$AREPO/.ENV"; printf 'x = "SECRET77 in code"\n' > "$AREPO/code.py"
 check "pair-fs grep (ripgrep and the Python fallback) skips secret names in any case" '[[ "$(FS grep SECRET77)" == *code.py* && "$(FS grep SECRET77)" != *.ENV* && "$(PAIR_FS_FORCE_PY_GREP=1 FS grep SECRET77)" == *code.py* && "$(PAIR_FS_FORCE_PY_GREP=1 FS grep SECRET77)" != *.ENV* ]]'
-printf 'KEYDATA77\n' > "$AREPO/id_rsa.backup"
-check "pair-fs grep (both backends) and the gate skip id_rsa.backup" '[[ "$(FS grep KEYDATA77)" == "no matches" && "$(PAIR_FS_FORCE_PY_GREP=1 FS grep KEYDATA77)" == "no matches" ]]'
+printf 'KEYDATA77\n' > "$AREPO/id_rsa.backup"; printf 'KEYDATA77\n' > "$AREPO/id_rsa~"
+check "pair-fs grep (both backends) skips id_rsa.backup and id_rsa~" '[[ "$(FS grep KEYDATA77)" == "no matches" && "$(PAIR_FS_FORCE_PY_GREP=1 FS grep KEYDATA77)" == "no matches" ]]'
 rm -f "$AREPO/.ENV" "$AREPO/code.py"
 check "pair_url: dot-only and empty hosts refused" '! /usr/bin/python3 -I "$SCRIPTS/pair_url.py" check "http://./" 2>/dev/null && ! /usr/bin/python3 -I "$SCRIPTS/pair_url.py" domain "..." >/dev/null 2>&1'
 check "pair-fs refuses signature placeholders"     '! FS git log "--format=%G?" >/dev/null 2>&1'
@@ -399,7 +403,7 @@ id")" == deny ]]'
 check "gate: .env inside the root refused"         '[[ "$(G "$T/pol.json" read_file Path "$AREPO/.env")" == deny ]]'
 check "gate: zsh glob qualifier, glob, brace, tilde, =cmd refused" '[[ "$(G "$T/pol.json" run_command CommandLine "pair-fs ls /tmp/x*(e:'"'"'touch y'"'"':)")" == deny && "$(G "$T/pol.json" run_command CommandLine "pair-fs ls /*")" == deny && "$(G "$T/pol.json" run_command CommandLine "pair-fs ls {a,b}")" == deny && "$(G "$T/pol.json" run_command CommandLine "pair-fs ls ~")" == deny && "$(G "$T/pol.json" run_command CommandLine "pair-fs ls =ls")" == deny ]]'
 check "gate: a quoted regex passes"                '[[ "$(G "$T/pol.json" run_command CommandLine "pair-fs grep '"'"'def (.*)\$'"'"' .")" == auto_approve && "$(G "$T/pol.json" run_command CommandLine "pair-fs grep \"a (b) [c]*\" .")" == auto_approve ]]'
-check "gate: id_rsa.backup refused"               '[[ "$(G "$T/pol.json" read_file Path "$AREPO/id_rsa.backup")" == deny ]]'
+check "gate: id_rsa.backup and id_rsa~ refused"   '[[ "$(G "$T/pol.json" read_file Path "$AREPO/id_rsa.backup")" == deny && "$(G "$T/pol.json" read_file Path "$AREPO/id_rsa~")" == deny ]]'
 check "gate: a link to .env and .ENV refused"      '[[ "$(G "$T/pol.json" read_file Path "$AREPO/innocent.txt")" == deny && "$(G "$T/pol.json" read_file Path "$AREPO/.ENV")" == deny ]]'
 check "gate: read through a symlink out of the root refused" '[[ "$(G "$T/pol.json" read_file Path "$AREPO/etclink/hosts")" == deny ]]'
 check "gate: relative read paths refused"          '[[ "$(G "$T/pol.json" read_file Path "notes.txt")" == deny ]]'

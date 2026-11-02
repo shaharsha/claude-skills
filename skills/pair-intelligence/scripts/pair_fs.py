@@ -17,7 +17,8 @@ import shutil
 import subprocess
 import sys
 
-ROOTS = [os.path.realpath(r) for r in json.loads(os.environ.get("PAIR_FS_ROOTS") or "[]")]
+RAW_ROOTS = [os.path.normpath(r) for r in json.loads(os.environ.get("PAIR_FS_ROOTS") or "[]")]
+ROOTS = [os.path.realpath(r) for r in RAW_ROOTS]
 MAX_LINES = 400
 MAX_BYTES = 60000
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache",
@@ -26,7 +27,7 @@ SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cach
 # patches. The model's file reader (agy_gate.py) refuses the same names.
 SECRET_GLOBS = [".env", ".env.*", "*.pem", "*.key", "*.p12", "*.pfx", "id_rsa*", "id_ed25519*",
                 "id_ecdsa*", "id_dsa*", ".netrc", ".npmrc", ".pypirc"]
-SECRET = re.compile(r"^(\.env(\..+)?|.+\.(pem|key|p12|pfx)|id_(rsa|ed25519|ecdsa|dsa)([._-].*)?|\.netrc|\.npmrc|\.pypirc)$",
+SECRET = re.compile(r"^(\.env(\..+)?|.+\.(pem|key|p12|pfx)|id_(rsa|ed25519|ecdsa|dsa).*|\.netrc|\.npmrc|\.pypirc)$",
                     re.IGNORECASE)
 SECRET_OK = re.compile(r"^\.env\.(example|sample|template|dist)$", re.IGNORECASE)
 
@@ -326,9 +327,16 @@ def cmd_git_cat(git, top, rest):
     rc, kind, _ = run([git, "-C", top, "cat-file", "-t", rev + "^{}"], top, GIT_ENV)
     if rc != 0 or kind.strip() != "commit":
         die("%s is not a commit" % rev)
-    # realpath, like the roots: the harness may name the project by a path
-    # that runs through a symlink (/tmp, /var/folders on macOS).
-    full = os.path.realpath(path if os.path.isabs(path) else os.path.join(top, path))
+    # A path in history, so mapped by text, never through the working tree's
+    # symlinks (a file that became a link would read another file). The
+    # harness names the project by its unresolved path (/tmp, /var/folders on
+    # macOS), so that prefix is swapped for the resolved root first.
+    if os.path.isabs(path):
+        for raw, real in zip(RAW_ROOTS, ROOTS):
+            if path == raw or path.startswith(raw + os.sep):
+                path = real + path[len(raw):]
+                break
+    full = os.path.normpath(path if os.path.isabs(path) else os.path.join(top, path))
     if not inside(full, top) or not any(inside(full, r) for r in ROOTS):
         die("%s is outside the git repository %s or the folders you may read" % (path, top))
     rel = os.path.relpath(full, top)
