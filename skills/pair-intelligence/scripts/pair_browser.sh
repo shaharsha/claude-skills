@@ -259,7 +259,8 @@ WRAPPER
 
   [[ $USE_BROKER -eq 1 ]] || return 0
   BROKER_SOCK="$SOCK/broker.sock"
-  python3 -I "$SKILL_DIR/scripts/pair_broker.py" "$BROKER_SOCK" "$WRAP" "$SOCK" > "$PB_DIR/broker.log" 2>&1 &
+  python3 -I "$SKILL_DIR/scripts/pair_broker.py" "$BROKER_SOCK" "$WRAP" "$SOCK" "$PB_DIR/browser-commands.jsonl" \
+    > "$PB_DIR/broker.log" 2>&1 &
   BROKER_PID=$!
   local _
   for _ in $(seq 1 50); do [[ -S "$BROKER_SOCK" ]] && break; sleep 0.1; done

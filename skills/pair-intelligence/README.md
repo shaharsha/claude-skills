@@ -106,7 +106,9 @@ json.dump(adc, open(d + "/adc-agy-MY_PROJECT.json", "w"))'
 
 With exactly one `adc-agy-*.json` present, Gemini runs on Vertex AI (a run's
 `meta.json` records `auth: vertex:<project>`); `PAIR_AGY_AUTH=key` forces the API
-key. If agy reports `Reauthentication failed`, log in again and redo the copy.
+key. Google ends this login on a schedule; when it has, `pair.sh` falls back to
+the API key and prints the fix: `gcloud auth application-default login`, then
+redo the copy.
 
 **A live browser**
 

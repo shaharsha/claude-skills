@@ -248,6 +248,39 @@ elif [[ "$BACKEND" == "agy" ]]; then
 try: print(json.load(open(sys.argv[1])).get("quota_project_id", ""))
 except Exception: pass' "$AGY_ADC" 2>/dev/null)"
     [[ -n "$AGY_PROJECT" ]] || { echo "$AGY_ADC has no quota_project_id, so agy would not know which project to bill" >&2; exit 69; }
+    # Google ends these logins on a schedule (invalid_rapt), and agy then says
+    # "Run 'agy' to log in", pointing at the one login this skill must not use.
+    # One token refresh up front tells it apart; a network hiccup is not a verdict.
+    ADC_STATE="$(PAIR_AGY_ADC_CHECK="${PAIR_AGY_ADC_CHECK:-}" python3 - "$AGY_ADC" <<'PY'
+import json, os, sys, urllib.error, urllib.parse, urllib.request
+mode = os.environ.get("PAIR_AGY_ADC_CHECK", "")   # skip | expired: for the offline tests
+if mode in ("skip", "expired"):
+    print({"skip": "ok", "expired": "expired"}[mode]); sys.exit()
+try:
+    d = json.load(open(sys.argv[1]))
+    if d.get("type") != "authorized_user":
+        print("ok"); sys.exit()
+    data = urllib.parse.urlencode({"client_id": d["client_id"], "client_secret": d["client_secret"],
+                                   "refresh_token": d["refresh_token"], "grant_type": "refresh_token"}).encode()
+    urllib.request.urlopen("https://oauth2.googleapis.com/token", data=data, timeout=10)
+    print("ok")
+except urllib.error.HTTPError as e:
+    print("expired" if e.code in (400, 401) else "unknown")
+except Exception:
+    print("unknown")
+PY
+)"
+    if [[ "$ADC_STATE" == expired ]]; then
+      HINT="the Vertex AI login in $AGY_ADC has expired: run 'gcloud auth application-default login', then refresh the copy (~/.local/bin/agy-vertex --refresh-adc on this Mac)"
+      if [[ "${PAIR_AGY_AUTH:-auto}" == vertex ]]; then
+        echo "$HINT" >&2; exit 69
+      fi
+      echo "pair.sh: $HINT; this run uses the Gemini API key instead" >&2
+      AGY_AUTH=key; AGY_PROJECT=""
+    fi
+  fi
+  if [[ "$AGY_AUTH" == vertex ]]; then
+    :
   else
     GEMINI_KEY="${GEMINI_API_KEY:-}"
     [[ -n "$GEMINI_KEY" ]] || GEMINI_KEY="$(python3 -c 'import json,os

@@ -10,7 +10,7 @@ starts this broker outside the sandbox; the model's `pair-browser` is a thin
 client that sends its arguments here, and the broker runs the generated
 grammar wrapper (pair-browser-host), which pins every browser setting.
 
-usage: pair_broker.py <socket path> <wrapper> <workdir>
+usage: pair_broker.py <socket path> <wrapper> <workdir> [command log]
 Limits: one command at a time, 90 s each, 300 per run, 50k characters of output.
 """
 import json
@@ -27,6 +27,9 @@ TIMEOUT = 90
 
 def main():
     sock_path, wrapper, workdir = sys.argv[1:4]
+    # One JSON line per command, outside the sandbox's reach: the run's record of
+    # what the model did in the browser.
+    log_path = sys.argv[4] if len(sys.argv) > 4 else None
     srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     old = os.umask(0o177)
     srv.bind(sock_path)
@@ -69,6 +72,13 @@ def main():
                         reply = {"rc": 124, "out": "", "err": "pair-browser: the command took over %ds\n" % TIMEOUT}
                     except (OSError, ValueError) as e:
                         reply = {"rc": 2, "out": "", "err": "pair-browser: the wrapper did not run (%s)\n" % e}
+            if log_path:
+                try:
+                    with open(log_path, "a") as f:
+                        f.write(json.dumps({"argv": req.get("argv") if isinstance(req, dict) else None,
+                                            "rc": reply["rc"]}) + "\n")
+                except (OSError, NameError):
+                    pass
             try:
                 conn.sendall((json.dumps(reply) + "\n").encode("utf-8"))
             except OSError:

@@ -64,6 +64,7 @@ This is a self-test of your tools. Do each step with exactly one tool call, even
 EOF
   out="$(cd "$G" && bash "$P" --engine gemini --backend agy --mode review --model gemini-3.8-flash-low --cwd "$G" --prompt-file "$T/gate-prompt.md" 2>&1)"
   run="$(field RUN_DIR "$out")"; st="$(field STATUS "$out")"
+  [[ "$out" == *"Vertex AI login"*"has expired"* ]] && warn "gemini auth: the Vertex AI login has expired, so these runs used the API key (gcloud auth application-default login, then refresh the agy ADC copy)"
   if [[ "$st" != ok ]]; then
     fail "gemini gate: the run ended $st ($(tail -2 <<<"$out" | tr '\n' ' '))"
   elif [[ ! -s "$run/gate.log" ]]; then
@@ -155,8 +156,10 @@ if [[ "$WHICH" == all || "$WHICH" == codex ]]; then
     fail "codex: the run ended ${st:-without a status} ($(tail -2 <<<"$out" | tr '\n' ' '))"
   else
     pass "codex sandbox: preflight passed ($(cat "$run/preflight.json" 2>/dev/null))"
-    if grep -q "$NONCE" "$run/answer.md"; then
-      pass "codex browser: a command reached the browser through the broker (random page title read back)"
+    # The broker's log sits outside the sandbox, so it is the proof the model's
+    # command went through it; the title alone could be read off the disk.
+    if grep -q "$NONCE" "$run/answer.md" && grep -q '"argv": \["get", "title"\], "rc": 0' "$run/browser-commands.jsonl" 2>/dev/null; then
+      pass "codex browser: the model's command went through the broker and read the page title"
     else
       fail "codex browser: the answer does not show the page title: $(head -c 200 "$run/answer.md")"
     fi

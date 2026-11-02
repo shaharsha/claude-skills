@@ -79,13 +79,30 @@ for rel in sys.stdin.buffer.read().split(b"\0"):
     rel="$(python3 -c 'import os,sys; print(os.path.relpath(os.path.realpath(sys.argv[1]), os.path.realpath(sys.argv[2])))' "$repo" "$top")"
     target="$copy"; [[ "$rel" == "." ]] || target="$copy/$rel"
     mkdir -p "$target"
-    for base in "" "$rel"; do
-      [[ "$base" == "." ]] && continue
-      for d in node_modules .venv venv; do
-        src="$top${base:+/$base}/$d"; dst="$copy${base:+/$base}/$d"
-        [[ -e "$src" && ! -e "$dst" ]] && ln -s "$src" "$dst"
-      done
-    done
+    # Installed dependencies are ignored, so the copy has none of them: link every
+    # ignored node_modules, .venv and venv folder, wherever it sits (a monorepo
+    # keeps one per package), outside any other one.
+    (cd "$top" && git ls-files --others --ignored --exclude-standard --directory -z) | python3 -c '
+import os, sys
+top, copy = sys.argv[1], sys.argv[2]
+names = {"node_modules", ".venv", "venv"}
+found = []
+for rel in sys.stdin.buffer.read().split(b"\0"):
+    rel = os.fsdecode(rel).rstrip("/")
+    if not rel:
+        continue
+    parts = rel.split("/")
+    for i, part in enumerate(parts):  # the outermost dependency folder on the path
+        if part in names:
+            found.append("/".join(parts[:i + 1]))
+            break
+for rel in sorted(set(found)):
+    src, dst = os.path.join(top, rel), os.path.join(copy, rel)
+    if os.path.isdir(src) and not os.path.lexists(dst):
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        os.symlink(src, dst)
+' "$top" "$copy"
+    # Dependency folders that are not ignored (rare) were copied above as files.
     echo "$target"
     ;;
   remove)

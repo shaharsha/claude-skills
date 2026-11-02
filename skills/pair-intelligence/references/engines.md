@@ -102,9 +102,14 @@ Tested on the Antigravity CLI (`agy`) 1.4.12 with a Gemini API key, 2026-11-02.
     billed to that project (startup credits). agy reads the project from that
     field before `GOOGLE_CLOUD_QUOTA_PROJECT`, and the main
     `application_default_credentials.json` pins another client's project, so the
-    script refuses it. `meta.json` records `auth: vertex:<project>`. If agy
-    reports `Reauthentication failed`, run `gcloud auth application-default login`
-    and refresh the copy (`~/.local/bin/agy-vertex --refresh-adc` on this Mac).
+    script refuses it. `meta.json` records `auth: vertex:<project>`. Google ends
+    these logins on a schedule (the token refresh answers `invalid_rapt`), and
+    agy then says "Run 'agy' to log in", pointing at the login this skill must
+    not use. So the script refreshes the token once before each run: when the
+    login has expired, `auto` falls back to the API key and says so, a forced
+    `vertex` stops (exit 69), and either way the message gives the fix: run
+    `gcloud auth application-default login`, then refresh the copy
+    (`~/.local/bin/agy-vertex --refresh-adc` on this Mac).
     A project's tokens-per-minute quota can run out on a long Argon review
     (seen: `429 RESOURCE_EXHAUSTED` after 10 minutes, answer written but the
     turn marked ERROR); the script prints agy's error with a hint: retry later,
