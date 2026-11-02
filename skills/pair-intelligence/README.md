@@ -69,6 +69,55 @@ ln -s "$PWD/claude-skills/skills/pair-intelligence" ~/.claude/skills/pair-intell
 - **A live browser:** the `agent-browser` CLI.
 - `python3` and macOS or Linux. No API key of its own.
 
+## Setup
+
+What a run needs inside the run (agy's private home and tool gate, the browser
+host, its socket and the Codex broker), `pair.sh` builds itself and removes
+afterwards. Set up once only what you will use:
+
+**Codex**
+
+```bash
+brew install --cask codex      # or: npm install -g @openai/codex
+codex login                    # a ChatGPT plan
+```
+
+**Gemini, with an API key** (the quick route)
+
+```bash
+brew install --cask antigravity-cli
+export GEMINI_API_KEY=...      # from Google AI Studio; OpenCode's saved Google key also works
+```
+
+**Gemini, on Vertex AI** (bills a GCP project, so startup credits apply). agy
+takes the project from the ADC file's `quota_project_id`, so give it a copy pinned
+to the project you mean:
+
+```bash
+gcloud services enable aiplatform.googleapis.com --project MY_PROJECT
+gcloud auth application-default login
+python3 -c 'import json, os
+d = os.path.expanduser("~/.config/gcloud")
+adc = json.load(open(d + "/application_default_credentials.json"))
+adc["quota_project_id"] = "MY_PROJECT"
+os.umask(0o077)
+json.dump(adc, open(d + "/adc-agy-MY_PROJECT.json", "w"))'
+```
+
+With exactly one `adc-agy-*.json` present, Gemini runs on Vertex AI (a run's
+`meta.json` records `auth: vertex:<project>`); `PAIR_AGY_AUTH=key` forces the API
+key. If agy reports `Reauthentication failed`, log in again and redo the copy.
+
+**A live browser**
+
+```bash
+npm install -g agent-browser
+agent-browser install          # downloads its browser
+```
+
+**Check it**: `bash scripts/test_pair.sh` runs offline; a missing CLI or
+credential makes `pair.sh` exit 69 with a message naming what to install or set.
+
 ## Quick start
 
 ```bash
