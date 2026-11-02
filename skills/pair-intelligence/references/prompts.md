@@ -128,8 +128,22 @@ API contracts, unhandled errors, and resource leaks all qualify. So does a
 change that contradicts a constraint stated above.
 
 Style, naming, formatting, and structural preference do not qualify. Neither
-does a pre-existing problem the change does not introduce or worsen. Missing
-tests qualify only where an untested path could plausibly be wrong.
+does a pre-existing problem the change does not introduce or worsen.
+
+A missing test is not a finding. When an untested path is wrong, report the
+wrong outcome and the input that produces it, under its own category; its
+suggested fix may include one test of that behaviour through the code's entry
+point, never one per member of a list. A refactor that keeps behaviour needs no
+new test.
+
+Do report a test this change adds, or an assertion it adds or re-stamps in an
+existing test, that a harmless edit would turn red: it pins line numbers,
+source text or a digest of code, copies a value from another file or layer,
+keeps a hand-made list in step with the code, or repeats an assertion an
+existing test already makes. Title it "Brittle test: ...", file
+it as maintainability, put the harmless edit that breaks it in
+failure_scenario, and in suggested_fix the behaviour to test instead or the
+existing test to extend.
 
 Severity is about the consequence if the scenario occurs, confidence is about
 whether the scenario is real. Keep them independent — a certain cosmetic issue
@@ -170,7 +184,11 @@ edits; rules elsewhere in the same document that this text contradicts.
 </check>
 
 Report only defects with a concrete wrong outcome. An empty findings list is a
-valid answer. Return JSON conforming to the supplied schema.
+valid answer. A missing test is not a defect. A test this change adds, or an
+assertion it adds or re-stamps, that a harmless edit would turn red (it pins line
+numbers, source text or a digest of code) is one: title it "Brittle test: ...",
+with that edit as the failure scenario. Return JSON conforming to the supplied
+schema.
 ```
 
 ---
@@ -210,6 +228,14 @@ drops.
 
 Also report where the plan is more complex than the stated goal requires, when
 you can name the simpler approach that meets the same requirements.
+
+Tests count toward that complexity. Do not ask the plan for more tests or
+coverage. Report a planned test that a harmless edit would turn red (it pins
+line numbers, source text or a digest of code, copies a value from another file,
+or keeps a hand-made list in step with the code), and a planned registry,
+census or allowlist that needs updating by hand on unrelated edits, with the
+harmless edit that would break it. Name the behavioural check that would
+replace it.
 
 Do not report alternative designs that are merely different, or preferences
 about structure and wording. Judge the plan against its own stated goal, not
@@ -266,6 +292,14 @@ still wrong is still worth catching.
 A requirement the plan deliberately deferred is not a gap. Say which
 requirements are satisfied, not only which are not; a plan fully implemented is
 a valid and useful outcome.
+
+A missing test is an unmet requirement only when the plan names that test.
+Report a test the change adds, or an assertion it adds or re-stamps in an
+existing test, that a harmless edit would turn red (it pins line numbers,
+source text or a digest of code, copies a value from another file, keeps a
+hand-made list in step with the code, or repeats an existing test's
+assertion): title it "Brittle test: ...", with the harmless edit in
+failure_scenario and the behaviour to test instead in suggested_fix.
 </what_counts>
 
 Return your result as JSON conforming to the supplied schema.
@@ -354,6 +388,21 @@ is not the scope of the review.
 
 Style, naming, formatting, and structural preference do not qualify. Neither
 does a pre-existing problem the change does not introduce or worsen.
+
+A missing test is not a finding. When an untested path is wrong, report the
+wrong outcome and the input that produces it, under its own category; its
+suggested fix may include one test of that behaviour through the code's entry
+point, never one per member of a list. A refactor that keeps behaviour needs no
+new test.
+
+Do report a test this change adds, or an assertion it adds or re-stamps in an
+existing test, that a harmless edit would turn red: it pins line numbers,
+source text or a digest of code, copies a value from another file or layer,
+keeps a hand-made list in step with the code, or repeats an assertion an
+existing test already makes. Title it "Brittle test: ...", file
+it as maintainability, put the harmless edit that breaks it in
+failure_scenario, and in suggested_fix the behaviour to test instead or the
+existing test to extend.
 
 Severity is about the consequence if the scenario occurs, confidence is about
 whether the scenario is real. Keep them independent.

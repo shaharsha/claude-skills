@@ -25,7 +25,7 @@
           },
           "category": {
             "type": "string",
-            "enum": ["correctness", "security", "concurrency", "data-loss", "api-contract", "error-handling", "resource-leak", "performance", "test-gap", "spec-violation", "maintainability"]
+            "enum": ["correctness", "security", "concurrency", "data-loss", "api-contract", "error-handling", "resource-leak", "performance", "spec-violation", "maintainability"]
           },
           "file": {
             "type": "string",

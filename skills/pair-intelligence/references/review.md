@@ -253,6 +253,17 @@ lanes each confirmed a finding and correctly diverged from its prescribed fix:
 In each case the confirmation was cheap and the remedy was the expensive part to
 get right. Test the prescription the way you tested the finding.
 
+**That includes remedies that add tests.** Reviewers propose tests readily, and
+tests are cheap to add and expensive to keep. Measured on 2026-11-02 over 358
+saved reviews of one repository: half the reviews asked for a test, 45% of the
+commits that fixed review findings added test lines, and the typical request
+was a bookkeeping shape (assert the exact set of every anchor, a mapping test
+for every entry point). Its test functions grew nearly ninefold in nine weeks,
+and over four days its main branch went red 38 times with no product bug among
+them, 81% of the red time from tests that fail on harmless edits. Before adding a test a finding asks for, ask whether one test of the
+behaviour through its entry point settles it, or none: a confirmed defect needs
+its fix, not necessarily a new test.
+
 **The same separation applies to retractions.** When you discover the instrument
 that produced a finding was flawed, that makes each reading *unverified* — which
 is a different state from false. Withdrawing them all reads as caution and is
@@ -345,14 +356,21 @@ round" starts feeling like rigour.
 The Torque build lanes run this skill on every PR and converged on a concrete
 rule; use it unless the user sets another.
 
-- **One concern per change**, under about 400 non-test lines, with its
-  fail-closed test written first.
+- **One concern per change**, under about 400 changed lines with tests
+  included (tests beyond the code's size need a reason in the PR body), and
+  its fail-closed point covered by one behavioural test through its real entry
+  point, not a guard that reads source text or structure.
 - **At most 4 rounds**, each a fresh reviewer, never a resumed conversation.
 - **From round 3, only a real high-severity finding blocks.**
 - **The same class of high finding twice means redesign**, not another patch.
   It fired twice on 2026-11-01 and both redesigns came out better.
 - **The last round reviews only the fix**, named as a diff.
 - **Declare unfixed medium and low findings** in the PR body.
+- **A "Brittle test:" finding** is low or medium and never blocks a merge on
+  its own. When it is on a test this change adds or edits, fix it in the same
+  PR if the fix is cheap (replace it with a behavioural test, extend the
+  existing test, or drop it), otherwise declare it; either way it needs no
+  further round. It costs minutes now and a red main later.
 - **State the base explicitly** (`git diff <base>...HEAD`). A lane diffed
   against a branch tip fetched after its own branch was cut, other people's
   hunks entered the review, and a false high came out of them.
@@ -360,7 +378,8 @@ rule; use it unless the user sets another.
   the prompt pointed at, not from files the reviewer found on its own.
 - **Edits after the last round are unreviewed.** Read that diff yourself before
   merging, and re-run the tests for every changed file: a "fix" that rewords a
-  message can break a test that pins its text.
+  message can break a test that pins its text. Replace such a pin with a check
+  of the behaviour rather than re-stamping the new text.
 - **When Codex calls the same design trade-off high every round,** argue the
   class once with the evidence instead of patching around it again.
 
