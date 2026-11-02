@@ -206,6 +206,26 @@ fixture had moved into a newly-in-scope directory was left out of the findings
 table entirely, and it was the reason that test had stopped exercising its own
 scenario while still passing. Nothing in the verdict pointed at it.
 
+**Check the "holds" list the same way.** When the reviewer lists what it checked
+and found correct, each entry is a claim made with the same confidence as a
+finding, and accepting it unchecked is deferring to the reviewer by another
+route. Measured on 2026-11-02, on an EBICS banking client: 2 of 7 "checks that
+hold" were refuted by the primary specs (a rights check called per-user scanned
+customer-wide data; a reversal-sign rule called correct was wrong). Before
+relying on an entry the change depends on, confirm it against the source or the
+spec.
+
+**A reviewer that only reads cannot see what a library emits.** Where
+correctness depends on how a library serialises (XML canonicalisation, JSON
+canonicalisation, crypto encodings, number formatting), a read-only reviewer can
+confirm the inputs and nothing past them. Measured on 2026-11-02: the one
+blocker in that EBICS client was lxml's subtree canonicalisation adding
+`xmlns=""` to inner elements, which made every signature wrong. Codex's review
+said the serialisation "remains unobserved" and moved on; running the code
+against a published test vector caught it. For such code, run the review with
+`--runnable` and ask for a known-answer test, or run one yourself, before a
+clean verdict counts.
+
 **A confirmed finding is not a complete finding.** Adjudicating means checking a
 finding's *extent*, not only its truth. Measured repeatedly on 2026-08-04: a
 reviewer correctly identified a wrong inventory and named four of the five

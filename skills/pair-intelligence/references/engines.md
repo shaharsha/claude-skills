@@ -115,10 +115,13 @@ Tested on the Antigravity CLI (`agy`) 1.4.12 with a Gemini API key, 2026-11-02.
     `gcloud auth application-default login`, then refresh the copy
     (`~/.local/bin/agy-vertex --refresh-adc` on this Mac).
     A project's tokens-per-minute quota can run out on a long Argon review
-    (seen: `429 RESOURCE_EXHAUSTED` after 10 minutes, answer written but the
-    turn marked ERROR); the script prints agy's error with a hint: retry later,
-    or `PAIR_AGY_AUTH=key`. On the Vertex route the script waits a minute and
-    continues the same conversation once (`PAIR_AGY_RETRY_WAIT` sets the wait);
+    (seen: `429 RESOURCE_EXHAUSTED` after 10 and after 30 minutes, once with an
+    answer written but the turn marked ERROR). On the Vertex route the script
+    waits a minute and continues the same conversation once, if at least two
+    minutes of the time limit are left (`PAIR_AGY_RETRY_WAIT` sets the wait). A
+    turn that still ends on the quota is `STATUS=quota`, exit 75, with the
+    reason there was no retry: wait a few minutes and rerun, with a narrower
+    prompt or a lower `--web-budget`, or set `PAIR_AGY_AUTH=key`;
   - `key`: `"modelProvider": "gemini"` in `--settings` and the key in
     `GEMINI_API_KEY` (from the environment, else OpenCode's `auth.json`). Never
     combine the two: `modelProvider` switches a Vertex run back to the key.
@@ -140,7 +143,12 @@ Tested on the Antigravity CLI (`agy`) 1.4.12 with a Gemini API key, 2026-11-02.
     literally (outside quotes just letters, digits and `_./:@,+=%-`; nothing but
     `$`, backquote, backslash and `!` refused inside double quotes; single quotes
     free); `search_web` unless `--web off`; every other tool refused, its own
-    `read_url_content` included. Its decisions land in `RUN_DIR/gate.log`;
+    `read_url_content` included. Two limits keep a turn from ending with nothing
+    (see traps): after 70% of `--timeout` every tool is refused with a reason
+    telling the model to answer now, and searches plus `pair-fetch` reads stop
+    at `--web-budget` (default 40 for research, 20 otherwise; reads of local
+    files do not count). The prompt states both up front. Its decisions land in
+    `RUN_DIR/gate.log`;
   - a settings floor under the gate: writes, MCP, URL reads and actuation, and
     the metacharacter pattern denied, so a broken gate still cannot write;
   - stream-json in and out, `--print-timeout`, `--disable-slash-commands`,
@@ -190,9 +198,16 @@ Traps, each seen in testing:
 - **Its shell is zsh.** A command line is expanded before any wrapper sees it,
   and a glob qualifier such as `*(e:'cmd':)` runs code (measured: `*(.)`
   expanded). Hence the gate's word-by-word check.
-- **Its own `--print-timeout` returns partial output as SUCCESS, exit 0**; only
-  stderr says "print timeout ... returning partial output". The script reports
-  that as `STATUS=timeout` (exit 124) and keeps the partial answer.
+- **Its own `--print-timeout` returns "partial output" as SUCCESS, exit 0**, and
+  only stderr says the turn was cut. Cut during tool calls, that output is
+  nothing: three runs on 2026-11-02 (10, 20 and 30 minutes, 19 to 222 steps)
+  all came back empty. The script reports `STATUS=timeout` (exit 124), keeps an
+  answer if one arrived, and otherwise says there is none and how many tool
+  calls were made. The gate's deadline exists so this does not happen.
+- **Unlimited search eats the time and the quota.** Given a review and
+  `--web cached` for 30 minutes, Argon ran 159 searches, each narrower than the
+  last, until Vertex answered 429; with `--web live` it read 86 pages in 20
+  minutes. Neither run wrote an answer. Hence `--web-budget`.
 - **`--sandbox` and `--mode plan` are not read-only:** the first confines only
   shell commands and leaves the project writable, the second is a prompt prefix.
 - **Hangs on stdin**, like the others: the script feeds stream-json from a file.

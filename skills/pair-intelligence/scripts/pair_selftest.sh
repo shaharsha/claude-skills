@@ -6,12 +6,13 @@
 #   bash scripts/pair_selftest.sh --engine gemini|codex
 #
 # The offline suite (test_pair.sh) proves the scripts; this proves the CLIs still
-# behave the way the scripts assume. It spends a few cents: two short Gemini
+# behave the way the scripts assume. It spends a few cents: three short Gemini
 # turns on Flash and one short Codex turn at low effort.
 #
 # Gemini/agy: the PreToolUse hook still fires with the run's policy (otherwise
 #   nothing gates search, scheduling or subagents), the gate's verdicts hold, a
-#   secret file stays unread, and agy's own timeout is still detected.
+#   secret file stays unread, a model refused for its web budget still answers,
+#   and agy's own timeout is still detected.
 # Codex: the read-only sandbox with one broker socket still passes the preflight,
 #   and a command reaches the browser through the broker.
 # Runnable copies: a disposable worktree is made with the uncommitted changes and
@@ -113,6 +114,33 @@ sys.exit(0 if hits else 1)' "$run/gate.log"; then
       warn "gemini gate: the model never tried to read the secret file, so that refusal went untested"
     fi
     printf '      auth: %s\n' "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("auth",""))' "$run/meta.json")"
+  fi
+
+  # The web budget and the deadline both work by refusing calls with a reason
+  # that says to answer now; a turn that ended on the refusal would lose the
+  # answer they exist to save.
+  cat > "$T/budget-prompt.md" <<'EOF2'
+This is a self-test of your web search tool. Run these four searches, one tool call each, even if one is refused: "Gutenberg printing press year", "Garamond typeface origin", "Helvetica typeface designer", "Futura typeface year". Then give one line per search: what you found, or that it was refused.
+EOF2
+  mkdir -p "$T/budget"
+  out="$(bash "$P" --engine gemini --backend agy --mode consult --model gemini-3.8-flash-low --web cached --web-budget 2 --cwd "$T/budget" --prompt-file "$T/budget-prompt.md" 2>&1)"
+  st="$(field STATUS "$out")"; run="$(field RUN_DIR "$out")"
+  counts="$(python3 -c 'import json,sys
+ok = no = 0
+for line in open(sys.argv[1]):
+    e = json.loads(line)
+    if e["tool"] == "search_web":
+        ok += e["decision"] == "auto_approve"; no += e["decision"] == "deny" and "web budget" in e["reason"]
+print(ok, no)' "$run/gate.log" 2>/dev/null || echo "0 0")"
+  ok_n="${counts% *}"; no_n="${counts#* }"
+  if [[ "$ok_n" -gt 2 ]]; then
+    fail "gemini web budget: $ok_n searches approved against a budget of 2"
+  elif [[ "$no_n" -eq 0 ]]; then
+    warn "gemini web budget: the model stopped at $ok_n searches, so no refusal was tested"
+  elif [[ "$st" == ok ]]; then
+    pass "gemini web budget: 2 searches approved, $no_n refused for the budget, and the model still answered"
+  else
+    fail "gemini web budget: after the refusal the run ended $st, not with an answer ($(tail -2 <<<"$out" | tr '\n' ' '))"
   fi
 
   # --timeout 25 gives agy a 15 s print timeout and the outer limit 25 s, so agy's

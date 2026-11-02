@@ -193,7 +193,8 @@ non-git and `--out-dir` paths. It spends no model quota.
 - Gemini's secret-file protection works by file name (`.env`, key files); a
   secret pasted into an ordinary file is just text to it.
 - A Vertex AI project's tokens-per-minute quota can run out on a long Gemini
-  review (`429 RESOURCE_EXHAUSTED`); retry later or set `PAIR_AGY_AUTH=key`.
+  review (`429 RESOURCE_EXHAUSTED`, `STATUS=quota`, exit 75); retry later, lower
+  `--web-budget`, or set `PAIR_AGY_AUTH=key`.
 - Two models agreeing is weak evidence; they share many errors. Where they
   disagree is where to look.
 
