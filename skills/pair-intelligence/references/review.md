@@ -356,8 +356,10 @@ round" starts feeling like rigour.
 The Torque build lanes run this skill on every PR and converged on a concrete
 rule; use it unless the user sets another.
 
-- **One concern per change**, under about 400 non-test lines, with its
-  fail-closed test written first.
+- **One concern per change**, under about 400 changed lines with tests
+  included (tests beyond the code's size need a reason in the PR body), and
+  its fail-closed point covered by one behavioural test through its real entry
+  point, not a guard that reads source text or structure.
 - **At most 4 rounds**, each a fresh reviewer, never a resumed conversation.
 - **From round 3, only a real high-severity finding blocks.**
 - **The same class of high finding twice means redesign**, not another patch.
