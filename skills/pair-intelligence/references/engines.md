@@ -118,14 +118,19 @@ Tested on the Antigravity CLI (`agy`) 1.4.12 with a Gemini API key, 2026-11-02.
   - stream-json in and out, `--print-timeout`, `--disable-slash-commands`,
     `--conversation <id>` to resume.
 - **`pair-fs`** (`pair_fs.py`): `ls`, `find GLOB`, `grep` (ripgrep, gitignore
-  aware) and `git status|diff|log|show|blame|ls-files` with an allow-list of
-  flags. Every path is resolved and must stay inside the roots. Secret files
-  never print: not through an explicit grep path, a link, `rev:path` or a patch
-  (patches exclude them by pathspec). Git runs only when the repository sits
+  aware) and `git status|diff|log|show|blame|ls-files|cat` with an allow-list of
+  flags. Every path is resolved and must stay inside the roots. Files named like
+  secrets (`.env*`, keys, `.netrc`...; any case, through any link) never print.
+  Git has many ways to name a file's contents, so none is accepted: a revision
+  has no `:` (no `HEAD:file`, `:0:file`, reflog dates) and may not be a blob id,
+  `-L` is blame-only and numeric, `--follow` is gone, and every diff, show and
+  log excludes secret files by pathspec. `pair-fs git cat REV PATH` reads a file
+  at a revision with the path checked. Git runs only when the repository sits
   inside the roots (its history would show the rest) and its config names no
   program (filters, `gpg.program`, pagers, drivers, includes and the like); on
   top, fsmonitor, pager, external diff, textconv, hooks and signature checks
-  are switched off per call.
+  are switched off per call. Protection is by file name: a secret pasted into
+  `config.py` is just code to it.
 - **`pair-fetch`** (`pair_fetch.py`, `--web live` only): one public http(s) page
   as text, checked on every redirect against loopback, private and metadata
   addresses, wrapped in untrusted-content markers.

@@ -225,6 +225,9 @@ elif [[ "$BACKEND" == "agy" ]]; then
     *) echo "PAIR_AGY_AUTH must be auto, vertex or key" >&2; exit 64 ;;
   esac
   if [[ "$AGY_AUTH" == vertex ]]; then
+    # Resolved, so a link to the main ADC is caught and a relative path survives
+    # the cd into the scratch workspace.
+    AGY_ADC="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$AGY_ADC")"
     [[ "$(basename "$AGY_ADC")" != application_default_credentials.json ]] \
       || { echo "refusing the main ADC file for agy: its quota project may bill another client; use a copy (PAIR_AGY_ADC)" >&2; exit 64; }
     AGY_PROJECT="$(python3 -c 'import json,sys
@@ -644,7 +647,7 @@ fi
     esac
     printf '<harness>\nThe project is the folder %s. Read files with your file-reading tool, using absolute paths under it.\n' "$CWD"
     printf 'To list folders, find files by name, search contents or read git history, run the `pair-fs` command (on your PATH):\n'
-    printf '  pair-fs ls [PATH] | pair-fs find GLOB [PATH] | pair-fs grep [-i] [-F] [-l] [--glob G] PATTERN [PATH] | pair-fs git status|diff|log|show|blame [ARGS]\n'
+    printf '  pair-fs ls [PATH] | pair-fs find GLOB [PATH] | pair-fs grep [-i] [-F] [-l] [--glob G] PATTERN [PATH] | pair-fs git status|diff|log|show|blame [ARGS] | pair-fs git cat REV PATH\n'
     printf 'PATH is absolute or relative to the project folder; `pair-fs git` with no subcommand prints the accepted flags. Put search patterns and any text with spaces or symbols in single quotes: outside quotes the shell accepts only letters, digits and _./:@,+=%%-. Nothing else runs: other shell commands, writing files and reading outside the project or secret files are refused with a reason. %s\n</harness>\n\n' "$WEBLINE"
   fi
   cat "$PROMPT_FILE"

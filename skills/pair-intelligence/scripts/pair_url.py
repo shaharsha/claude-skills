@@ -30,6 +30,8 @@ def canon_host(host):
     if not host or not re.match(r"^[A-Za-z0-9.\-\[\]:]+$", host):
         raise Refused("host %r has characters a browser may reinterpret" % host)
     h = host.lower().rstrip(".")
+    if not h or ".." in h:
+        raise Refused("host %r is not a host name" % host)
     if h.startswith("["):
         raise Refused("IPv6 hosts are not supported here; use localhost:PORT or a host name")
     last = h.split(".")[-1]

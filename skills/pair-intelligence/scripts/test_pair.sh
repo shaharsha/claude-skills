@@ -320,6 +320,13 @@ check "PAIR_AGY_AUTH=vertex without an ADC copy: exit 69" '[[ $? -eq 69 ]]'
 cp "$T/vhome/.config/gcloud/adc-agy-proj-x.json" "$T/application_default_credentials.json"
 (cd "$T/arepo" && PAIR_AGY_AUTH=vertex PAIR_AGY_ADC="$T/application_default_credentials.json" bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" >/dev/null 2>&1)
 check "the main ADC file is refused: exit 64"      '[[ $? -eq 64 ]]'
+ln -sf "$T/application_default_credentials.json" "$T/adc-agy-link.json"
+(cd "$T/arepo" && PAIR_AGY_AUTH=vertex PAIR_AGY_ADC="$T/adc-agy-link.json" bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" >/dev/null 2>&1)
+check "a link to the main ADC file is refused: exit 64" '[[ $? -eq 64 ]]'
+cp "$T/vhome/.config/gcloud/adc-agy-proj-x.json" "$T/arepo/rel-adc.json"
+out="$(cd "$T/arepo" && PAIR_AGY_AUTH=vertex PAIR_AGY_ADC=rel-adc.json FAKE_AGY=ok bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"
+check "a relative ADC path is passed to agy absolute" '[[ "$(jq_py "$(last_args agy)" "d[\"adc\"]")" == /*rel-adc.json ]]'
+rm -f "$T/arepo/rel-adc.json"
 printf '{"type":"authorized_user"}' > "$T/adc-noproj.json"
 (cd "$T/arepo" && PAIR_AGY_AUTH=vertex PAIR_AGY_ADC="$T/adc-noproj.json" bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" >/dev/null 2>&1)
 check "an ADC copy without quota_project_id: exit 69" '[[ $? -eq 69 ]]'
@@ -347,7 +354,7 @@ check "pair-fs refuses a symlink out of the root"  '! FS ls etclink >/dev/null 2
 check "pair-fs grep skips secret files"            '[[ "$(FS grep SECRET123)" == "no matches" ]]'
 FS grep --pre=/bin/sh x >/dev/null 2>&1; r1=$?; FS grep -- -x >/dev/null 2>&1; r2=$?
 check "pair-fs grep refuses unknown flags, takes a dash pattern after --" '[[ $r1 -eq 2 && $r2 -eq 0 ]]'
-check "pair-fs git log and show work"              'FS git log --oneline | grep -q init && FS git show HEAD:a.txt | grep -q "^a$"'
+check "pair-fs git log, show and cat work"        'FS git log --oneline | grep -q init && FS git show --stat HEAD | grep -q a.txt && FS git cat HEAD a.txt | grep -q "^a$"'
 git -C "$AREPO" config core.fsmonitor "touch $T/fsmonitor_ran"
 git -C "$AREPO" config core.pager "touch $T/pager_ran"
 FS git status >/dev/null 2>&1; r1=$?; FS git diff >/dev/null 2>&1
@@ -356,9 +363,17 @@ git -C "$AREPO" config --unset core.fsmonitor; git -C "$AREPO" config --unset co
 git -C "$AREPO" config gpg.program "touch $T/gpg_ran"
 check "pair-fs git refuses gpg.program in repo config" '! FS git log --oneline >/dev/null 2>&1 && [[ ! -e "$T/gpg_ran" ]]'
 git -C "$AREPO" config --unset gpg.program
-check "pair-fs git refuses a repo wider than its roots" '! PAIR_FS_ROOTS="[\"$AREPO/many\"]" /usr/bin/python3 -I "$SCRIPTS/pair_fs.py" git log --oneline >/dev/null 2>&1'
+mkdir -p "$AREPO/narrow"
+wider="$(PAIR_FS_ROOTS="[\"$AREPO/narrow\"]" /usr/bin/python3 -I "$SCRIPTS/pair_fs.py" git log --oneline 2>&1)"
+check "pair-fs git refuses a repo wider than its roots" '[[ "$wider" == *"wider than the folders you may read"* ]]'
 git -C "$AREPO" add -f .env >/dev/null 2>&1; git -C "$AREPO" -c user.email=t@t -c user.name=t commit -qm "track env" >/dev/null 2>&1
 check "pair-fs never prints a secret: grep path, symlink, case, rev:path, patches" '! FS grep SECRET .env >/dev/null 2>&1 && ln -sf .env "$AREPO/innocent.txt" && ! FS grep SECRET innocent.txt >/dev/null 2>&1 && ! FS git show HEAD:.env >/dev/null 2>&1 && ! FS git show HEAD | grep -q SECRET123 && ! FS git log -p | grep -q SECRET123'
+check "pair-fs git: no :0:path, -L file, --follow, -U leak, or blob id" '! FS git show :0:.env >/dev/null 2>&1 && ! FS git log -L 1,1:.env >/dev/null 2>&1 && ! FS git log --follow -p -- a.txt >/dev/null 2>&1 && ! FS git log -U1 | grep -q SECRET123 && ! FS git show "$(git -C "$AREPO" rev-parse HEAD:.env)" >/dev/null 2>&1'
+check "pair-fs git cat reads a file at a revision, never a secret" '[[ "$(FS git cat HEAD a.txt)" == a ]] && ! FS git cat HEAD .env >/dev/null 2>&1 && ! FS git cat HEAD ../x >/dev/null 2>&1'
+printf 'TOKEN=SECRET77\n' > "$AREPO/.ENV"; printf 'x = "SECRET77 in code"\n' > "$AREPO/code.py"
+check "pair-fs grep (ripgrep and the Python fallback) skips secret names in any case" '[[ "$(FS grep SECRET77)" == *code.py* && "$(FS grep SECRET77)" != *.ENV* && "$(PAIR_FS_FORCE_PY_GREP=1 FS grep SECRET77)" == *code.py* && "$(PAIR_FS_FORCE_PY_GREP=1 FS grep SECRET77)" != *.ENV* ]]'
+rm -f "$AREPO/.ENV" "$AREPO/code.py"
+check "pair_url: dot-only and empty hosts refused" '! /usr/bin/python3 -I "$SCRIPTS/pair_url.py" check "http://./" 2>/dev/null && ! /usr/bin/python3 -I "$SCRIPTS/pair_url.py" domain "..." >/dev/null 2>&1'
 check "pair-fs refuses signature placeholders"     '! FS git log "--format=%G?" >/dev/null 2>&1'
 check "pair-fs git refuses --output and no-index paths" '! FS git log --output=/tmp/pair-x >/dev/null 2>&1 && ! FS git diff /etc/hosts /etc/passwd >/dev/null 2>&1 && ! FS git diff -- /etc/hosts >/dev/null 2>&1'
 mkdir -p "$AREPO/many" && (cd "$AREPO/many" && for i in $(seq 1 450); do : > "f$i.txt"; done)
@@ -549,6 +564,7 @@ while True:
     d+=b
 print(json.loads(d)["rc"], json.loads(d)["out"].strip())' "$BS/b.sock" "$1"; }
 check "broker runs the wrapper with the model's arguments" '[[ "$(breq "{\"argv\": [\"get\", \"url\"]}")" == "0 wrapped: get url" ]]'
+check "broker survives a NUL in an argument"     '[[ "$(breq "{\"argv\": [\"get\", \"\\u0000\"]}")" == 2* && "$(breq "{\"argv\": [\"y\"]}")" == "0 wrapped: y" ]]'
 check "broker refuses malformed requests and keeps serving" '[[ "$(breq "{\"argv\": \"get url\"}")" == 2* && "$(breq "not json")" == 2* && "$(breq "[]")" == 2* && "$(breq "null")" == 2* && "$(breq "{\"argv\": [\"x\"]}")" == "0 wrapped: x" ]]'
 check "broker socket is private to this user"      '[[ "$(stat -f %Lp "$BS/b.sock")" == 600 ]]'
 mkdir -p "$BS/empty"

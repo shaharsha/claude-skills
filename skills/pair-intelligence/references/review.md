@@ -16,8 +16,9 @@ sidecar the verify scripts check. To review with Gemini, use the same prompt
 templates with `bash scripts/pair.sh --engine gemini --mode review --cwd <repo>
 --prompt-file <abs>`: read-only by a tool gate instead of a sandbox, no enforced
 schema (ask for the findings layout in prose; drop the templates' JSON lines), no
-provenance sidecar. Its only command is `pair-fs`, which covers `git diff`, `log`
-and `show` with a fixed set of flags, so name the base as usual. A Gemini review
+provenance sidecar. Its only command is `pair-fs`, which covers `git diff`, `log`,
+`show` and `cat REV PATH` (a file at a revision) with a fixed set of flags, so
+name the base as usual; `HEAD:path` forms are refused there. A Gemini review
 at high effort took 2 to 6 minutes in testing. For a two-engine review, send the
 identical prompt to both and adjudicate the union.
 

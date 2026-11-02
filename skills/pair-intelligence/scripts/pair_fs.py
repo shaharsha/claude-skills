@@ -134,6 +134,45 @@ def cmd_find(args):
     emit(out, "matches")
 
 
+def py_grep(pattern, path, flags, glob):
+    """Used when ripgrep is missing: same refusals (secret names in any case, no
+    symlinks followed, the usual heavy folders skipped), plain Python search."""
+    try:
+        rx = re.compile(re.escape(pattern) if "-F" in flags else pattern, re.IGNORECASE if "-i" in flags else 0)
+    except re.error as e:
+        die("bad pattern: %s" % e)
+    if "-w" in flags:
+        rx = re.compile(r"\b(?:%s)\b" % rx.pattern, rx.flags)
+    files = [path] if os.path.isfile(path) else []
+    if not files:
+        for dp, dns, fns in os.walk(path):
+            dns[:] = sorted(d for d in dns if d not in SKIP_DIRS)
+            files += [os.path.join(dp, f) for f in sorted(fns)]
+    out = []
+    for f in files:
+        name = os.path.basename(f)
+        if os.path.islink(f) or is_secret(name) or (glob and not fnmatch.fnmatch(name, glob)):
+            continue
+        try:
+            with open(f, "rb") as fh:
+                data = fh.read(2000000)
+        except OSError:
+            continue
+        if b"\0" in data[:8000]:
+            continue
+        for n, line in enumerate(data.decode("utf-8", "replace").splitlines(), 1):
+            if rx.search(line):
+                if "-l" in flags:
+                    out.append(f)
+                    break
+                out.append("%s:%d:%s" % (f, n, line[:300]))
+        if len(out) > MAX_LINES:
+            break
+    if not out:
+        print("no matches")
+    emit(out, "lines")
+
+
 def cmd_grep(args):
     flags, glob, rest, i = [], None, [], 0
     while i < len(args):
@@ -157,7 +196,8 @@ def cmd_grep(args):
     if not 1 <= len(rest) <= 2:
         die("grep takes a pattern and an optional path")
     pattern, path = rest[0], resolve(rest[1] if len(rest) > 1 else ".", contents=True)
-    rg = shutil.which("rg", path=TOOL_PATH)
+    # PAIR_FS_FORCE_PY_GREP is for the tests; the shim's env -i keeps it from the model.
+    rg = None if os.environ.get("PAIR_FS_FORCE_PY_GREP") else shutil.which("rg", path=TOOL_PATH)
     if rg:
         # Ignores .gitignore'd files like the model's own tools would; --no-config
         # keeps RIPGREP_CONFIG_PATH out, and nothing the model passes becomes a flag.
@@ -167,10 +207,7 @@ def cmd_grep(args):
             argv += ["--glob", glob]
         argv += ["--iglob=!" + g for g in SECRET_GLOBS] + ["-e", pattern, "--", path]
     else:
-        argv = ["/usr/bin/grep", "-rnI", "--exclude-dir=.git", "--exclude-dir=node_modules"] + flags
-        if glob:
-            argv += ["--include", glob]
-        argv += ["--exclude=" + g for g in SECRET_GLOBS] + ["-e", pattern, "--", path]
+        return py_grep(pattern, path, flags, glob)
     rc, out, err = run(argv, ROOTS[0])
     if rc == 1 and not out:
         print("no matches")
@@ -181,29 +218,39 @@ def cmd_grep(args):
 
 
 # git: subcommand -> flags taken as they are. Value flags are checked by shape below.
+#
+# Secret files must never print, and git has many ways to name a file's
+# contents (rev:path, :0:path, reflog dates, -L <range>:<file>, a blob's id,
+# --follow across a rename). So no argument may name contents at all: a
+# revision may not contain ":", may not resolve to a blob, -L is blame-only and
+# numeric, --follow is gone, and every diff, show and log carries pathspecs that
+# exclude secret files from its output. Reading a file at a revision goes
+# through `cat`, which checks the path the way the file reader does.
 GIT_FLAGS = {
     "status": {"-s", "--short", "-b", "--branch", "--porcelain", "-uno", "--untracked-files=no"},
     "diff": {"--stat", "--numstat", "--shortstat", "--name-only", "--name-status", "--cached",
              "--staged", "-w", "--ignore-space-change", "--word-diff", "--merge-base", "-p", "--patch"},
     "log": {"--oneline", "--stat", "--name-only", "--name-status", "-p", "--patch", "--graph",
-            "--decorate", "--all", "--no-merges", "--first-parent", "--reverse", "--follow", "-w"},
+            "--decorate", "--all", "--no-merges", "--first-parent", "--reverse", "-w"},
     "show": {"--stat", "--name-only", "--name-status", "--oneline", "-p", "--patch", "-w", "--no-patch", "-s"},
     "blame": {"-w", "-M", "-C", "-s", "-e"},
     "ls-files": {"-m", "--modified", "-o", "--others", "--exclude-standard", "-d", "--deleted"},
+    "cat": set(),
 }
-GIT_VALUE = re.compile(r"^(-n|-U|-L|--max-count|--unified|--since|--until|--after|--before|--author|"
+GIT_VALUE = re.compile(r"^(-n|-U|--max-count|--unified|--since|--until|--after|--before|--author|"
                        r"--grep|--format|--pretty|--date)(=.+)?$|^-[0-9]+$|^-U[0-9]+$|^-n[0-9]+$")
 # Repository config that names a program git could run, directly or through a
 # driver: refused outright, since -c can only switch off the keys it names.
 RISKY_CONFIG = re.compile(r"^(include|includeif)\.|program|command|helper|\.(clean|smudge|process)$|pager|editor|"
                           r"driver|fsmonitor|textconv|showsignature|alternate|hookspath|^alias\.|^uploadpack\.|"
                           r"^core\.(sshcommand|askpass|gitproxy)", re.IGNORECASE)
-REV = re.compile(r"^[A-Za-z0-9_@^~{}:+-][A-Za-z0-9._/@^~{}:+-]*$")
+REV = re.compile(r"^[A-Za-z0-9_@^~{}+-][A-Za-z0-9._/@^~{}+-]*$")  # no ":" anywhere
+SECRET_EXCLUDES = [":(exclude,icase,glob)**/" + g for g in SECRET_GLOBS]
 GIT_HELP = "pair-fs git <sub> [flags] [revs] [-- paths]\n" + "\n".join(
-    "  %-8s %s" % (k, " ".join(sorted(v))) for k, v in GIT_FLAGS.items()) + \
-    "\n  value flags: -n N, -N, -U N, -L a,b (blame), --max-count= --since= --until= --author= --grep= --format= --date="
-
-
+    "  %-8s %s" % (k, " ".join(sorted(v))) for k, v in GIT_FLAGS.items() if k != "cat") + \
+    "\n  value flags: -n N, -N, -U N, --max-count= --since= --until= --author= --grep= --format= --date=" + \
+    "\n  blame -L START,END" + \
+    "\n  cat REV PATH   the file at PATH as of revision REV (secret files refused)"
 GIT_ENV = {"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_OPTIONAL_LOCKS": "0",
            "GIT_TERMINAL_PROMPT": "0", "GIT_PAGER": "cat"}
 
@@ -211,6 +258,8 @@ GIT_ENV = {"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_OP
 def git_toplevel():
     git = shutil.which("git", path=TOOL_PATH) or die("git is not installed")
     for r in ROOTS:
+        if not os.path.isdir(r):  # an image passed as a root
+            continue
         rc, out, _ = run([git, "-C", r, "rev-parse", "--show-toplevel"], r, GIT_ENV)
         if rc == 0 and out.strip():
             top = os.path.realpath(out.strip())
@@ -227,12 +276,72 @@ def git_toplevel():
     die("none of the readable folders is a git repository")
 
 
+def secret_path(rel):
+    return any(is_secret(part) for part in rel.split("/") if part)
+
+
+def check_rev(git, top, token):
+    """A revision or range; none of its ends may be a blob (a file's contents by id)."""
+    if not REV.match(token) or "/../" in token or token.endswith("/..") or token.startswith("../"):
+        die("%s is not a revision (a revision has no ':'); put file paths after --, "
+            "and use 'pair-fs git cat REV PATH' for a file at a revision" % token)
+    if secret_path(token):
+        die("%s names a secret file (.env, keys); its contents are not shown" % token)
+    for end in re.split(r"\.\.\.?", token):
+        if end:
+            rc, kind, _ = run([git, "-C", top, "cat-file", "-t", end], top, GIT_ENV)
+            if rc == 0 and kind.strip() == "blob":
+                die("%s is a file's contents by id; use 'pair-fs git cat REV PATH'" % token)
+
+
+def base_cmd(git, top, sub):
+    # Repository config cannot run anything here: the fsmonitor hook, pager,
+    # external diff, textconv drivers and signature programs are switched off for
+    # this call, and GIT_OPTIONAL_LOCKS keeps status from rewriting the index.
+    cmd = [git, "-C", top, "-c", "core.fsmonitor=false", "-c", "core.pager=cat",
+           "-c", "diff.external=", "-c", "core.hooksPath=/dev/null", "-c", "color.ui=never",
+           "-c", "diff.ignoreSubmodules=all", "-c", "status.submoduleSummary=false",
+           "-c", "log.showSignature=false", "-c", "gpg.program=/usr/bin/false",
+           "-c", "gpg.ssh.program=/usr/bin/false", "-c", "gpg.x509.program=/usr/bin/false", "--no-pager", sub]
+    if sub in ("diff", "log", "show"):
+        cmd += ["--no-ext-diff", "--no-textconv"]
+    if sub in ("log", "show"):
+        cmd += ["--no-show-signature"]
+    if sub == "blame":
+        cmd += ["--no-textconv"]
+    if sub == "status":
+        cmd += ["--ignore-submodules=all"]
+    return cmd
+
+
+def cmd_git_cat(git, top, rest):
+    if len(rest) != 2:
+        die("cat takes a revision and a path: pair-fs git cat HEAD~1 src/app.py")
+    rev, path = rest
+    check_rev(git, top, rev)
+    rc, kind, _ = run([git, "-C", top, "cat-file", "-t", rev], top, GIT_ENV)
+    if rc != 0 or kind.strip() not in ("commit", "tag"):
+        die("%s is not a commit" % rev)
+    full = os.path.normpath(path if os.path.isabs(path) else os.path.join(top, path))
+    if not inside(full, top) or not any(inside(full, r) for r in ROOTS):
+        die("%s is outside the git repository %s or the folders you may read" % (path, top))
+    rel = os.path.relpath(full, top)
+    if rel == "." or secret_path(rel):
+        die("%s is a secret file (.env, keys) or not a file; its contents are not shown" % path)
+    rc, so, se = run(base_cmd(git, top, "show") + ["%s:%s" % (rev, rel)], top, GIT_ENV)
+    if rc != 0:
+        die(se.strip() or "git cat failed")
+    emit(so.splitlines(), "lines")
+
+
 def cmd_git(args):
     if not args or args[0] not in GIT_FLAGS:
         print(GIT_HELP)
         sys.exit(0 if not args else 2)
     sub, rest, out, paths, i = args[0], args[1:], [], [], 0
     git, top = git_toplevel()
+    if sub == "cat":
+        return cmd_git_cat(git, top, rest)
     while i < len(rest):
         a = rest[i]
         if a == "--":
@@ -240,6 +349,12 @@ def cmd_git(args):
             break
         if a in GIT_FLAGS[sub]:
             out.append(a)
+        elif sub == "blame" and (a == "-L" or a.startswith("-L")):
+            val = a[2:] if len(a) > 2 else (rest[i + 1] if i + 1 < len(rest) else "")
+            if not re.match(r"^[0-9]+,[0-9]+$", val):
+                die("blame -L takes START,END line numbers")
+            out.append("-L" + val)
+            i += 0 if len(a) > 2 else 1
         elif GIT_VALUE.match(a):
             if re.match(r"^--(format|pretty)", a) and "%G" in a or a in ("--format", "--pretty") and \
                     i + 1 < len(rest) and "%G" in rest[i + 1]:
@@ -253,12 +368,9 @@ def cmd_git(args):
                 i += 1
         elif a.startswith("-"):
             die("git %s does not accept %s here; run 'pair-fs git' for the flags" % (sub, a))
-        elif REV.match(a) and "/../" not in a and not a.endswith("/..") and not a.startswith("../"):
-            if is_secret(a.split(":", 1)[-1]):
-                die("%s names a secret file (.env, keys); its contents are not shown" % a)
-            out.append(a)  # a revision, range, rev:path, or a path inside the repo
         else:
-            die("%s is not a revision; put file paths after --" % a)
+            check_rev(git, top, a)
+            out.append(a)  # a revision or range, or a path inside the repo
         i += 1
     rel = []
     for p in paths:
@@ -266,27 +378,10 @@ def cmd_git(args):
         if not inside(full, top):
             die("%s is outside the git repository %s" % (p, top))
         rel.append(os.path.relpath(full, top))
-    patches = sub in ("diff", "show") or (sub == "log" and any(f in out for f in ("-p", "--patch")))
-    if patches and "--follow" not in out:  # --follow takes exactly one pathspec
-        # A tracked secret would otherwise show up inside a patch.
-        rel = (rel or ["."]) + [":(exclude,icase,glob)**/" + g for g in SECRET_GLOBS]
-    # Repository config cannot run anything here: the fsmonitor hook, pager,
-    # external diff and textconv drivers are all switched off for this call,
-    # and GIT_OPTIONAL_LOCKS keeps status from rewriting the index.
-    base = [git, "-C", top, "-c", "core.fsmonitor=false", "-c", "core.pager=cat",
-            "-c", "diff.external=", "-c", "core.hooksPath=/dev/null", "-c", "color.ui=never",
-            "-c", "diff.ignoreSubmodules=all", "-c", "status.submoduleSummary=false",
-            "-c", "log.showSignature=false", "-c", "gpg.program=/usr/bin/false",
-            "-c", "gpg.ssh.program=/usr/bin/false", "-c", "gpg.x509.program=/usr/bin/false", "--no-pager", sub]
-    if sub in ("diff", "log", "show"):
-        base += ["--no-ext-diff", "--no-textconv"]
-    if sub in ("log", "show"):
-        base += ["--no-show-signature"]
-    if sub == "blame":
-        base += ["--no-textconv"]
-    if sub == "status":
-        base += ["--ignore-submodules=all"]
-    rc, so, se = run(base + out + (["--"] + rel if rel else []), top, GIT_ENV)
+    if sub in ("diff", "show", "log"):
+        # Whatever the flags (-p, -U, --stat...), secret files stay out of the output.
+        rel = (rel or ["."]) + SECRET_EXCLUDES
+    rc, so, se = run(base_cmd(git, top, sub) + out + (["--"] + rel if rel else []), top, GIT_ENV)
     if rc != 0:
         die(se.strip() or "git %s failed" % sub)
     emit(so.splitlines(), "lines")
