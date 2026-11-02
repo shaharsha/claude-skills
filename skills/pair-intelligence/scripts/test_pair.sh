@@ -310,18 +310,20 @@ out="$(cd "$T/arepo" && FAKE_AGY=ok bash "$P" --engine gemini --backend opencode
 check "agy resume refuses another backend: exit 64" '[[ $rc -eq 64 ]]'
 reset_log
 t0=$(date +%s)
-out="$(cd "$T/arepo" && FAKE_AGY=ok FAKE_AGY_TOOLS='[["search_web",{"query":"q"}]]' bash "$P" --engine gemini --backend agy --mode review --prompt-file "$T/prompt.md" 2>&1)"
+out="$(cd "$T/arepo" && FAKE_AGY=ok FAKE_AGY_TOOLS='[["search_web",{"query":"q"}]]' bash "$P" --engine gemini --backend agy --mode review --web-budget 17 --prompt-file "$T/prompt.md" 2>&1)"
 t1=$(date +%s)
 check "agy review: web search refused"             '[[ "$(dec)" == deny ]]'
 RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
-# The numbers the model is told, not the sentences around them.
-check "agy review: told its 20 minutes and the 14-minute tool cutoff; no web budget with web off" 'grep -qE "(^|[^0-9])20 minutes" "$LOG/agy-stdin-0.txt" && grep -qE "(^|[^0-9])14 minutes" "$LOG/agy-stdin-0.txt" && ! grep -i web "$LOG/agy-stdin-0.txt" | grep -q "[0-9]"'
+# The prompt agy got (its stdin is one stream-json line), checked for the numbers
+# the model is told, not the sentences around them.
+agy_prompt() { python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).readline())["message"]["content"])' "$1"; }
+check "agy review: told its 20 minutes and the 14-minute tool cutoff; with web off, not its web budget (17)" 'agy_prompt "$LOG/agy-stdin-0.txt" | grep -qE "(^|[^0-9])20 minutes" && agy_prompt "$LOG/agy-stdin-0.txt" | grep -qE "(^|[^0-9])14 minutes" && ! agy_prompt "$LOG/agy-stdin-0.txt" | grep -qw 17'
 until_s="$(jq_py "$RUN/agy-policy.json" "d[\"tools_until\"]")"
 check "agy: policy stops tools at 70% of the 1200 s timeout" '[[ $until_s -ge $((t0 + 840)) && $until_s -le $((t1 + 840)) ]]'
 reset_log
 out="$(cd "$T/arepo" && FAKE_AGY=ok FAKE_AGY_TOOLS='[["search_web",{"query":"a"}],["search_web",{"query":"b"}],["search_web",{"query":"c"}]]' bash "$P" --engine gemini --backend agy --web-budget 2 --prompt-file "$T/prompt.md" 2>&1)"
 RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
-check "agy --web-budget 2: two searches, the third refused; the prompt says 2" '[[ "$(dec)" == "auto_approve auto_approve deny" && "$(jq_py "$RUN/agy-policy.json" "d[\"web_budget\"]")" == 2 ]] && grep -i web "$LOG/agy-stdin-0.txt" | grep -qw 2'
+check "agy --web-budget 2: two searches, the third refused; the prompt says 2" '[[ "$(dec)" == "auto_approve auto_approve deny" && "$(jq_py "$RUN/agy-policy.json" "d[\"web_budget\"]")" == 2 ]] && agy_prompt "$LOG/agy-stdin-0.txt" | grep -i web | grep -qw 2'
 out="$(FAKE_AGY=ok bash "$P" --engine gemini --backend agy --mode research --prompt-file "$T/prompt.md" 2>&1)"
 RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
 check "agy research: web budget 40 by default"     '[[ "$(jq_py "$RUN/agy-policy.json" "d[\"web_budget\"]")" == 40 ]]'
