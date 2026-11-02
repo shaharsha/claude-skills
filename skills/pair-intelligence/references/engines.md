@@ -90,7 +90,11 @@ Tested on the Antigravity CLI (`agy`) 1.4.12 with a Gemini API key, 2026-11-02.
     `application_default_credentials.json` pins another client's project, so the
     script refuses it. `meta.json` records `auth: vertex:<project>`. If agy
     reports `Reauthentication failed`, run `gcloud auth application-default login`
-    and refresh the copy (`~/.local/bin/agy-vertex --refresh-adc` on this Mac);
+    and refresh the copy (`~/.local/bin/agy-vertex --refresh-adc` on this Mac).
+    A project's tokens-per-minute quota can run out on a long Argon review
+    (seen: `429 RESOURCE_EXHAUSTED` after 10 minutes, answer written but the
+    turn marked ERROR); the script prints agy's error with a hint: retry later,
+    or `PAIR_AGY_AUTH=key`;
   - `key`: `"modelProvider": "gemini"` in `--settings` and the key in
     `GEMINI_API_KEY` (from the environment, else OpenCode's `auth.json`). Never
     combine the two: `modelProvider` switches a Vertex run back to the key.
@@ -122,9 +126,11 @@ Tested on the Antigravity CLI (`agy`) 1.4.12 with a Gemini API key, 2026-11-02.
   flags. Every path is resolved and must stay inside the roots. Files named like
   secrets (`.env*`, keys, `.netrc`...; any case, through any link) never print.
   Git has many ways to name a file's contents, so none is accepted: a revision
-  has no `:` (no `HEAD:file`, `:0:file`, reflog dates) and may not be a blob id,
-  `-L` is blame-only and numeric, `--follow` is gone, and every diff, show and
-  log excludes secret files by pathspec. `pair-fs git cat REV PATH` reads a file
+  has no `:` (no `HEAD:file`, `:0:file`, reflog dates) and may not be a blob id
+  or a tag that points at one, values attach to their flag (`-U3`,
+  `--format=X`: git reads a separate word as a revision), `-L` is blame-only
+  and numeric, `--follow` is gone, and every diff, show and log excludes secret
+  files by pathspec. `pair-fs git cat REV PATH` reads a file
   at a revision with the path checked. Git runs only when the repository sits
   inside the roots (its history would show the rest) and its config names no
   program (filters, `gpg.program`, pagers, drivers, includes and the like); on

@@ -26,7 +26,7 @@ SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cach
 # patches. The model's file reader (agy_gate.py) refuses the same names.
 SECRET_GLOBS = [".env", ".env.*", "*.pem", "*.key", "*.p12", "*.pfx", "id_rsa*", "id_ed25519*",
                 "id_ecdsa*", "id_dsa*", ".netrc", ".npmrc", ".pypirc"]
-SECRET = re.compile(r"^(\.env(\..+)?|.+\.(pem|key|p12|pfx)|id_(rsa|ed25519|ecdsa|dsa)(\.pub)?|\.netrc|\.npmrc|\.pypirc)$",
+SECRET = re.compile(r"^(\.env(\..+)?|.+\.(pem|key|p12|pfx)|id_(rsa|ed25519|ecdsa|dsa)([._-].*)?|\.netrc|\.npmrc|\.pypirc)$",
                     re.IGNORECASE)
 SECRET_OK = re.compile(r"^\.env\.(example|sample|template|dist)$", re.IGNORECASE)
 
@@ -237,8 +237,11 @@ GIT_FLAGS = {
     "ls-files": {"-m", "--modified", "-o", "--others", "--exclude-standard", "-d", "--deleted"},
     "cat": set(),
 }
-GIT_VALUE = re.compile(r"^(-n|-U|--max-count|--unified|--since|--until|--after|--before|--author|"
-                       r"--grep|--format|--pretty|--date)(=.+)?$|^-[0-9]+$|^-U[0-9]+$|^-n[0-9]+$")
+# Values only in attached form (-U3, --format=X): several of these take an
+# optional value, and git reads a separate next word as a revision, so a
+# separate value would carry an unchecked object name past check_rev.
+GIT_VALUE = re.compile(r"^(--max-count|--unified|--since|--until|--after|--before|--author|"
+                       r"--grep|--format|--pretty|--date)=.+$|^-[0-9]+$|^-U[0-9]+$|^-n[0-9]+$")
 # Repository config that names a program git could run, directly or through a
 # driver: refused outright, since -c can only switch off the keys it names.
 RISKY_CONFIG = re.compile(r"^(include|includeif)\.|program|command|helper|\.(clean|smudge|process)$|pager|editor|"
@@ -248,7 +251,7 @@ REV = re.compile(r"^[A-Za-z0-9_@^~{}+-][A-Za-z0-9._/@^~{}+-]*$")  # no ":" anywh
 SECRET_EXCLUDES = [":(exclude,icase,glob)**/" + g for g in SECRET_GLOBS]
 GIT_HELP = "pair-fs git <sub> [flags] [revs] [-- paths]\n" + "\n".join(
     "  %-8s %s" % (k, " ".join(sorted(v))) for k, v in GIT_FLAGS.items() if k != "cat") + \
-    "\n  value flags: -n N, -N, -U N, --max-count= --since= --until= --author= --grep= --format= --date=" + \
+    "\n  values attached: -n5, -5, -U3, --max-count=5 --since=DATE --until=DATE --author=X --grep=X --format=X --date=X" + \
     "\n  blame -L START,END" + \
     "\n  cat REV PATH   the file at PATH as of revision REV (secret files refused)"
 GIT_ENV = {"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_OPTIONAL_LOCKS": "0",
@@ -289,7 +292,8 @@ def check_rev(git, top, token):
         die("%s names a secret file (.env, keys); its contents are not shown" % token)
     for end in re.split(r"\.\.\.?", token):
         if end:
-            rc, kind, _ = run([git, "-C", top, "cat-file", "-t", end], top, GIT_ENV)
+            # ^{} peels tags: an annotated tag can point straight at a blob.
+            rc, kind, _ = run([git, "-C", top, "cat-file", "-t", end + "^{}"], top, GIT_ENV)
             if rc == 0 and kind.strip() == "blob":
                 die("%s is a file's contents by id; use 'pair-fs git cat REV PATH'" % token)
 
@@ -319,10 +323,12 @@ def cmd_git_cat(git, top, rest):
         die("cat takes a revision and a path: pair-fs git cat HEAD~1 src/app.py")
     rev, path = rest
     check_rev(git, top, rev)
-    rc, kind, _ = run([git, "-C", top, "cat-file", "-t", rev], top, GIT_ENV)
-    if rc != 0 or kind.strip() not in ("commit", "tag"):
+    rc, kind, _ = run([git, "-C", top, "cat-file", "-t", rev + "^{}"], top, GIT_ENV)
+    if rc != 0 or kind.strip() != "commit":
         die("%s is not a commit" % rev)
-    full = os.path.normpath(path if os.path.isabs(path) else os.path.join(top, path))
+    # realpath, like the roots: the harness may name the project by a path
+    # that runs through a symlink (/tmp, /var/folders on macOS).
+    full = os.path.realpath(path if os.path.isabs(path) else os.path.join(top, path))
     if not inside(full, top) or not any(inside(full, r) for r in ROOTS):
         die("%s is outside the git repository %s or the folders you may read" % (path, top))
     rel = os.path.relpath(full, top)
@@ -356,16 +362,9 @@ def cmd_git(args):
             out.append("-L" + val)
             i += 0 if len(a) > 2 else 1
         elif GIT_VALUE.match(a):
-            if re.match(r"^--(format|pretty)", a) and "%G" in a or a in ("--format", "--pretty") and \
-                    i + 1 < len(rest) and "%G" in rest[i + 1]:
+            if re.match(r"^--(format|pretty)=", a) and "%G" in a:
                 die("signature placeholders (%G...) are not available")
-            if "=" in a or re.match(r"^-[0-9]+$|^-U[0-9]+$|^-n[0-9]+$", a):
-                out.append(a)
-            else:
-                if i + 1 >= len(rest) or rest[i + 1].startswith("-"):
-                    die("%s needs a value" % a)
-                out += [a, rest[i + 1]]
-                i += 1
+            out.append(a)
         elif a.startswith("-"):
             die("git %s does not accept %s here; run 'pair-fs git' for the flags" % (sub, a))
         else:

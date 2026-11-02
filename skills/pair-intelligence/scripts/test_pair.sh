@@ -149,6 +149,8 @@ if mode == "denied":
     res.update(response="", denied_actions=[{"action": "read_file", "display_name": "ReadFile"}])
 if mode == "error":
     res.update(status="ERROR", response="")
+if mode == "quota":
+    res.update(status="ERROR", error="API error (attempt 1): RESOURCE_EXHAUSTED (code 429): TPM quota exhausted.")
 if mode == "cut":
     res.update(response="partial essay")
     sys.stderr.write("[agy] print timeout after 590s with turn in progress; returning partial output\n")
@@ -342,6 +344,8 @@ out="$(PAIR_GEMINI_BACKEND= FAKE_OC=ok bash "$P" --prompt-file "$T/prompt.md" --
 check "a Gemini session recorded before agy resumes on OpenCode" '[[ $rc -eq 0 && "$(jq_py "$(last_args oc)" "\" \".join(d[\"args\"])")" == *"-s ses_old"* ]]'
 out="$(cd "$T/arepo" && FAKE_AGY=cut bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
 check "agy's own print timeout (partial answer, SUCCESS): exit 124, STATUS=timeout" '[[ $rc -eq 124 && "$out" == *"STATUS=timeout"* ]]'
+out="$(cd "$T/arepo" && FAKE_AGY=quota bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+check "agy error inside the result reaches stderr with a quota hint" '[[ $rc -eq 71 && "$out" == *RESOURCE_EXHAUSTED*PAIR_AGY_AUTH=key* ]]'
 
 # --- pair_fs.py and agy_gate.py, directly -------------------------------------------
 FS() { PAIR_FS_ROOTS="[\"$AREPO\"]" /usr/bin/python3 -I "$SCRIPTS/pair_fs.py" "$@"; }
@@ -369,9 +373,14 @@ check "pair-fs git refuses a repo wider than its roots" '[[ "$wider" == *"wider 
 git -C "$AREPO" add -f .env >/dev/null 2>&1; git -C "$AREPO" -c user.email=t@t -c user.name=t commit -qm "track env" >/dev/null 2>&1
 check "pair-fs never prints a secret: grep path, symlink, case, rev:path, patches" '! FS grep SECRET .env >/dev/null 2>&1 && ln -sf .env "$AREPO/innocent.txt" && ! FS grep SECRET innocent.txt >/dev/null 2>&1 && ! FS git show HEAD:.env >/dev/null 2>&1 && ! FS git show HEAD | grep -q SECRET123 && ! FS git log -p | grep -q SECRET123'
 check "pair-fs git: no :0:path, -L file, --follow, -U leak, or blob id" '! FS git show :0:.env >/dev/null 2>&1 && ! FS git log -L 1,1:.env >/dev/null 2>&1 && ! FS git log --follow -p -- a.txt >/dev/null 2>&1 && ! FS git log -U1 | grep -q SECRET123 && ! FS git show "$(git -C "$AREPO" rev-parse HEAD:.env)" >/dev/null 2>&1'
+git -C "$AREPO" -c user.email=t@t -c user.name=t tag -a saved-env -m x "$(git -C "$AREPO" rev-parse HEAD:.env)"
+check "pair-fs git: no detached values, no tag to a blob" '! FS git show --pretty HEAD:.env >/dev/null 2>&1 && ! FS git show -U HEAD:.env >/dev/null 2>&1 && ! FS git show --unified HEAD:.env >/dev/null 2>&1 && ! FS git log --format %H >/dev/null 2>&1 && ! FS git show saved-env 2>/dev/null | grep -q SECRET123 && FS git log -U3 -n1 >/dev/null 2>&1'
+git -C "$AREPO" tag -d saved-env >/dev/null
 check "pair-fs git cat reads a file at a revision, never a secret" '[[ "$(FS git cat HEAD a.txt)" == a ]] && ! FS git cat HEAD .env >/dev/null 2>&1 && ! FS git cat HEAD ../x >/dev/null 2>&1'
 printf 'TOKEN=SECRET77\n' > "$AREPO/.ENV"; printf 'x = "SECRET77 in code"\n' > "$AREPO/code.py"
 check "pair-fs grep (ripgrep and the Python fallback) skips secret names in any case" '[[ "$(FS grep SECRET77)" == *code.py* && "$(FS grep SECRET77)" != *.ENV* && "$(PAIR_FS_FORCE_PY_GREP=1 FS grep SECRET77)" == *code.py* && "$(PAIR_FS_FORCE_PY_GREP=1 FS grep SECRET77)" != *.ENV* ]]'
+printf 'KEYDATA77\n' > "$AREPO/id_rsa.backup"
+check "pair-fs grep (both backends) and the gate skip id_rsa.backup" '[[ "$(FS grep KEYDATA77)" == "no matches" && "$(PAIR_FS_FORCE_PY_GREP=1 FS grep KEYDATA77)" == "no matches" ]]'
 rm -f "$AREPO/.ENV" "$AREPO/code.py"
 check "pair_url: dot-only and empty hosts refused" '! /usr/bin/python3 -I "$SCRIPTS/pair_url.py" check "http://./" 2>/dev/null && ! /usr/bin/python3 -I "$SCRIPTS/pair_url.py" domain "..." >/dev/null 2>&1'
 check "pair-fs refuses signature placeholders"     '! FS git log "--format=%G?" >/dev/null 2>&1'
@@ -390,6 +399,7 @@ id")" == deny ]]'
 check "gate: .env inside the root refused"         '[[ "$(G "$T/pol.json" read_file Path "$AREPO/.env")" == deny ]]'
 check "gate: zsh glob qualifier, glob, brace, tilde, =cmd refused" '[[ "$(G "$T/pol.json" run_command CommandLine "pair-fs ls /tmp/x*(e:'"'"'touch y'"'"':)")" == deny && "$(G "$T/pol.json" run_command CommandLine "pair-fs ls /*")" == deny && "$(G "$T/pol.json" run_command CommandLine "pair-fs ls {a,b}")" == deny && "$(G "$T/pol.json" run_command CommandLine "pair-fs ls ~")" == deny && "$(G "$T/pol.json" run_command CommandLine "pair-fs ls =ls")" == deny ]]'
 check "gate: a quoted regex passes"                '[[ "$(G "$T/pol.json" run_command CommandLine "pair-fs grep '"'"'def (.*)\$'"'"' .")" == auto_approve && "$(G "$T/pol.json" run_command CommandLine "pair-fs grep \"a (b) [c]*\" .")" == auto_approve ]]'
+check "gate: id_rsa.backup refused"               '[[ "$(G "$T/pol.json" read_file Path "$AREPO/id_rsa.backup")" == deny ]]'
 check "gate: a link to .env and .ENV refused"      '[[ "$(G "$T/pol.json" read_file Path "$AREPO/innocent.txt")" == deny && "$(G "$T/pol.json" read_file Path "$AREPO/.ENV")" == deny ]]'
 check "gate: read through a symlink out of the root refused" '[[ "$(G "$T/pol.json" read_file Path "$AREPO/etclink/hosts")" == deny ]]'
 check "gate: relative read paths refused"          '[[ "$(G "$T/pol.json" read_file Path "notes.txt")" == deny ]]'

@@ -847,6 +847,12 @@ elif engine == "agy":
             denied = bool(r.get("denied_actions"))
             if (r.get("response") or "").strip():
                 answer.write_text(r["response"].strip() + "\n")
+            if r.get("error"):
+                # agy keeps the reason inside the result, not on stderr.
+                hint = (" (Vertex AI quota: retry later, or PAIR_AGY_AUTH=key)"
+                        if "RESOURCE_EXHAUSTED" in r["error"] else "")
+                with open(sys.argv[6], "a") as f:
+                    f.write("agy: %s%s\n" % (r["error"], hint))
     pathlib.Path(sys.argv[5]).write_text("\n".join(lines) + ("\n" if lines else ""))
 else:
     texts = []
