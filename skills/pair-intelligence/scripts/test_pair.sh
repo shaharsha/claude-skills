@@ -480,6 +480,9 @@ printf '{"roots":["%s"],"web":"cached","commands":[],"log":"%s","web_budget":5}'
 chmod 400 "$T/gl-locked.log"; r2="$(G "$T/pol-locked.json" search_web query a)"; r3="$(G "$T/pol-locked.json" read_file Path "$AREPO/a.txt")"
 chmod 600 "$T/gl-locked.log"
 check "gate: a log it cannot read, or cannot append to, refuses the web, not file reads" '[[ "$r1" == deny && "$r2" == deny && "$r3" == auto_approve ]]'
+printf '{"tool": "search_web", "decision": "auto_approve", "web": true}\n{"tool": "search_web", "decis' > "$T/gl-torn.log"
+printf '{"roots":["%s"],"web":"cached","commands":[],"log":"%s","web_budget":5}' "$AREPO" "$T/gl-torn.log" > "$T/pol-torn.json"
+check "gate: a torn log line (a write cut short) refuses the web" '[[ "$(G "$T/pol-torn.json" search_web query a)" == deny ]]'
 printf '{"roots":["%s"],"web":"cached","commands":[],"log":"%s","web_budget":3}' "$AREPO" "$T/gl-par.log" > "$T/pol-par.json"
 rm -f "$T/par.out"; for i in 1 2 3 4 5 6 7 8; do (G "$T/pol-par.json" search_web query "p$i" >> "$T/par.out") & done; wait
 check "gate: eight parallel searches against a budget of 3: exactly 3 approved" '[[ $(grep -c auto_approve "$T/par.out") -eq 3 && $(grep -c deny "$T/par.out") -eq 5 ]]'

@@ -150,7 +150,9 @@ def main():
                     try:
                         e = json.loads(line)
                     except ValueError:
-                        continue
+                        # Only a write cut short (a full disk) leaves such a line, and
+                        # the next record would be glued to it, uncounted.
+                        decide("deny", "this run's web budget cannot be counted")
                     used += bool(e.get("web") and e.get("decision") == "auto_approve")
         except FileNotFoundError:
             pass
