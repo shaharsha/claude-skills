@@ -366,10 +366,11 @@ rule; use it unless the user sets another.
   It fired twice on 2026-11-01 and both redesigns came out better.
 - **The last round reviews only the fix**, named as a diff.
 - **Declare unfixed medium and low findings** in the PR body.
-- **A "Brittle test:" finding on a test this change adds or edits** is fixed
-  before merging even when low: replace it with a behavioural test, extend the
-  existing test, or drop it. It costs minutes now and a red main later, and it
-  does not need another round.
+- **A "Brittle test:" finding** is low or medium and never blocks a merge on
+  its own. When it is on a test this change adds or edits, fix it in the same
+  PR if the fix is cheap (replace it with a behavioural test, extend the
+  existing test, or drop it), otherwise declare it; either way it needs no
+  further round. It costs minutes now and a red main later.
 - **State the base explicitly** (`git diff <base>...HEAD`). A lane diffed
   against a branch tip fetched after its own branch was cut, other people's
   hunks entered the review, and a false high came out of them.
