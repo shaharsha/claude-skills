@@ -218,19 +218,33 @@ elif [[ "$BACKEND" == "agy" ]]; then
   command -v "$AGY" >/dev/null || { echo "agy (Antigravity CLI) not found; brew install --cask antigravity-cli, set PAIR_AGY, or use --backend opencode" >&2; exit 69; }
   # Never the Antigravity login: Google's terms forbid driving agy from other
   # tools with it. Two routes instead, and neither secret reaches argv or output:
-  #   vertex - plain Vertex AI on a GCP project (startup credits), through an
-  #            ADC copy whose quota_project_id names the project; agy takes the
-  #            project from that field before any environment variable, so the
-  #            main ADC file (pinned to another project) is refused;
+  #   vertex - plain Vertex AI on a GCP project (startup credits), through
+  #            ~/.config/gcloud/adc-agy-*.json: best a service-account key with
+  #            only Vertex AI User, which never expires; or a copy of your own
+  #            ADC whose quota_project_id names the project, which Google ends on
+  #            a schedule. agy takes the project from the file before any
+  #            environment variable, so the main ADC file (pinned to another
+  #            project) is refused;
   #   key    - a Gemini API key (AI Studio).
-  # auto picks vertex when exactly one ~/.config/gcloud/adc-agy-*.json exists
-  # (or PAIR_AGY_ADC names one), else key.
+  # auto picks vertex when PAIR_AGY_ADC names a file, or the adc-agy-*.json files
+  # hold exactly one service-account key, or there is exactly one such file;
+  # else key.
   AGY_AUTH="${PAIR_AGY_AUTH:-auto}"
   AGY_ADC="${PAIR_AGY_ADC:-}"
   AGY_PROJECT=""
   if [[ "$AGY_AUTH" != key && -z "$AGY_ADC" ]]; then
-    _adcs=("$HOME"/.config/gcloud/adc-agy-*.json)
-    [[ ${#_adcs[@]} -eq 1 && -f "${_adcs[0]}" ]] && AGY_ADC="${_adcs[0]}"
+    AGY_ADC="$(python3 - "$HOME"/.config/gcloud/adc-agy-*.json <<'PY'
+import json, os, sys
+files = [f for f in sys.argv[1:] if os.path.isfile(f)]
+def kind(f):
+    try:
+        return json.load(open(f)).get("type", "")
+    except Exception:
+        return ""
+sa = [f for f in files if kind(f) == "service_account"]
+print(sa[0] if len(sa) == 1 else files[0] if len(files) == 1 else "")
+PY
+)"
   fi
   case "$AGY_AUTH" in
     auto) if [[ -n "$AGY_ADC" && -f "$AGY_ADC" ]]; then AGY_AUTH=vertex; else AGY_AUTH=key; fi ;;
@@ -244,10 +258,14 @@ elif [[ "$BACKEND" == "agy" ]]; then
     AGY_ADC="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$AGY_ADC")"
     [[ "$(basename "$AGY_ADC")" != application_default_credentials.json ]] \
       || { echo "refusing the main ADC file for agy: its quota project may bill another client; use a copy (PAIR_AGY_ADC)" >&2; exit 64; }
+    # A user ADC copy names its project in quota_project_id; a service-account key
+    # in project_id (its own project, the one it is granted Vertex AI on).
     AGY_PROJECT="$(python3 -c 'import json,sys
-try: print(json.load(open(sys.argv[1])).get("quota_project_id", ""))
+try:
+    d = json.load(open(sys.argv[1]))
+    print(d.get("quota_project_id") or (d.get("project_id", "") if d.get("type") == "service_account" else ""))
 except Exception: pass' "$AGY_ADC" 2>/dev/null)"
-    [[ -n "$AGY_PROJECT" ]] || { echo "$AGY_ADC has no quota_project_id, so agy would not know which project to bill" >&2; exit 69; }
+    [[ -n "$AGY_PROJECT" ]] || { echo "$AGY_ADC names no project (quota_project_id, or a service-account key's project_id), so agy would not know which project to bill" >&2; exit 69; }
     # Google ends these logins on a schedule (invalid_rapt), and agy then says
     # "Run 'agy' to log in", pointing at the one login this skill must not use.
     # One token refresh up front tells it apart; a network hiccup is not a verdict.

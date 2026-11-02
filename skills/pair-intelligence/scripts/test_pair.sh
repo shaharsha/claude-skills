@@ -333,6 +333,12 @@ A="$(last_args agy)"; RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
 check "vertex auto: ADC copy found, no API key passed" '[[ $rc -eq 0 && "$(jq_py "$A" "d[\"adc_auth\"]+\" \"+d[\"location\"]")" == "true global" && "$(jq_py "$A" "d[\"adc\"]")" == *adc-agy-proj-x.json && -z "$(jq_py "$A" "d[\"key\"]")" ]]'
 check "vertex: settings carry no modelProvider (it would switch to key mode)" '! grep -q modelProvider "$(jq_py "$A" "d[\"args\"][d[\"args\"].index(\"--settings\")+1]")"'
 check "vertex: meta.json names the billed project" '[[ "$(jq_py "$RUN/meta.json" "d[\"auth\"]")" == vertex:proj-x ]]'
+mkdir -p "$T/sahome/.config/gcloud"
+cp "$T/vhome/.config/gcloud/adc-agy-proj-x.json" "$T/sahome/.config/gcloud/"
+printf '{"type":"service_account","project_id":"proj-y","client_email":"sa@proj-y.iam.gserviceaccount.com"}' > "$T/sahome/.config/gcloud/adc-agy-sa-proj-y.json"
+out="$(cd "$T/arepo" && HOME="$T/sahome" PAIR_AGY_AUTH=auto FAKE_AGY=ok bash "$P" --engine gemini --backend agy --cwd "$T/arepo" --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
+check "vertex: a service-account key wins over a login copy, its project_id billed" '[[ $rc -eq 0 && "$(jq_py "$(last_args agy)" "d[\"adc\"]")" == *adc-agy-sa-proj-y.json && "$(jq_py "$RUN/meta.json" "d[\"auth\"]")" == vertex:proj-y && "$out" != *expired* ]]'
 out="$(cd "$T/arepo" && HOME="$T/vhome" PAIR_AGY_AUTH=key FAKE_AGY=ok bash "$P" --engine gemini --backend agy --cwd "$T/arepo" --prompt-file "$T/prompt.md" 2>&1)"
 check "PAIR_AGY_AUTH=key wins over an ADC copy" '[[ "$(jq_py "$(last_args agy)" "d[\"key\"]")" == fake-key-123 && -z "$(jq_py "$(last_args agy)" "d[\"adc_auth\"]")" ]]'
 out="$(cd "$T/arepo" && HOME="$T/vhome" PAIR_AGY_AUTH=auto PAIR_AGY_ADC_CHECK=expired FAKE_AGY=ok bash "$P" --engine gemini --backend agy --cwd "$T/arepo" --prompt-file "$T/prompt.md" 2>&1)"; rc=$?

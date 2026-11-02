@@ -89,9 +89,26 @@ brew install --cask antigravity-cli
 export GEMINI_API_KEY=...      # from Google AI Studio; OpenCode's saved Google key also works
 ```
 
-**Gemini, on Vertex AI** (bills a GCP project, so startup credits apply). agy
-takes the project from the ADC file's `quota_project_id`, so give it a copy pinned
-to the project you mean:
+**Gemini, on Vertex AI** (bills a GCP project, so startup credits apply). Best:
+a service account with only the Vertex AI User role, whose key never expires:
+
+```bash
+gcloud iam service-accounts create pair-intelligence-agy --project MY_PROJECT
+gcloud projects add-iam-policy-binding MY_PROJECT --role roles/aiplatform.user \
+  --member serviceAccount:pair-intelligence-agy@MY_PROJECT.iam.gserviceaccount.com
+(umask 077; gcloud iam service-accounts keys create ~/.config/gcloud/adc-agy-sa-MY_PROJECT.json \
+  --iam-account pair-intelligence-agy@MY_PROJECT.iam.gserviceaccount.com)
+```
+
+If your organization blocks key creation (`iam.disableServiceAccountKeyCreation`,
+on by default in newer organizations), lift it on that project only
+(`gcloud resource-manager org-policies disable-enforce
+iam.disableServiceAccountKeyCreation --project MY_PROJECT`), create the key, then
+restore it (`gcloud resource-manager org-policies delete
+iam.disableServiceAccountKeyCreation --project MY_PROJECT`): an existing key keeps
+working. The other way is a copy of your own login pinned to the project (agy
+takes the project from the file's `quota_project_id`); Google ends that login on
+a schedule, so it needs renewing:
 
 ```bash
 gcloud services enable aiplatform.googleapis.com --project MY_PROJECT

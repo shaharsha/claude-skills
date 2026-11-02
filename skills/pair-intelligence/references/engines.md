@@ -96,10 +96,13 @@ Tested on the Antigravity CLI (`agy`) 1.4.12 with a Gemini API key, 2026-11-02.
 
 - **Auth: Vertex AI or an API key, never the Antigravity login.** Google's FAQ
   forbids driving agy from other tools with that login. `PAIR_AGY_AUTH` picks:
-  - `vertex` (what `auto`, the default, picks when exactly one
-    `~/.config/gcloud/adc-agy-*.json` exists, or `PAIR_AGY_ADC` names one):
-    plain Vertex AI on the GCP project in that ADC copy's `quota_project_id`,
-    billed to that project (startup credits). agy reads the project from that
+  - `vertex` (what `auto`, the default, picks when `PAIR_AGY_ADC` names a file,
+    or the `~/.config/gcloud/adc-agy-*.json` files hold exactly one
+    service-account key, or there is exactly one such file): plain Vertex AI,
+    billed to the project (startup credits). Best is a service-account key with
+    only `roles/aiplatform.user` (project from its `project_id`), which never
+    expires; this Mac has `adc-agy-sa-shahar-personal.json`. A copy of your own
+    ADC (project from its `quota_project_id`) works too but expires, see below. agy reads the project from that
     field before `GOOGLE_CLOUD_QUOTA_PROJECT`, and the main
     `application_default_credentials.json` pins another client's project, so the
     script refuses it. `meta.json` records `auth: vertex:<project>`. Google ends
