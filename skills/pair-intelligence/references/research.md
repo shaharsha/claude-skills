@@ -91,7 +91,8 @@ Per engine:
   rules allow only `pair-browser`; not `agent-browser`, not `curl`, and
   redirection and `$(...)` are refused. Tested: it drove the browser and could
   not close it.
-- **Codex in review, consult, ideate or research** stays read-only. Its sandbox
+- **Codex, in every mode** stays read-only (or, with `--runnable`, writable only
+  in its disposable copy). Its sandbox
   proxy cuts every socket but one: a broker's (`pair_broker.py`), started outside
   the sandbox. Codex's `pair-browser` is a thin client that sends its arguments
   there, and the broker runs the grammar wrapper. Codex never touches
@@ -99,13 +100,10 @@ Per engine:
   browser without its allow-list. A preflight inside the same sandbox checks the
   broker answers and the internet, the repo and the browser's socket do not,
   before Codex starts.
-- **Codex in browse** runs with workspace write and network on. Its shell is not
-  filtered, so the wrapper is a convention for it, not a wall: it can reach any
-  host with curl, and a model that sets out to read the wrapper can find the
-  socket and drive the browser directly, which runs outside the sandbox and can
-  write a screenshot anywhere you can. The allow-list still binds every page the
-  browser loads, unless the model relaunches the browser itself. For untrusted
-  pages, prefer browse on Gemini, or Codex in research mode with `--domains`.
+- **Codex in browse** works the same way: read-only, one socket (the broker's),
+  no network of its own. Until 2026-11-02 browse gave it workspace write and
+  network, which let it `curl` any host and relaunch the browser without the
+  allow-list; the broker closed that.
 
 List every domain the task needs: where redirects land, and the domains the page
 loads its styles and scripts from (GitHub needs `githubassets.com` too), because

@@ -49,7 +49,8 @@ Read the mode's file before you write the prompt. Images work in any mode: add
 | Web search | built in | Google search; with `--web live`, `pair-fetch` reads pages |
 | Images | yes | yes |
 | Enforced JSON | `--schema` | no |
-| Live browser | `--domains`, any mode; still read-only outside browse | `--domains`, any mode |
+| Live browser | `--domains`, any mode; stays read-only | `--domains`, any mode |
+| Run code | `--runnable` (review, consult): a disposable copy, network off | no |
 | Cost | ChatGPT plan quota | per token: Vertex AI on your GCP project when an agy ADC copy exists, else the API key (Argon has no free tier) |
 
 Use Codex unless the user names Gemini, Codex is unavailable or rate-limited, or
@@ -75,7 +76,9 @@ Models, flags and traps per engine: `references/engines.md`.
    `references/review.md`). Common flags: `--cwd`, `--image` (repeatable),
    `--name` / `--resume` (a resumed session keeps its engine, mode and
    directory; browse sessions are not resumable), `--domains` (a live browser,
-   in any mode), `--web`, `--effort`, `--timeout`. `--help` lists the rest.
+   in any mode), `--runnable` (Codex may run tests in a disposable copy), `--web`,
+   `--effort`, `--timeout`. `--help` lists the rest. After an agy or codex
+   upgrade, run `bash scripts/pair.sh --selftest` (a few cents of live checks).
 
    If your shell tool runs commands inside its own sandbox, run these scripts
    outside it: an engine's sandbox cannot start inside another one, and the
@@ -107,9 +110,13 @@ Models, flags and traps per engine: `references/engines.md`.
   shots folder. In review, consult, ideate and research the model stays
   read-only: Codex reaches the browser through a broker socket, the one hole in
   its sandbox, checked by a preflight before it starts; Gemini through its gate.
-- **Browse:** the same browser with no repository in reach. Gemini may run
-  nothing else. Codex keeps workspace write and network, so for Codex the wrapper
-  is a convention, not a wall (see `references/research.md`).
+- **Browse:** the same browser with no repository in reach; both engines stay
+  read-only there too.
+- **Runnable** (`--runnable`, Codex review and consult): Codex works in a
+  disposable git worktree of the repo with the uncommitted changes, may write
+  there and run tests, has no network, and the copy is removed afterwards.
+  Dependency folders are linked read-only; a test that downloads anything fails.
+  It runs the repository's own code: use it on code you would run yourself.
 
 Never grant `--add-dir ~/.agent-browser` (it holds every session's browser socket
 and the saved-login key), never use `danger-full-access` or a bypass flag, never

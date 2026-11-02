@@ -89,9 +89,26 @@ brew install --cask antigravity-cli
 export GEMINI_API_KEY=...      # from Google AI Studio; OpenCode's saved Google key also works
 ```
 
-**Gemini, on Vertex AI** (bills a GCP project, so startup credits apply). agy
-takes the project from the ADC file's `quota_project_id`, so give it a copy pinned
-to the project you mean:
+**Gemini, on Vertex AI** (bills a GCP project, so startup credits apply). Best:
+a service account with only the Vertex AI User role, whose key never expires:
+
+```bash
+gcloud iam service-accounts create pair-intelligence-agy --project MY_PROJECT
+gcloud projects add-iam-policy-binding MY_PROJECT --role roles/aiplatform.user \
+  --member serviceAccount:pair-intelligence-agy@MY_PROJECT.iam.gserviceaccount.com
+(umask 077; gcloud iam service-accounts keys create ~/.config/gcloud/adc-agy-sa-MY_PROJECT.json \
+  --iam-account pair-intelligence-agy@MY_PROJECT.iam.gserviceaccount.com)
+```
+
+If your organization blocks key creation (`iam.disableServiceAccountKeyCreation`,
+on by default in newer organizations), lift it on that project only
+(`gcloud resource-manager org-policies disable-enforce
+iam.disableServiceAccountKeyCreation --project MY_PROJECT`), create the key, then
+restore it (`gcloud resource-manager org-policies delete
+iam.disableServiceAccountKeyCreation --project MY_PROJECT`): an existing key keeps
+working. The other way is a copy of your own login pinned to the project (agy
+takes the project from the file's `quota_project_id`); Google ends that login on
+a schedule, so it needs renewing:
 
 ```bash
 gcloud services enable aiplatform.googleapis.com --project MY_PROJECT
@@ -106,7 +123,9 @@ json.dump(adc, open(d + "/adc-agy-MY_PROJECT.json", "w"))'
 
 With exactly one `adc-agy-*.json` present, Gemini runs on Vertex AI (a run's
 `meta.json` records `auth: vertex:<project>`); `PAIR_AGY_AUTH=key` forces the API
-key. If agy reports `Reauthentication failed`, log in again and redo the copy.
+key. Google ends this login on a schedule; when it has, `pair.sh` falls back to
+the API key and prints the fix: `gcloud auth application-default login`, then
+redo the copy.
 
 **A live browser**
 
@@ -115,8 +134,11 @@ npm install -g agent-browser
 agent-browser install          # downloads its browser
 ```
 
-**Check it**: `bash scripts/test_pair.sh` runs offline; a missing CLI or
-credential makes `pair.sh` exit 69 with a message naming what to install or set.
+**Check it**: `bash scripts/test_pair.sh` runs offline; `bash scripts/pair.sh
+--selftest` checks the live CLIs (a few cents: two short Gemini turns and one
+short Codex turn), worth rerunning after an agy or codex upgrade. A missing CLI
+or credential makes `pair.sh` exit 69 with a message naming what to install or
+set.
 
 ## Quick start
 
@@ -137,8 +159,12 @@ bash scripts/pair.sh --mode ideate --prompt-file /abs/round2.md --resume names
 bash scripts/pair.sh --mode browse --domains example.com --prompt-file /abs/task.md
 
 # A review that checks the code against the running page (Codex stays read-only)
-bash scripts/pair.sh --mode review --cwd /abs/repo --domains localhost:5173 \
-  --prompt-file /abs/review.md
+bash scripts/codex_review.sh --repo /abs/repo --domains localhost:5173 \
+  --prompt-file /abs/review.md --label ui-change
+
+# A review where Codex may run the tests, in a disposable copy with no network
+bash scripts/codex_review.sh --repo /abs/repo --runnable \
+  --prompt-file /abs/review.md --label with-tests
 
 # A Codex code review with structured findings
 bash scripts/codex_review.sh --repo /abs/repo --prompt-file /abs/review.md --label my-change
@@ -161,9 +187,9 @@ non-git and `--out-dir` paths. It spends no model quota.
 
 - Both engines can read files beyond the ones you name and send what they read to
   their vendor. Redact secrets, and keep answer keys away from them.
-- In browse mode Codex has network access in its sandbox, so it can reach other
-  hosts with curl; the domain allow-list binds only the browser. With `--domains`
-  in the other modes it stays read-only and reaches the browser through a broker.
+- Codex reaches the browser through a broker socket and otherwise has no network,
+  in every mode. With `--runnable` it can run tests in a disposable copy of the
+  repo, still without network, so tests that download anything fail.
 - Gemini's secret-file protection works by file name (`.env`, key files); a
   secret pasted into an ordinary file is just text to it.
 - A Vertex AI project's tokens-per-minute quota can run out on a long Gemini

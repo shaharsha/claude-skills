@@ -31,6 +31,8 @@ SCHEMA="$SKILL_DIR/assets/findings.schema.json"
 EPHEMERAL=0
 SEARCH=0
 OUT_OVERRIDE=""
+DOMAINS=""
+RUNNABLE=0
 
 usage() {
   cat >&2 <<'USAGE'
@@ -52,6 +54,13 @@ usage: codex_review.sh --repo <dir> --prompt-file <file> [options]
   --out-dir <dir>       Write artifacts here instead of <repo>/.codex-review/.
                         Use a durable directory when the repo is a worktree that
                         will be removed: the evidence goes with it otherwise.
+  --domains <a.com,...>  Give the reviewer a live, isolated browser limited to
+                        these domains (a local dev server needs its port:
+                        localhost:5173). It stays read-only: the browser is
+                        reached through a broker socket, checked by a preflight.
+                        Screenshots are kept beside the review as <base>.shots/.
+  --runnable            Review in a disposable copy of the repo where Codex may
+                        run tests and write files, network off. Not resumable.
   --list                Print known session labels for --repo and exit
 
 Prints the paths it wrote, with REVIEW_MD=<path> last.
@@ -74,6 +83,8 @@ while [[ $# -gt 0 ]]; do
     --search)      SEARCH=1; shift ;;
     --ephemeral)   EPHEMERAL=1; shift ;;
     --out-dir)     OUT_OVERRIDE="${2:-}"; shift 2 ;;
+    --domains)     DOMAINS="${2:-}"; shift 2 ;;
+    --runnable)    RUNNABLE=1; shift ;;
     --list)        LIST_ONLY=1; shift ;;
     -h|--help)     usage ;;
     *) echo "unknown argument: $1" >&2; usage ;;
@@ -131,6 +142,14 @@ fi
 [[ -f "$PROMPT_FILE" ]] || { echo "no such prompt file: $PROMPT_FILE" >&2; exit 66; }
 command -v codex >/dev/null || { echo "codex CLI not found on PATH" >&2; exit 69; }
 [[ -n "$RESUME" && "$EPHEMERAL" -eq 1 ]] && { echo "--resume and --ephemeral are incompatible" >&2; exit 64; }
+if [[ $RUNNABLE -eq 1 ]]; then
+  [[ -z "$RESUME" ]] || { echo "--runnable rounds are not resumable: the copy is removed after the run" >&2; exit 64; }
+  [[ $IS_GIT -eq 1 ]] || { echo "--runnable needs a git repository" >&2; exit 64; }
+  EPHEMERAL=1
+fi
+if [[ -n "$DOMAINS" ]]; then
+  command -v agent-browser >/dev/null || { echo "agent-browser not found on PATH" >&2; exit 69; }
+fi
 
 mkdir -p "$OUT_DIR"
 OUT_DIR="$(cd "$OUT_DIR" && pwd)"
@@ -218,7 +237,27 @@ _reserve_base
 # peer acquires $BASE while this run is still writing, which reopens the collision
 # the block above exists to close, with a lock in front of it. This line looks
 # tidy-uppable and is not: do NOT move it earlier or scope it to the reservation.
-trap 'rm -f "$BASE.lock"' EXIT
+RUN_REPO="$REPO"
+SCRATCH_PARENT=""
+PB_DIR=""
+# Screenshots are evidence: kept beside the review as <base>.shots/.
+keep_shots() {
+  if [[ -n "$PB_DIR" && ! -e "$BASE.shots" && -n "$(ls -A "$PB_DIR/shots" 2>/dev/null)" ]]; then
+    cp -R "$PB_DIR/shots" "$BASE.shots" 2>/dev/null || true
+  fi
+}
+review_cleanup() {
+  if [[ -n "$PB_DIR" ]]; then
+    pb_cleanup
+    # Screenshots are evidence: keep them beside the review, then drop the rest.
+    keep_shots
+    rm -rf "$PB_DIR"
+  fi
+  [[ -n "$SCRATCH_PARENT" ]] && bash "$SKILL_DIR/scripts/pair_scratch.sh" remove "$REPO" "$SCRATCH_PARENT" >/dev/null 2>&1
+  rm -f "$BASE.lock"
+  return 0
+}
+trap review_cleanup EXIT
 
 RAW="$BASE.json"
 MD="$BASE.md"
@@ -323,16 +362,67 @@ elif [[ -n "$(git -C "$REPO" status --porcelain 2>/dev/null)" ]]; then
 else
   REVIEW_DIRTY="clean"
 fi
+[[ $RUNNABLE -eq 1 ]] && REVIEW_DIRTY="$REVIEW_DIRTY; read in a disposable copy where Codex could run code"
+
+# --- runnable copy and live browser (both optional) --------------------------
+if [[ $RUNNABLE -eq 1 ]]; then
+  # A runnable Codex may write to temp folders: the real repo, this skill (the
+  # host runs its scripts later) and the review's artifacts must not be in one.
+  bash "$SKILL_DIR/scripts/pair_scratch.sh" check "$(git -C "$REPO" rev-parse --show-toplevel)" "$SKILL_DIR" "$OUT_DIR" || exit 64
+  SCRATCH_PARENT="$(mktemp -d "${TMPDIR:-/tmp}/pair-run.XXXXXX")"
+  RUN_REPO="$(bash "$SKILL_DIR/scripts/pair_scratch.sh" create "$REPO" "$SCRATCH_PARENT")" \
+    || { echo "could not make a runnable copy of $REPO" >&2; exit 71; }
+fi
+# shellcheck source=pair_browser.sh
+source "$SKILL_DIR/scripts/pair_browser.sh"
+RUN_PROMPT="$PROMPT_FILE"
+if [[ -n "$DOMAINS" || $RUNNABLE -eq 1 ]]; then
+  # Not a temp folder: a runnable copy may write there, and the browser host
+  # runs what this folder holds.
+  mkdir -p "$HOME/.cache/pair-intelligence"
+  PB_DIR="$(mktemp -d "$HOME/.cache/pair-intelligence/review.XXXXXX")"
+  if [[ -n "$DOMAINS" ]]; then
+    ENGINE=codex
+    SHOTS="$PB_DIR/shots"
+    PB_CHECK_DIR="$REPO"
+    PB_SANDBOX_CWD="$RUN_REPO"
+    PB_BASE_PROFILE=":read-only"; [[ $RUNNABLE -eq 1 ]] && PB_BASE_PROFILE=":workspace"
+    pb_setup
+  fi
+  # The reviewed prompt is the caller's file (hashed above); this copy only adds
+  # how to use the browser and the copy, and the sidecar names what was added.
+  RUN_PROMPT="$PB_DIR/prompt.md"
+  {
+    [[ -n "$DOMAINS" ]] && pb_harness
+    if [[ $RUNNABLE -eq 1 ]]; then
+      printf '<harness>\nYou are working in a disposable copy of the repository at %s: the same commit with the same uncommitted changes. You may run tests and scripts and write files there; nothing you change reaches the real repository, and the network is off (no package downloads). Dependency folders such as node_modules or .venv are links to the real ones and read-only.\n</harness>\n\n' "$RUN_REPO"
+    fi
+    cat "$PROMPT_FILE"
+  } > "$RUN_PROMPT"
+fi
+
+if [[ -n "$DOMAINS" ]]; then
+  # Read-only (or the writable copy) with one unix socket open, the broker's.
+  SANDBOX_TIER=("${CODEX_BROKER_TIER[@]}")
+  SANDBOX_FLAG=()
+elif [[ $RUNNABLE -eq 1 ]]; then
+  # Writes only inside the disposable copy (and temp dirs), network off.
+  SANDBOX_TIER=(-c 'sandbox_mode="workspace-write"' -c 'sandbox_workspace_write.network_access=false')
+  SANDBOX_FLAG=(-s workspace-write)
+else
+  # Verified, and contrary to what the -s flag's absence on `resume` suggests:
+  # a resumed session does NOT inherit its original sandbox. Without this line a
+  # resume silently falls back to the user's global config, which is frequently
+  # danger-full-access. This must stay in COMMON, not the fresh-session branch.
+  SANDBOX_TIER=(-c 'sandbox_mode="read-only"')
+  SANDBOX_FLAG=(-s read-only)
+fi
 
 COMMON=(
   -m "$MODEL"
   -c "model_reasoning_effort=\"$EFFORT\""
   -c 'approval_policy="never"'
-  # Verified, and contrary to what the -s flag's absence on `resume` suggests:
-  # a resumed session does NOT inherit its original sandbox. Without this line a
-  # resume silently falls back to the user's global config, which is frequently
-  # danger-full-access. This must stay in COMMON, not the fresh-session branch.
-  -c 'sandbox_mode="read-only"'
+  "${SANDBOX_TIER[@]}"
   # Codex reads AGENTS.md natively and ignores CLAUDE.md. This makes CLAUDE.md a
   # first-class instruction file for the run, so the reviewer is held to the same
   # project rules the author was, with no AGENTS.md needed anywhere.
@@ -359,14 +449,14 @@ if [[ -n "$RESUME_ID" ]]; then
   # session; the sandbox does not, which is why COMMON sets it via -c.
   CODEX_ARGS=(exec resume "$RESUME_ID" "${COMMON[@]}")
 else
-  CODEX_ARGS=(exec -C "$REPO" -s read-only "${COMMON[@]}")
+  CODEX_ARGS=(exec -C "$RUN_REPO" ${SANDBOX_FLAG[@]+"${SANDBOX_FLAG[@]}"} "${COMMON[@]}")
   [[ "$EPHEMERAL" -eq 1 ]] && CODEX_ARGS+=(--ephemeral)
 fi
 
 # `-` makes stdin the whole prompt. Redirecting stdin from the file also stops
 # codex from blocking on an inherited non-tty stdin.
 set +e
-(cd "$REPO" && codex "${CODEX_ARGS[@]}" - < "$PROMPT_FILE") > "$LOG" 2>&1
+(cd "$RUN_REPO" && PATH="${PB_DIR:+$PB_DIR/bin:}$PATH" codex "${CODEX_ARGS[@]}" - < "$RUN_PROMPT") > "$LOG" 2>&1
 STATUS=$?
 set -e
 
@@ -468,6 +558,9 @@ printf 'sha=%s\nbranch=%s\ntree=%s\nprompt=%s\nprompt_relative=%s\nprompt_sha256
   "$REVIEW_SHA" "$REVIEW_BRANCH" "$REVIEW_DIRTY" "$PROMPT_CITE" "$PROMPT_RELATIVE" "$PROMPT_SHA" \
   "$PROMPT_ORIGIN" "$([[ -n "$PROMPT_COPY" ]] && echo yes || echo no)" \
   "$LABEL" "${SESSION_ID:-unknown}" "$STAMP" "$ARTIFACT_SHA" > "$BASE.provenance"
+# What the run added to the reviewed prompt: a browser (its domains) and/or a
+# runnable copy. New keys at the end, so existing readers are unaffected.
+printf 'browser_domains=%s\nrunnable=%s\n' "${DOMAINS:-none}" "$([[ $RUNNABLE -eq 1 ]] && echo yes || echo no)" >> "$BASE.provenance"
 
 echo "RAW_JSON=$RAW"
 echo "CODEX_LOG=$LOG"
@@ -475,6 +568,8 @@ echo "REVIEWED_SHA=$REVIEW_SHA"
 echo "REVIEWED_TREE=$REVIEW_DIRTY"
 [[ -n "$SESSION_ID" ]] && echo "SESSION_ID=$SESSION_ID"
 [[ -n "${SESSION_KEY:-}" ]] && echo "SESSION_NAME=$SESSION_KEY"
+keep_shots
+[[ -d "$BASE.shots" ]] && echo "SHOTS=$BASE.shots"
 echo "REVIEW_MD=$MD"
 exit 0
 }
