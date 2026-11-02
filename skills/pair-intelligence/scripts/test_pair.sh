@@ -171,6 +171,12 @@ if mode == "quota":
 if mode == "cut":
     res.update(response="partial essay")
     sys.stderr.write("[agy] print timeout after 590s with turn in progress; returning partial output\n")
+if mode == "cut-empty":   # cut in the middle of a tool loop: agy returns no text
+    res.update(response="")
+    sys.stderr.write("[agy] print timeout after 590s with turn in progress; returning partial output\n")
+if mode == "quota-cut":   # the measured r2 run: a 429 while the print timeout fired
+    res.update(status="ERROR", response="", error="API error (attempt 1): RESOURCE_EXHAUSTED (code 429): TPM quota exhausted.")
+    sys.stderr.write("[agy] print timeout after 590s with turn in progress; returning partial output\n")
 ev(event="result", result=res)
 FAKE
 
@@ -305,6 +311,20 @@ check "agy resume refuses another backend: exit 64" '[[ $rc -eq 64 ]]'
 reset_log
 out="$(cd "$T/arepo" && FAKE_AGY=ok FAKE_AGY_TOOLS='[["search_web",{"query":"q"}]]' bash "$P" --engine gemini --backend agy --mode review --prompt-file "$T/prompt.md" 2>&1)"
 check "agy review: web search refused"             '[[ "$(dec)" == deny ]]'
+RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
+check "agy review: told its time, not a web budget (web is off)" 'grep -q "You have about 20 minutes for this turn. After about 14 minutes every tool call is refused" "$LOG/agy-stdin-0.txt" && ! grep -q "Web searches and page reads are limited" "$LOG/agy-stdin-0.txt"'
+check "agy: policy stops tools at 70% of the timeout" '[[ $(( $(jq_py "$RUN/agy-policy.json" "d[\"tools_until\"]") - $(stat -f %m "$RUN/prompt.md") )) -ge 835 && $(( $(jq_py "$RUN/agy-policy.json" "d[\"tools_until\"]") - $(stat -f %m "$RUN/prompt.md") )) -le 842 ]]'
+reset_log
+out="$(cd "$T/arepo" && FAKE_AGY=ok FAKE_AGY_TOOLS='[["search_web",{"query":"a"}],["search_web",{"query":"b"}],["search_web",{"query":"c"}]]' bash "$P" --engine gemini --backend agy --web-budget 2 --prompt-file "$T/prompt.md" 2>&1)"
+RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
+check "agy --web-budget 2: two searches, the third refused; the prompt says 2" '[[ "$(dec)" == "auto_approve auto_approve deny" && "$(jq_py "$RUN/agy-policy.json" "d[\"web_budget\"]")" == 2 ]] && grep -q "limited to 2 in all" "$LOG/agy-stdin-0.txt"'
+out="$(FAKE_AGY=ok bash "$P" --engine gemini --backend agy --mode research --prompt-file "$T/prompt.md" 2>&1)"
+RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
+check "agy research: web budget 40 by default"     '[[ "$(jq_py "$RUN/agy-policy.json" "d[\"web_budget\"]")" == 40 ]]'
+bash "$P" --web-budget 5 --prompt-file "$T/prompt.md" >/dev/null 2>&1; r1=$?
+bash "$P" --engine gemini --backend opencode --web-budget 5 --prompt-file "$T/prompt.md" >/dev/null 2>&1; r2=$?
+bash "$P" --engine gemini --backend agy --web-budget lots --prompt-file "$T/prompt.md" >/dev/null 2>&1; r3=$?
+check "--web-budget: refused for Codex and OpenCode, and when not a number: exit 64" '[[ $r1 -eq 64 && $r2 -eq 64 && $r3 -eq 64 ]]'
 reset_log
 out="$(FAKE_AGY=ok FAKE_AGY_TOOLS='[["read_url_content",{"Url":"https://example.com"}]]' bash "$P" --engine gemini --backend agy --mode research --prompt-file "$T/prompt.md" 2>&1)"
 check "agy research: read_url_content refused (pair-fetch is the reader)" '[[ "$(dec)" == deny ]]'
@@ -371,9 +391,14 @@ reset_log
 out="$(PAIR_GEMINI_BACKEND= FAKE_OC=ok bash "$P" --prompt-file "$T/prompt.md" --resume legacy 2>&1)"; rc=$?
 check "a Gemini session recorded before agy resumes on OpenCode" '[[ $rc -eq 0 && "$(jq_py "$(last_args oc)" "\" \".join(d[\"args\"])")" == *"-s ses_old"* ]]'
 out="$(cd "$T/arepo" && FAKE_AGY=cut bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
-check "agy's own print timeout (partial answer, SUCCESS): exit 124, STATUS=timeout" '[[ $rc -eq 124 && "$out" == *"STATUS=timeout"* ]]'
+check "agy's own print timeout (partial answer, SUCCESS): exit 124, STATUS=timeout" '[[ $rc -eq 124 && "$out" == *"STATUS=timeout"* && "$out" == *"holds only what arrived before the cut"* ]]'
+out="$(cd "$T/arepo" && FAKE_AGY=cut-empty FAKE_AGY_TOOLS='[["search_web",{"query":"q"}]]' bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+check "agy cut mid tool loop: says there is no answer and how many tool calls, never 'partial output'" '[[ $rc -eq 124 && "$out" == *"with no answer"*"1 tool calls"* && "$out" != *"partial output if"* ]]'
 out="$(cd "$T/arepo" && FAKE_AGY=quota bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
-check "agy error inside the result reaches stderr with a quota hint" '[[ $rc -eq 71 && "$out" == *RESOURCE_EXHAUSTED*PAIR_AGY_AUTH=key* ]]'
+RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
+check "agy quota error: exit 75, STATUS=quota, the reason in stderr.log" '[[ $rc -eq 75 && "$out" == *"STATUS=quota"* && "$out" == *"API key route is not retried"* ]] && grep -q "RESOURCE_EXHAUSTED.*PAIR_AGY_AUTH=key" "$RUN/stderr.log"'
+out="$(cd "$T/arepo" && FAKE_AGY=quota-cut bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+check "agy 429 while its print timeout fired: STATUS=quota, not timeout" '[[ $rc -eq 75 && "$out" == *"STATUS=quota"* ]]'
 
 # --- pair_fs.py and agy_gate.py, directly -------------------------------------------
 FS() { PAIR_FS_ROOTS="[\"$AREPO\"]" /usr/bin/python3 -I "$SCRIPTS/pair_fs.py" "$@"; }
@@ -436,6 +461,28 @@ check "gate: a link to .env and .ENV refused"      '[[ "$(G "$T/pol.json" read_f
 check "gate: read through a symlink out of the root refused" '[[ "$(G "$T/pol.json" read_file Path "$AREPO/etclink/hosts")" == deny ]]'
 check "gate: relative read paths refused"          '[[ "$(G "$T/pol.json" read_file Path "notes.txt")" == deny ]]'
 check "gate: unknown tools refused"                '[[ "$(G "$T/pol.json" invoke_subagent Prompt x)" == deny ]]'
+# GR: the same, printing the reason.
+GR() { python3 -c 'import json,sys; print(json.dumps({"toolCall": {"name": sys.argv[1], "args": {sys.argv[2]: sys.argv[3]}}}))' "$2" "$3" "$4" \
+        | PAIR_GATE_POLICY="$1" /usr/bin/python3 -I "$SCRIPTS/agy_gate.py" | python3 -c 'import json,sys; print(json.load(sys.stdin)["reason"])'; }
+now=$(date +%s)
+printf '{"roots":["%s"],"web":"live","commands":["pair-fs","pair-fetch"],"bin":"/x/bin","log":"%s","tools_until":%d}' "$AREPO" "$T/gl-past.log" $((now - 1)) > "$T/pol-past.json"
+printf '{"roots":["%s"],"web":"live","commands":["pair-fs","pair-fetch"],"bin":"/x/bin","log":"%s","tools_until":%d}' "$AREPO" "$T/gl-future.log" $((now + 600)) > "$T/pol-future.json"
+check "gate: past tools_until refuses every tool, telling the model to answer now" '[[ "$(G "$T/pol-past.json" read_file Path "$AREPO/a.txt")" == deny && "$(G "$T/pol-past.json" run_command CommandLine "pair-fs ls")" == deny && "$(GR "$T/pol-past.json" search_web query q)" == *"Write your final answer now"* ]]'
+check "gate: before tools_until, tools run"        '[[ "$(G "$T/pol-future.json" read_file Path "$AREPO/a.txt")" == auto_approve && "$(G "$T/pol-future.json" search_web query q)" == auto_approve ]]'
+printf '{"roots":["%s"],"web":"live","commands":["pair-fs","pair-fetch"],"bin":"/x/bin","log":"%s","web_budget":3}' "$AREPO" "$T/gl-budget.log" > "$T/pol-budget.json"
+b1="$(G "$T/pol-budget.json" search_web query a) $(G "$T/pol-budget.json" run_command CommandLine "/x/bin/pair-fetch https://example.com") $(G "$T/pol-budget.json" read_file Path "$AREPO/a.txt") $(G "$T/pol-budget.json" run_command CommandLine "pair-fetch \$x") $(G "$T/pol-budget.json" search_web query b) $(G "$T/pol-budget.json" search_web query c) $(G "$T/pol-budget.json" run_command CommandLine "pair-fetch https://example.org")"
+check "gate: web_budget counts approved searches and page reads only, then refuses both" '[[ "$b1" == "auto_approve auto_approve auto_approve deny auto_approve deny deny" && "$(GR "$T/pol-budget.json" search_web query d)" == *"web budget (3 searches and page reads) is used up"* ]]'
+check "gate: reading files is outside the web budget" '[[ "$(G "$T/pol-budget.json" read_file Path "$AREPO/a.txt")" == auto_approve && "$(G "$T/pol-budget.json" run_command CommandLine "pair-fs ls")" == auto_approve ]]'
+printf '{"roots":["%s"],"web":"cached","commands":[],"web_budget":5}' "$AREPO" > "$T/pol-nolog.json"
+check "gate: a web budget it cannot count refuses the web" '[[ "$(G "$T/pol-nolog.json" search_web query a)" == deny ]]'
+printf '{"roots":["%s"],"web":"cached","commands":[],"log":"%s","web_budget":5}' "$AREPO" "$T/gl-locked.log" > "$T/pol-locked.json"
+: > "$T/gl-locked.log"; chmod 200 "$T/gl-locked.log"; r1="$(G "$T/pol-locked.json" search_web query a)"
+chmod 400 "$T/gl-locked.log"; r2="$(G "$T/pol-locked.json" search_web query a)"; r3="$(G "$T/pol-locked.json" read_file Path "$AREPO/a.txt")"
+chmod 600 "$T/gl-locked.log"
+check "gate: a log it cannot read, or cannot append to, refuses the web, not file reads" '[[ "$r1" == deny && "$r2" == deny && "$r3" == auto_approve ]]'
+printf '{"roots":["%s"],"web":"cached","commands":[],"log":"%s","web_budget":3}' "$AREPO" "$T/gl-par.log" > "$T/pol-par.json"
+rm -f "$T/par.out"; for i in 1 2 3 4 5 6 7 8; do (G "$T/pol-par.json" search_web query "p$i" >> "$T/par.out") & done; wait
+check "gate: eight parallel searches against a budget of 3: exactly 3 approved" '[[ $(grep -c auto_approve "$T/par.out") -eq 3 && $(grep -c deny "$T/par.out") -eq 5 ]]'
 
 # --- pair.sh: browse --------------------------------------------------------------
 reset_log
@@ -693,10 +740,14 @@ RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
 check "vertex 429 then an empty retry: STATUS=empty, not the cut-off first answer" '[[ $rc -eq 70 && ! -s "$RUN/answer.md" ]]'
 reset_log
 out="$(cd "$T/arepo" && "${VX[@]}" PAIR_AGY_RETRY_WAIT=0 FAKE_AGY=quota-once bash "$P" --engine gemini --backend agy --timeout 100 --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
-check "vertex 429 with too little time left: no retry"  '[[ $rc -eq 71 && $(ls "$LOG"/agy-args-*.json | wc -l) -eq 1 ]]'
+check "vertex 429 with too little time left: no retry, exit 75 saying why"  '[[ $rc -eq 75 && $(ls "$LOG"/agy-args-*.json | wc -l) -eq 1 && "$out" == *"too little of the time limit was left"* ]]'
 reset_log
 out="$(cd "$T/arepo" && PAIR_AGY_AUTH=key PAIR_AGY_RETRY_WAIT=0 FAKE_AGY=quota-once bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
-check "429 on the API key: no retry, reported"  '[[ $rc -eq 71 && $(ls "$LOG"/agy-args-*.json | wc -l) -eq 1 ]]'
+check "429 on the API key: no retry, exit 75"  '[[ $rc -eq 75 && $(ls "$LOG"/agy-args-*.json | wc -l) -eq 1 ]]'
+reset_log
+out="$(cd "$T/arepo" && "${VX[@]}" PAIR_AGY_RETRY_WAIT=0 FAKE_AGY=quota bash "$P" --engine gemini --backend agy --timeout 300 --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
+check "vertex 429 on the retry too: exit 75, says so; the policy keeps a deadline" '[[ $rc -eq 75 && $(ls "$LOG"/agy-args-*.json | wc -l) -eq 2 && "$out" == *"ran out again on the one retry"* && "$(jq_py "$RUN/agy-policy.json" "d[\"tools_until\"] > 0")" == True ]]'
 
 # --- pair.sh: argument checks -----------------------------------------------------
 bash "$P" --help >/dev/null 2>&1;                                         check "--help exits 0" '[[ $? -eq 0 ]]'

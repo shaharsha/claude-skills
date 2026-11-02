@@ -13,14 +13,23 @@ No policy, an unreadable policy or a crash here all end in a refusal: agy's
 settings floor (writes, MCP and URL actuation denied) still holds, and anything
 left falls to Ask, which ends the run.
 
-Policy JSON: {"roots": [...], "web": "off|cached|live", "commands": [...], "log": path}
+It also keeps a run from spending its whole time limit on tools. agy cut off
+by its own timeout in the middle of a tool loop returns no text at all
+(measured: 159 searches, then nothing), so after "tools_until" every call is
+refused with a reason that tells the model to answer now, and searches plus
+page reads stop at "web_budget".
+
+Policy JSON: {"roots": [...], "web": "off|cached|live", "commands": [...], "log": path,
+              "tools_until": epoch seconds, "web_budget": n}
 Runs under /usr/bin/python3 -I (3.9 on macOS), so no newer syntax.
 """
+import fcntl
 import json
 import os
 import re
 import shlex
 import sys
+import time
 
 # agy runs a command line in zsh (measured: a `*(.)` glob qualifier expanded).
 # Outside quotes only these characters pass, so no glob, glob qualifier
@@ -86,14 +95,18 @@ def main():
     call = event.get("toolCall") or {}
     name, args = call.get("name", ""), call.get("args") or {}
 
+    is_web = False      # a search or a page read
+    counted = False     # ... approved only if its log line, which the budget counts, is written
+
     def decide(decision, reason=""):
         if pol and pol.get("log"):
             try:
                 with open(pol["log"], "a") as f:
-                    f.write(json.dumps({"tool": name, "decision": decision, "reason": reason,
+                    f.write(json.dumps({"tool": name, "decision": decision, "reason": reason, "web": is_web,
                                         "args": {k: str(v)[:300] for k, v in args.items()}}) + "\n")
             except OSError:
-                pass
+                if counted and decision == "auto_approve":
+                    decision, reason = "deny", "this run's web budget cannot be counted"
         sys.stdout.write(json.dumps({"decision": decision, "reason": reason}))
         sys.exit(0)
 
@@ -103,6 +116,49 @@ def main():
     web = pol.get("web", "off")
     commands = pol.get("commands", [])
     bindir = pol.get("bin", "")
+
+    until = pol.get("tools_until")
+    if until is not None and time.time() >= until:
+        decide("deny", "the time for tools is over: every further tool call is refused. Write your final "
+               "answer now from what you already have, and say what you could not check.")
+
+    if name == "search_web":
+        is_web = True
+    elif name == "run_command":
+        try:
+            first = shlex.split(str(args.get("CommandLine", "")))[:1]
+        except ValueError:
+            first = []
+        is_web = bool(first) and os.path.basename(first[0]) == "pair-fetch"
+    budget = pol.get("web_budget")
+    if is_web and budget is not None:
+        # Held until this process exits, so counting and logging one call cannot
+        # interleave with a parallel call's.
+        # Fails closed: a log it cannot read or write would let the budget run over.
+        if not pol.get("log"):
+            decide("deny", "this run's web budget cannot be counted")
+        counted = True
+        try:
+            lock = open(pol["log"] + ".lock", "a")
+            fcntl.flock(lock, fcntl.LOCK_EX)
+        except OSError:
+            decide("deny", "this run's web budget cannot be counted")
+        used = 0
+        try:
+            with open(pol["log"]) as f:
+                for line in f:
+                    try:
+                        e = json.loads(line)
+                    except ValueError:
+                        continue
+                    used += bool(e.get("web") and e.get("decision") == "auto_approve")
+        except FileNotFoundError:
+            pass
+        except OSError:
+            decide("deny", "this run's web budget cannot be counted")
+        if used >= budget:
+            decide("deny", "this run's web budget (%d searches and page reads) is used up: answer from what "
+                   "you have found, and say what you could not check." % budget)
 
     def readable(p):
         if not p or not os.path.isabs(p):

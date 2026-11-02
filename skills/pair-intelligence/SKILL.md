@@ -77,7 +77,8 @@ Models, flags and traps per engine: `references/engines.md`.
    `--name` / `--resume` (a resumed session keeps its engine, mode and
    directory; browse sessions are not resumable), `--domains` (a live browser,
    in any mode), `--runnable` (Codex may run tests in a disposable copy), `--web`,
-   `--effort`, `--timeout`. `--help` lists the rest. After an agy or codex
+   `--web-budget` (Gemini: searches plus page reads), `--effort`, `--timeout`.
+   `--help` lists the rest. After an agy or codex
    upgrade, run `bash scripts/pair.sh --selftest` (a few cents of live checks).
 
    If your shell tool runs commands inside its own sandbox, run these scripts
@@ -88,8 +89,8 @@ Models, flags and traps per engine: `references/engines.md`.
    confirm the answer shows the model reached the material: a file and line, a
    quote, a URL, or for an image, measurements and quoted on-screen text. A
    brainstorm round with no source material shows it in the answer itself. A
-   failed, empty, incomplete or timed-out round means no answer, never a clean
-   verdict.
+   failed, empty, incomplete, quota-stopped or timed-out round means no answer,
+   never a clean verdict.
 4. **Adjudicate**, then report.
 
 ## Permission tiers

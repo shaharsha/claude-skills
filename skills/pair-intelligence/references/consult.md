@@ -69,6 +69,11 @@ and it worked well in practice (11 of 11 findings held up on a legal review):
 
 - Adjudicate each reason as in SKILL.md. Check the extent: an answer that names
   three failing inputs often has a fourth class it did not see.
+- Check the facts a pick rests on, not only its reasoning: the main reason for a
+  pick can be a confident factual error. Measured on 2026-11-02: Gemini argued
+  against switching to a library because it "risks invalidating already-registered
+  keys", and the library's own documentation shows key import
+  (`import_keys()`). A sound argument from a false premise still picks wrong.
 - If you dispute a specific claim, resume the same session once with the evidence
   ("`pay.py:42` takes the lock before the read at line 47") and ask it to re-derive
   the claim against the source, not whether it agrees with you.

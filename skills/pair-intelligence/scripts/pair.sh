@@ -41,6 +41,7 @@ EFFORT=""
 WEB=""
 SCHEMA=""
 TIMEOUT=""
+WEB_BUDGET=""
 DOMAINS=""
 RUNNABLE=0
 OUT_ROOT="${PAIR_OUT:-$HOME/.cache/pair-intelligence}"
@@ -73,8 +74,11 @@ usage: pair.sh --prompt-file <abs path> [options]
   --web off|cached|live   Web access (default by mode). Codex: its search tool.
                           Gemini/agy: cached = search only, live = search and
                           page fetches. Gemini/OpenCode: anything but off = fetch.
+  --web-budget <n>        Gemini/agy only: searches plus page reads allowed in
+                          the turn (default 40 for research, else 20)
   --schema <file>         Codex only: JSON Schema the answer must match
-  --timeout <secs>        Wall-clock limit (default by mode)
+  --timeout <secs>        Wall-clock limit (default by mode). On agy, tools are
+                          refused after 70% of it, so time is left to answer.
   --domains <a.com,b.com> Open a live browser limited to these domains (required
                           for browse; optional for the other modes). A local host
                           needs its port: localhost:5173
@@ -87,7 +91,8 @@ usage: pair.sh --prompt-file <abs path> [options]
 
 Prints RUN_DIR, SESSION_ID, SESSION_NAME and STATUS, with ANSWER=<path> last.
 Exit: 0 answered, 64 usage, 66 missing input, 69 missing CLI, 70 empty answer,
-      71 the turn failed or ended without a final step, 124 timed out.
+      71 the turn failed or ended without a final step, 75 Gemini quota ran
+      out (retry later), 124 timed out.
 USAGE
   exit "${1:-64}"
 }
@@ -109,6 +114,7 @@ while [[ $# -gt 0 ]]; do
     --web)         WEB="${2:-}"; shift 2 ;;
     --schema)      SCHEMA="${2:-}"; shift 2 ;;
     --timeout)     TIMEOUT="${2:-}"; shift 2 ;;
+    --web-budget)  WEB_BUDGET="${2:-}"; shift 2 ;;
     --domains)     DOMAINS="${2:-}"; shift 2 ;;
     --runnable)    RUNNABLE=1; shift ;;
     --selftest)    exec bash "$SKILL_DIR/scripts/pair_selftest.sh" ;;
@@ -208,6 +214,12 @@ if [[ -n "$SCHEMA" ]]; then
   [[ "$SCHEMA" = /* && -f "$SCHEMA" ]] || { echo "--schema must be an existing absolute path" >&2; exit 66; }
 fi
 [[ "$TIMEOUT" =~ ^[0-9]*$ ]] || { echo "--timeout takes whole seconds" >&2; exit 64; }
+if [[ -n "$WEB_BUDGET" ]]; then
+  [[ "$WEB_BUDGET" =~ ^[0-9]+$ ]] || { echo "--web-budget takes a whole number" >&2; exit 64; }
+  # Only agy's tool calls pass through a gate this script owns; Codex and OpenCode
+  # search inside their own process, where nothing can count.
+  [[ "$BACKEND" == "agy" ]] || { echo "--web-budget applies to --engine gemini on agy only" >&2; exit 64; }
+fi
 
 GEMINI_KEY=""
 AGY_AUTH=""
@@ -344,6 +356,9 @@ case "$MODE" in
   research|browse) : "${TIMEOUT:=900}" ;;
   *)       : "${TIMEOUT:=600}" ;;
 esac
+# agy, given unlimited search, spent a whole review on 159 searches and returned
+# nothing (measured): it gets a web budget and stops using tools at 70% of the time.
+case "$MODE" in research) : "${WEB_BUDGET:=40}" ;; *) : "${WEB_BUDGET:=20}" ;; esac
 case "$WEB" in off|cached|live|"") ;; *) echo "--web must be off, cached or live" >&2; exit 64 ;; esac
 if [[ "$ENGINE" == "codex" ]]; then
   case "$EFFORT" in low|medium|high|xhigh|max) ;; *) echo "Codex --effort: low|medium|high|xhigh|max" >&2; exit 64 ;; esac
@@ -467,6 +482,7 @@ if [[ "$BACKEND" == "agy" ]]; then
 fi
 
 # --- the prompt -------------------------------------------------------------------
+dur() { if [[ $1 -ge 120 ]]; then echo "$(( $1 / 60 )) minutes"; else echo "$1 seconds"; fi; }
 {
   [[ -n "$DOMAINS" ]] && pb_harness
   if [[ $RUNNABLE -eq 1 ]]; then
@@ -482,6 +498,14 @@ fi
     printf 'To list folders, find files by name, search contents or read git history, run the `pair-fs` command (on your PATH):\n'
     printf '  pair-fs ls [PATH] | pair-fs find GLOB [PATH] | pair-fs grep [-i] [-F] [-l] [--glob G] PATTERN [PATH] | pair-fs git status|diff|log|show|blame [ARGS] | pair-fs git cat REV PATH\n'
     printf 'PATH is absolute or relative to the project folder; `pair-fs git` with no subcommand prints the accepted flags. Put search patterns and any text with spaces or symbols in single quotes: outside quotes the shell accepts only letters, digits and _./:@,+=%%-. Nothing else runs: other shell commands, writing files and reading outside the project or secret files are refused with a reason. %s\n</harness>\n\n' "$WEBLINE"
+  fi
+  if [[ "$BACKEND" == "agy" ]]; then
+    # A turn cut off by the time limit in the middle of tool calls returns no text
+    # at all, so the model is told its budget up front, and the gate enforces it.
+    BUDGETLINE=""
+    [[ "$WEB" != off ]] && BUDGETLINE=" Web searches and page reads are limited to $WEB_BUDGET in all; spend them on what matters most."
+    printf '<harness>\nYou have about %s for this turn. After about %s every tool call is refused, so finish looking things up by then and leave time to write your answer: a turn cut off by the time limit returns nothing.%s\n</harness>\n\n' \
+      "$(dur "$TIMEOUT")" "$(dur $(( TIMEOUT * 7 / 10 )))" "$BUDGETLINE"
   fi
   cat "$PROMPT_FILE"
   # Codex opens images with its view_image tool and agy with its file reader;
@@ -505,6 +529,7 @@ run_limited() {
 
 # --- run ------------------------------------------------------------------------
 START="$(date +%s)"
+RETRIED=0
 set +e
 if [[ "$ENGINE" == "codex" ]]; then
   if [[ $USE_BROKER -eq 1 ]]; then
@@ -549,11 +574,12 @@ elif [[ "$BACKEND" == "agy" ]]; then
     echo "agy's scratch workspace $AGY_WS is inside a git repository; set TMPDIR elsewhere" >&2; exit 71
   fi
   POLICY="$RUN_DIR/agy-policy.json"
-  python3 - "$POLICY" "$WEB" "$RUN_DIR/bin" "$RUN_DIR/gate.log" "${AGY_CMDS[*]:-}" "${AGY_ROOTS[@]}" <<'PY'
+  python3 - "$POLICY" "$WEB" "$RUN_DIR/bin" "$RUN_DIR/gate.log" "$(( $(date +%s) + TIMEOUT * 7 / 10 ))" "$WEB_BUDGET" \
+    "${AGY_CMDS[*]:-}" "${AGY_ROOTS[@]}" <<'PY'
 import json, sys
-path, web, bindir, log, cmds, *roots = sys.argv[1:]
-json.dump({"roots": roots, "web": web, "commands": cmds.split(), "bin": bindir, "log": log},
-          open(path, "w"), indent=2)
+path, web, bindir, log, until, budget, cmds, *roots = sys.argv[1:]
+json.dump({"roots": roots, "web": web, "commands": cmds.split(), "bin": bindir, "log": log,
+           "tools_until": int(until), "web_budget": int(budget)}, open(path, "w"), indent=2)
 PY
   # The gate lives in agy's private home; rewritten every run (same bytes, atomic)
   # so a moved skill folder or a hand edit cannot leave a stale or open gate.
@@ -619,11 +645,21 @@ PY
   if [[ -n "$QUOTA_CONV" && "$AGY_AUTH" == vertex && $LEFT -gt 120 ]]; then
     echo "agy: Vertex AI quota exhausted; retrying once in ${RETRY_WAIT}s with the ${LEFT}s left (conversation $QUOTA_CONV)" >> "$ERRLOG"
     sleep "$RETRY_WAIT"
-    # The retry gets what is left of the budget, not a fresh one.
+    RETRIED=1
+    # The retry gets what is left of the budget, not a fresh one, and its own
+    # point after which tools are refused; the web budget carries over.
     TIMEOUT=$LEFT
     for i in "${!ARGS[@]}"; do
       [[ "${ARGS[$i]}" == --print-timeout ]] && ARGS[$((i + 1))]="$(( LEFT > 20 ? LEFT - 10 : LEFT ))s"
     done
+    python3 - "$POLICY" "$(( $(date +%s) + LEFT * 7 / 10 ))" <<'PY'
+import json, os, sys
+p = sys.argv[1]
+d = json.load(open(p))
+d["tools_until"] = int(sys.argv[2])
+json.dump(d, open(p + ".new", "w"), indent=2)
+os.replace(p + ".new", p)
+PY
     python3 -c 'import json; print(json.dumps({"event": "user", "message": {"content": "Your last turn was cut off by a rate limit. Finish the task and give your complete final answer."}}))' \
       > "$RUN_DIR/agy-retry.jsonl"
     [[ -n "$RESUME_ID" ]] || ARGS+=(--conversation "$QUOTA_CONV")
@@ -688,7 +724,7 @@ evs = []
 for line in events.read_text(errors="replace").splitlines() if events.exists() else []:
     try: evs.append(json.loads(line))
     except ValueError: pass
-sid, failed, completed, denied = "", False, False, False
+sid, failed, completed, denied, quota = "", False, False, False, False
 if engine == "codex":
     for e in evs:
         t = e.get("type", "")
@@ -717,6 +753,7 @@ elif engine == "agy":
             completed = r.get("status") == "SUCCESS"
             failed = not completed
             denied = bool(r.get("denied_actions"))
+            quota = failed and "RESOURCE_EXHAUSTED" in (r.get("error") or "")
             # The answer is the LAST result's: after a retry, an empty retry must
             # not pass off the cut-off first turn as the answer.
             if (r.get("response") or "").strip():
@@ -745,9 +782,15 @@ else:
     if texts:
         answer.write_text("\n\n".join(x for x in texts if x).strip() + "\n")
 # agy's own --print-timeout returns what it has so far as SUCCESS with exit 0;
-# only its stderr says the turn was cut (measured).
+# only its stderr says the turn was cut (measured). A turn that ended on the
+# quota is reported as that even when the print timeout fired too (agy was then
+# waiting out the 429): more time would not have helped.
 agy_cut = engine == "agy" and errlog.exists() and "print timeout after" in errlog.read_text(errors="replace")
-if rc in (124, 137, 142) or agy_cut:
+if rc in (124, 137, 142):
+    status = "timeout"
+elif quota:
+    status = "quota"
+elif agy_cut:
     status = "timeout"
 elif denied:
     status = "denied"
@@ -806,7 +849,23 @@ echo "STATUS=$STATUS"
 echo "ANSWER=$ANSWER"
 case "$STATUS" in
   ok)      exit 0 ;;
-  timeout) echo "timed out after ${TIMEOUT}s; $ANSWER holds partial output if there is any; see $ERRLOG" >&2; exit 124 ;;
+  timeout)
+    if [[ -s "$ANSWER" ]]; then
+      echo "timed out after ${SECS}s; $ANSWER holds only what arrived before the cut; see $ERRLOG" >&2
+    else
+      CALLS=""
+      [[ -s "$RUN_DIR/tools.txt" ]] && CALLS=" It had made $(wc -l < "$RUN_DIR/tools.txt" | tr -d ' ') tool calls; see $RUN_DIR/tools.txt."
+      echo "timed out after ${SECS}s with no answer: the turn was cut while the model was still working, and a cut turn returns none of its text.${CALLS} Rerun with a narrower prompt or a longer --timeout; see $ERRLOG" >&2
+    fi
+    exit 124 ;;
+  quota)
+    if [[ $RETRIED -eq 1 ]]; then WHY="it ran out again on the one retry"
+    elif [[ "$AGY_AUTH" != vertex ]]; then WHY="the API key route is not retried"
+    elif [[ ${LEFT:-0} -le 120 ]]; then WHY="too little of the time limit was left to wait and retry"
+    else WHY="agy named no conversation to continue"; fi
+    HAVE="there is no answer"; [[ -s "$ANSWER" ]] && HAVE="$ANSWER holds what Gemini wrote before that, possibly cut short"
+    echo "the Gemini quota ran out (429 RESOURCE_EXHAUSTED) and $WHY; $HAVE. Wait a few minutes and rerun; a narrower prompt or a lower --web-budget sends fewer tokens per minute. See $ERRLOG" >&2
+    exit 75 ;;
   empty)   echo "no answer; see $ERRLOG and $EVENTS" >&2; exit 70 ;;
   incomplete) echo "the turn ended without a final step; $ANSWER holds only what arrived" >&2; exit 71 ;;
   denied)  echo "agy ended the turn on a permission it could not ask for; see $RUN_DIR/tools.txt and $ERRLOG" >&2; exit 71 ;;
