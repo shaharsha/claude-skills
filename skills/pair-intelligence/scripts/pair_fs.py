@@ -28,7 +28,7 @@ SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cach
 SECRET_GLOBS = [".env", ".env.*", "*.pem", "*.key", "*.p12", "*.pfx", "id_rsa*", "id_ed25519*",
                 "id_ecdsa*", "id_dsa*", ".netrc", ".npmrc", ".pypirc"]
 SECRET = re.compile(r"^(\.env(\..+)?|.+\.(pem|key|p12|pfx)|id_(rsa|ed25519|ecdsa|dsa).*|\.netrc|\.npmrc|\.pypirc)$",
-                    re.IGNORECASE)
+                    re.IGNORECASE | re.DOTALL)  # DOTALL: a file name may hold a newline
 SECRET_OK = re.compile(r"^\.env\.(example|sample|template|dist)$", re.IGNORECASE)
 
 

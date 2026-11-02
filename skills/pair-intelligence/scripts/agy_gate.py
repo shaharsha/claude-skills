@@ -27,7 +27,7 @@ import sys
 # (*(e:'cmd':) runs code), brace, tilde, $, redirection or separator reaches it.
 SAFE_BARE = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./:@,+=%-")
 SECRET = re.compile(r"^(\.env(\..+)?|.+\.(pem|key|p12|pfx)|id_(rsa|ed25519|ecdsa|dsa).*|\.netrc|\.npmrc|\.pypirc)$",
-                    re.IGNORECASE)
+                    re.IGNORECASE | re.DOTALL)  # DOTALL: a file name may hold a newline
 SECRET_OK = re.compile(r"^\.env\.(example|sample|template|dist)$", re.IGNORECASE)
 
 
