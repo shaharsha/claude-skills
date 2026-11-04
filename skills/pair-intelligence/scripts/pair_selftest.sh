@@ -202,20 +202,21 @@ if [[ "$WHICH" == all || "$WHICH" == codex ]]; then
   run="$(field RUN_DIR "$out")"
   servers="$(python3 -c '
 import json, sys
-names = set()
+names, probed = set(), False
 for line in open(sys.argv[1]):
     try: e = json.loads(line)
     except ValueError: continue
     it = e.get("item") or {}
     if it.get("type") == "mcp_tool_call" and it.get("tool") == "list_mcp_resources" and e.get("type") == "item.completed":
+        probed = probed or it.get("status") == "completed"
         for part in (it.get("result") or {}).get("content") or []:
             try: names |= {r.get("server", "?") for r in json.loads(part.get("text", "{}")).get("resources", [])}
             except ValueError: pass
-print(" ".join(sorted(names)))' "$run/events.jsonl" 2>/dev/null)"
-  if ! grep -q list_mcp_resources "$run/events.jsonl" 2>/dev/null; then
+print(("probed " if probed else "") + " ".join(sorted(names)))' "$run/events.jsonl" 2>/dev/null)"
+  if [[ "$servers" != probed* ]]; then
     warn "codex lockdown: the model did not call list_mcp_resources, so the check went untested"
-  elif [[ -n "$servers" ]]; then
-    fail "codex lockdown: the model can reach MCP servers: $servers (a Codex upgrade added a feature; turn it off in codex_lockdown.sh)"
+  elif [[ -n "${servers#probed }" && "$servers" != probed ]]; then
+    fail "codex lockdown: the model can reach MCP servers: ${servers#probed } (a Codex upgrade added a feature; turn it off in codex_lockdown.sh)"
   else
     pass "codex lockdown: no app connectors or other MCP servers reachable"
   fi

@@ -238,7 +238,7 @@ check "codex ok: read-only via -s and -c"         '[[ "$(jq_py "$A" "\" \".join(
 check "codex ok: consult uses cached web search"  '[[ "$(jq_py "$A" "\" \".join(d[\"args\"])")" == *"web_search=\"cached\""* ]]'
 check "codex ok: prompt arrives on stdin"         'grep -q "2+2" "$LOG/codex-stdin-0.txt"'
 check "codex: user config ignored (MCP, plugins), doc limit kept" '[[ "$(jq_py "$A" "\" \".join(d[\"args\"])")" == *"--ignore-user-config"*"project_doc_max_bytes=400000"* ]]'
-check "codex: app connectors, plugins, browser and computer use, hooks off" '[[ "$(jq_py "$A" "\" \".join(d[\"args\"])")" == *"features.apps=false"*"features.plugins=false"*"features.browser_use=false"*"features.computer_use=false"*"features.hooks=false"* ]]'
+check "codex: app connectors, plugins, browser and computer use, hooks off" '[[ "$(jq_py "$A" "\" \".join(f for f in (\"apps\", \"plugins\", \"browser_use\", \"computer_use\", \"hooks\") if \"features.\" + f + \"=false\" not in d[\"args\"])")" == "" ]]'
 RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
 check "codex ok: meta.json is valid JSON"         'python3 -c "import json;json.load(open(\"$RUN/meta.json\"))"'
 
@@ -265,8 +265,12 @@ mkdir -p "$T/shots" && : > "$T/shots/b.png" && : > "$T/shots/a.jpg" && : > "$T/s
 out="$(FAKE_CODEX=ok bash "$P" --mode ideate --image "$T/shots" --prompt-file "$T/prompt.md" 2>&1)"
 check "--image <folder> adds its images, sorted, and nothing else" 'grep -q "$T/shots/a.jpg" "$LOG/codex-stdin-$(( $(ls "$LOG"/codex-stdin-*.txt | wc -l) - 1 )).txt" && ! grep -q notes.txt "$(ls -t "$LOG"/codex-stdin-*.txt | head -1)" && [[ "$(grep -n "shots/" "$(ls -t "$LOG"/codex-stdin-*.txt | head -1)" | head -1)" == *a.jpg* ]]'
 mkdir -p "$T/noshots"
-bash "$P" --image "$T/noshots" --prompt-file "$T/prompt.md" >/dev/null 2>&1
-check "--image on a folder with no images: exit 66" '[[ $? -eq 66 ]]'
+bash "$P" --image "$T/noshots" --prompt-file "$T/prompt.md" >/dev/null 2>&1; r1=$?
+bash "$P" --image "$T/shots/b.png" --image "$T/noshots" --prompt-file "$T/prompt.md" >/dev/null 2>&1; r2=$?
+check "--image on a folder with no images: exit 66, even after another image" '[[ $r1 -eq 66 && $r2 -eq 66 ]]'
+mkdir -p "$T/dotonly/.github" && printf 'x\n' > "$T/dotonly/.github/ci.yml"
+out="$(FAKE_CODEX=ok FAKE_CODEX_NOREAD=1 bash "$P" --cwd "$T/dotonly" --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+check "a folder holding only hidden files still counts as something to read" '[[ $rc -eq 72 ]]'
 rm -f "$T/repo/facts.md"
 printf '  \n\n' > "$T/blank.md"
 bash "$P" --prompt-file "$T/blank.md" >/dev/null 2>&1; r1=$?
@@ -898,6 +902,9 @@ check "codex_review: verdict, findings, reads and seconds on stdout before REVIE
 out="$(FAKE_CODEX=review FAKE_CODEX_NOREAD=1 bash "$SCRIPTS/codex_review.sh" --repo "$T/docs" --prompt-file "$T/prompt.md" --label t4 --out-dir "$T/evidence" 2>&1)"; rc=$?
 MD="$(sed -n 's/^REVIEW_MD=//p' <<<"$out")"
 check "codex_review that read no file: exit 72, the review still written with a warning on top" '[[ $rc -eq 72 && "$out" == *"READS=0"* && -f "$MD" ]] && head -3 "$MD" | grep -q "⚠️" && grep -q "^reads=0$" "${MD%.md}.provenance"'
+out="$(FAKE_CODEX=ok FAKE_CODEX_NOREAD=1 bash "$SCRIPTS/codex_review.sh" --repo "$T/docs" --prompt-file "$T/prompt.md" --label t4b --out-dir "$T/evidence" --no-schema 2>&1)"; rc=$?
+MD="$(sed -n 's/^REVIEW_MD=//p' <<<"$out")"
+check "codex_review --no-schema that read no file: the warning is on top of the prose review too" '[[ $rc -eq 72 ]] && head -1 "$MD" | grep -q "⚠️" && grep -q "the answer" "$MD"'
 out="$(FAKE_CODEX=review-doubt bash "$SCRIPTS/codex_review.sh" --repo "$T/docs" --prompt-file "$T/prompt.md" --label t5 --out-dir "$T/evidence" 2>&1)"; rc=$?
 MD="$(sed -n 's/^REVIEW_MD=//p' <<<"$out")"
 check "codex_review: no findings at low confidence is flagged on top, exit 0" '[[ $rc -eq 0 ]] && head -3 "$MD" | grep -q "⚠️"'

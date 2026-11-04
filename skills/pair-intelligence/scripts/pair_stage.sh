@@ -17,7 +17,9 @@
 # tracked files at that commit, with no .git, no uncommitted changes and nothing
 # git-ignored. <dest> must be new or empty.
 set -euo pipefail
-
+# One brace group, so bash reads the whole script before running it (a skills
+# pull during a long archive would otherwise shift what it reads next).
+{
 usage() { sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 64; }
 [[ $# -ge 2 ]] || usage
 DEST="$1"; shift
@@ -45,7 +47,7 @@ for spec in "$@"; do
   mkdir -p "$DEST/$folder"
   path_args=()
   if [[ -n "$paths" ]]; then IFS=',' read -r -a path_args <<< "$paths"; fi
-  git -C "$repo" archive --format=tar "$sha" ${path_args[@]+"${path_args[@]}"} | tar -x -C "$DEST/$folder"
+  git -C "$repo" archive --format=tar "$sha" -- ${path_args[@]+"${path_args[@]}"} | tar -x -C "$DEST/$folder"
   when="$(git -C "$repo" show -s --format=%cI "$sha")"
   ROWS+=("| \`$folder/\` | \`$(cd "$repo" && pwd)\` | \`$ref\` | \`$sha\` | $when | ${paths:-all} |")
 done
@@ -56,3 +58,5 @@ done
 } > "$DEST/SHAS.md"
 echo "STAGED=$DEST"
 cat "$DEST/SHAS.md"
+exit
+}

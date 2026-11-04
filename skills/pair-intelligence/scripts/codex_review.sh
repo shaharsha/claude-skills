@@ -556,6 +556,10 @@ if [[ -n "$SCHEMA" ]]; then
     --session "${SESSION_ID:-unknown}" --session-key "${SESSION_KEY:-}"
 else
   cp "$RAW" "$MD"
+  # A prose review is not JSON, so the warnings can go on top of it too.
+  if [[ ${#WARNINGS[@]} -gt 0 ]]; then
+    { for w in "${WARNINGS[@]}"; do printf '> ⚠️ %s\n' "$w"; done; printf '\n'; cat "$RAW"; } > "$MD"
+  fi
 fi
 
 # Stamp provenance into the artifact the gate rule actually points at. Only for

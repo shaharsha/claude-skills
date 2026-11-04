@@ -109,13 +109,14 @@ while [[ $# -gt 0 ]]; do
     --cwd)         CWD="${2:-}"; shift 2 ;;
     --image)
       if [[ -d "${2:-}" ]]; then
+        _before=${#IMAGES[@]}
         while IFS= read -r _img; do IMAGES+=("$_img"); done < <(python3 -c '
 import os, sys
 d = os.path.abspath(sys.argv[1])
 for n in sorted(os.listdir(d)):
     if n.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")) and os.path.isfile(os.path.join(d, n)):
         print(os.path.join(d, n))' "$2")
-        [[ ${#IMAGES[@]} -gt 0 ]] || { echo "--image: no images in $2" >&2; exit 66; }
+        [[ ${#IMAGES[@]} -gt $_before ]] || { echo "--image: no images in $2" >&2; exit 66; }
       else
         IMAGES+=("${2:-}")
       fi
@@ -765,7 +766,7 @@ STATUS="failed"; SESSION_ID="-"
 # inside a process substitution.
 python3 - "${BACKEND:-$ENGINE}" "$EVENTS" "$ANSWER" "$RC" "$RUN_DIR/tools.txt" "$ERRLOG" "$RETRY_FROM" \
   "$MODE" "$RUN_CWD" > "$RUN_DIR/.status" <<'PY'
-import json, os, sys, pathlib
+import json, os, shlex, sys, pathlib
 engine, events, answer, rc = sys.argv[1], pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3]), int(sys.argv[4])
 errlog = pathlib.Path(sys.argv[6])
 retry_from = int(sys.argv[7])   # agy: events before this line belong to the attempt before a retry
@@ -801,6 +802,17 @@ elif engine == "agy":
             if s.get("step_type") == "tool" and s.get("state") in ("DONE", "ERROR"):
                 info = s.get("tool_info") or {}
                 params = info.get("parameters") or {}
+                if s["state"] == "DONE":
+                    reads = max(reads, 0)
+                    if s.get("tool_name") in ("read_file", "view_file"):
+                        reads += 1
+                    elif s.get("tool_name") == "run_command":
+                        # The gate runs pair-fs by name or by its full path.
+                        try:
+                            argv0 = shlex.split(str(params.get("CommandLine", "")))[:1]
+                        except ValueError:
+                            argv0 = []
+                        reads += bool(argv0) and os.path.basename(argv0[0]) == "pair-fs"
                 arg = params.get("CommandLine") or params.get("Path") or params.get("query") \
                     or params.get("Url") or json.dumps(params)[:200]
                 err = (info.get("error") or {}).get("message", "")
@@ -834,8 +846,7 @@ elif engine == "agy":
             elif answer.exists():
                 answer.unlink()
     pathlib.Path(sys.argv[5]).write_text("\n".join(lines) + ("\n" if lines else ""))
-    reads = sum(1 for l in lines if l.split()[:2] in (["DONE", "read_file"], ["DONE", "view_file"])
-                or (l.split()[:2] == ["DONE", "run_command"] and " pair-fs " in " " + l))
+    reads = max(reads, 0)
 else:
     texts = []
     for e in evs:
@@ -882,7 +893,7 @@ else:
 mode, cwd = sys.argv[8], sys.argv[9]
 images = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 try:
-    material = any(not n.startswith(".") and not n.lower().endswith(images) for n in os.listdir(cwd))
+    material = any(n != ".git" and not n.lower().endswith(images) for n in os.listdir(cwd))
 except OSError:
     material = False
 if status == "ok" and reads == 0 and mode in ("review", "consult") and material:
@@ -952,7 +963,9 @@ case "$STATUS" in
     elif [[ ${LEFT:-0} -le 120 ]]; then WHY="too little of the time limit was left to wait and retry"
     else WHY="agy named no conversation to continue"; fi
     HAVE="there is no answer"; [[ -s "$ANSWER" ]] && HAVE="$ANSWER holds what Gemini wrote before that, possibly cut short"
-    echo "the Gemini quota ran out (429 RESOURCE_EXHAUSTED) and $WHY; $HAVE. Wait a few minutes and rerun; a narrower prompt or a lower --web-budget sends fewer tokens per minute. See $ERRLOG" >&2
+    NOW="Wait a few minutes and rerun; a narrower prompt or a lower --web-budget sends fewer tokens per minute."
+    [[ "$AGY_AUTH" == vertex ]] && NOW="To rerun now, set PAIR_AGY_AUTH=key (the Gemini API key has its own quota), or wait a few minutes; a narrower prompt or a lower --web-budget sends fewer tokens per minute."
+    echo "the Gemini quota ran out (429 RESOURCE_EXHAUSTED) and $WHY; $HAVE. $NOW See $ERRLOG" >&2
     exit 75 ;;
   auth)
     if [[ "$AGY_AUTH" == vertex ]]; then
