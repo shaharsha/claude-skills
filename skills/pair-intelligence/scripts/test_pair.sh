@@ -122,6 +122,10 @@ open(f"{log}/agy-stdin-{n}.txt", "w").write(stdin)
 mode = os.environ.get("FAKE_AGY", "ok")
 if mode == "hang":
     time.sleep(30)
+if mode == "auth" or (mode == "auth-once" and n == 0):
+    # Measured 2026-11-03 on the Vertex route: agy fails in 20 s, before any event.
+    sys.stderr.write("Error: authentication required. Run 'agy' to log in, then retry.\nerror: authentication failed or timed out\n")
+    sys.exit(1)
 ev = lambda **k: print(json.dumps(k), flush=True)
 # Like agy: start every .agents/mcp_config.json server from the workspace up to
 # the repository root (measured on agy 1.4.12, even with MCP tools denied).
@@ -153,6 +157,12 @@ for name, targs in json.loads(os.environ.get("FAKE_AGY_TOOLS", "[]")):
     ev(event="step_update", step_update={"step_type": "tool", "tool_name": name, "state": state, "tool_info": info})
 if mode == "nores" or (mode == "quota-nores" and n == 1):
     sys.exit(0)
+if mode in ("quota-after-answer", "quota-mid-answer") and n == 0:
+    # The answer is streamed in one agent_response step; measured twice on 2026-11-02/03:
+    # the step finished (DONE), then a later call hit the 429 and the turn was marked ERROR.
+    ev(event="step_update", step_update={"step_index": 9, "step_type": "agent_response", "state": "ACTIVE"})
+    if mode == "quota-after-answer":
+        ev(event="step_update", step_update={"step_index": 9, "step_type": "agent_response", "state": "DONE", "duration_seconds": 109.7})
 res = {"conversation_id": "conv-fake-1", "status": "SUCCESS", "response": "agy answer", "usage": {}}
 if mode == "denied":
     res.update(response="", denied_actions=[{"action": "read_file", "display_name": "ReadFile"}])
@@ -168,6 +178,9 @@ if mode == "quota-empty":
         res.update(response="")
 if mode == "quota":
     res.update(status="ERROR", error="API error (attempt 1): RESOURCE_EXHAUSTED (code 429): TPM quota exhausted.")
+if mode in ("quota-after-answer", "quota-mid-answer") and n == 0:
+    res.update(status="ERROR", conversation_id="conv-q", response="the whole review, findings and verdict",
+               error="API error (attempt 1): RESOURCE_EXHAUSTED (code 429): TPM quota exhausted.")
 if mode == "cut":
     res.update(response="partial essay")
     sys.stderr.write("[agy] print timeout after 590s with turn in progress; returning partial output\n")
@@ -196,7 +209,7 @@ export PATH="$FAKE:$PATH" FAKE_LOG="$LOG" PAIR_OUT="$T/out" PAIR_OPENCODE="$FAKE
 # The OpenCode sections below predate agy; the agy section passes --backend agy.
 export PAIR_GEMINI_BACKEND=opencode PAIR_AGY="$FAKE/agy" PAIR_AGY_HOME="$T/agyhome" GEMINI_API_KEY="fake-key-123"
 # Key mode unless a test asks for Vertex: this machine may hold a real agy ADC copy.
-export PAIR_AGY_AUTH=key
+export PAIR_AGY_AUTH=key PAIR_AGY_AUTH_RETRY_WAIT=0
 P="$SCRIPTS/pair.sh"
 printf 'What is 2+2?\n' > "$T/prompt.md"
 last_args() { ls -t "$LOG"/"$1"-args-*.json | head -1; }
@@ -760,6 +773,24 @@ reset_log
 out="$(cd "$T/arepo" && "${VX[@]}" PAIR_AGY_RETRY_WAIT=0 FAKE_AGY=quota bash "$P" --engine gemini --backend agy --timeout 300 --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
 RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
 check "vertex 429 on the retry too: exit 75, says so; the policy keeps a deadline" '[[ $rc -eq 75 && $(ls "$LOG"/agy-args-*.json | wc -l) -eq 2 && "$out" == *"ran out again on the one retry"* && "$(jq_py "$RUN/agy-policy.json" "d[\"tools_until\"] > 0")" == True ]]'
+reset_log
+out="$(cd "$T/arepo" && "${VX[@]}" PAIR_AGY_RETRY_WAIT=0 FAKE_AGY=quota-after-answer bash "$P" --engine gemini --backend agy --timeout 300 --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
+check "vertex 429 after the answer step finished: answered, no retry" '[[ $rc -eq 0 && "$out" == *"STATUS=ok"* && $(ls "$LOG"/agy-args-*.json | wc -l) -eq 1 ]] && grep -q "the whole review" "$RUN/answer.md"'
+reset_log
+out="$(cd "$T/arepo" && "${VX[@]}" PAIR_AGY_RETRY_WAIT=0 FAKE_AGY=quota-mid-answer bash "$P" --engine gemini --backend agy --timeout 300 --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+check "vertex 429 while the answer was still streaming: retried" '[[ $rc -eq 0 && $(ls "$LOG"/agy-args-*.json | wc -l) -eq 2 ]]'
+
+# --- agy: an authentication failure ----------------------------------------------------
+reset_log
+out="$(cd "$T/arepo" && "${VX[@]}" PAIR_AGY_RETRY_WAIT=0 FAKE_AGY=auth-once bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+check "vertex auth failure once: retried, then ok" '[[ $rc -eq 0 && "$out" == *"STATUS=ok"* && $(ls "$LOG"/agy-args-*.json | wc -l) -eq 2 ]]'
+reset_log
+out="$(cd "$T/arepo" && "${VX[@]}" PAIR_AGY_RETRY_WAIT=0 FAKE_AGY=auth bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+check "vertex auth failure twice: exit 69, and agy's advice to use its own login is not passed on" '[[ $rc -eq 69 && $(ls "$LOG"/agy-args-*.json | wc -l) -eq 2 && "$out" != *"Run '"'"'agy'"'"' to log in"* ]]'
+reset_log
+out="$(cd "$T/arepo" && PAIR_AGY_AUTH=key PAIR_AGY_RETRY_WAIT=0 FAKE_AGY=auth bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+check "API-key auth failure: exit 69, not retried" '[[ $rc -eq 69 && $(ls "$LOG"/agy-args-*.json | wc -l) -eq 1 && "$out" != *"Run '"'"'agy'"'"' to log in"* ]]'
 
 # --- pair.sh: argument checks -----------------------------------------------------
 bash "$P" --help >/dev/null 2>&1;                                         check "--help exits 0" '[[ $? -eq 0 ]]'

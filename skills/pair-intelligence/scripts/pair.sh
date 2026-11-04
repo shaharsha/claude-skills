@@ -90,7 +90,7 @@ usage: pair.sh --prompt-file <abs path> [options]
   --list                  Print remembered session labels and exit
 
 Prints RUN_DIR, SESSION_ID, SESSION_NAME and STATUS, with ANSWER=<path> last.
-Exit: 0 answered, 64 usage, 66 missing input, 69 missing CLI, 70 empty answer,
+Exit: 0 answered, 64 usage, 66 missing input, 69 missing CLI or credentials, 70 empty answer,
       71 the turn failed or ended without a final step, 75 Gemini quota ran
       out (retry later), 124 timed out.
 USAGE
@@ -624,20 +624,36 @@ PY
   : > "$EVENTS"; : > "$ERRLOG"
   run_agy "$RUN_DIR/agy-input.jsonl"
   RC=$?
+  # On the Vertex route agy once failed in 20 s with "authentication required"
+  # and the next run worked (2026-11-03): a token fetch that failed, not the key,
+  # which the check above had just used. One retry; agy's own advice in that
+  # message is to use its login, which this skill must not.
+  if [[ $RC -ne 0 && ! -s "$EVENTS" && "$AGY_AUTH" == vertex ]] && grep -qE 'authentication (required|failed)' "$ERRLOG"; then
+    echo "agy: could not authenticate to Vertex AI; retrying once" >> "$ERRLOG"
+    sleep "${PAIR_AGY_AUTH_RETRY_WAIT:-5}"
+    run_agy "$RUN_DIR/agy-input.jsonl"
+    RC=$?
+  fi
   # A Vertex project's tokens-per-minute quota can run out mid-turn (429
   # RESOURCE_EXHAUSTED, the turn then marked ERROR). Wait a minute and continue
   # the same conversation once, if the time budget allows.
+  # Not when the answer was already complete: twice the 429 came after the
+  # answer's step had finished, and a retry only wrote the answer again.
   python3 - "$EVENTS" > "$RUN_DIR/.quota" <<'PY'
 import json, sys
-last = None
+last, step, answered = None, None, False
 for line in open(sys.argv[1], errors="replace"):
     try:
         e = json.loads(line)
     except ValueError:
         continue
-    if e.get("event") == "result":
+    if e.get("event") == "step_update":
+        s = e.get("step_update") or {}
+        step = (s.get("step_type"), s.get("state"))
+    elif e.get("event") == "result":
         last = e.get("result") or {}
-if last and last.get("status") != "SUCCESS" and "RESOURCE_EXHAUSTED" in (last.get("error") or ""):
+        answered = step == ("agent_response", "DONE") and bool((last.get("response") or "").strip())
+if last and last.get("status") != "SUCCESS" and "RESOURCE_EXHAUSTED" in (last.get("error") or "") and not answered:
     print(last.get("conversation_id", ""))
 PY
   QUOTA_CONV="$(cat "$RUN_DIR/.quota")"; rm -f "$RUN_DIR/.quota"
@@ -731,7 +747,8 @@ for i, line in enumerate(events.read_text(errors="replace").splitlines() if even
     except ValueError: continue
     if i < retry_from:
         before_retry.add(len(evs) - 1)
-sid, failed, completed, denied, quota = "", False, False, False, False
+sid, failed, completed, denied, quota, results = "", False, False, False, False, 0
+step = None   # agy: the (type, state) of the last step before each result
 if engine == "codex":
     for e in evs:
         t = e.get("type", "")
@@ -747,6 +764,7 @@ elif engine == "agy":
     for n, e in enumerate(evs):
         if e.get("event") == "step_update":
             s = e.get("step_update") or {}
+            step = (s.get("step_type"), s.get("state"))
             if s.get("step_type") == "tool" and s.get("state") in ("DONE", "ERROR"):
                 info = s.get("tool_info") or {}
                 params = info.get("parameters") or {}
@@ -756,6 +774,7 @@ elif engine == "agy":
                 lines.append(f"{s['state']:<5} {s.get('tool_name', '?'):<16} {arg}" + (f"  -> {err[:200]}" if err else ""))
         elif e.get("event") == "result":
             r = e.get("result") or {}
+            results += 1
             sid = r.get("conversation_id", "") or sid
             if r.get("error"):
                 # agy keeps the reason inside the result, not on stderr.
@@ -771,6 +790,12 @@ elif engine == "agy":
             failed = not completed
             denied = bool(r.get("denied_actions"))
             quota = failed and "RESOURCE_EXHAUSTED" in (r.get("error") or "")
+            if quota and step == ("agent_response", "DONE") and (r.get("response") or "").strip():
+                # The answer's step had finished before the 429 (a later call hit
+                # it), so the answer is whole.
+                quota, failed, completed = False, False, True
+                with open(sys.argv[6], "a") as f:
+                    f.write("agy: the 429 came after the answer was complete; the answer is whole\n")
             if (r.get("response") or "").strip():
                 answer.write_text(r["response"].strip() + "\n")
             elif answer.exists():
@@ -794,9 +819,13 @@ else:
 # only its stderr says the turn was cut (measured). A turn that ended on the
 # quota is reported as that even when the print timeout fired too (agy was then
 # waiting out the 429): more time would not have helped.
-agy_cut = engine == "agy" and errlog.exists() and "print timeout after" in errlog.read_text(errors="replace")
+errtext = errlog.read_text(errors="replace") if errlog.exists() else ""
+agy_cut = engine == "agy" and "print timeout after" in errtext
+auth = engine == "agy" and not results and rc != 0 and ("authentication required" in errtext or "authentication failed" in errtext)
 if rc in (124, 137, 142):
     status = "timeout"
+elif auth:
+    status = "auth"
 elif quota:
     status = "quota"
 elif agy_cut:
@@ -875,6 +904,13 @@ case "$STATUS" in
     HAVE="there is no answer"; [[ -s "$ANSWER" ]] && HAVE="$ANSWER holds what Gemini wrote before that, possibly cut short"
     echo "the Gemini quota ran out (429 RESOURCE_EXHAUSTED) and $WHY; $HAVE. Wait a few minutes and rerun; a narrower prompt or a lower --web-budget sends fewer tokens per minute. See $ERRLOG" >&2
     exit 75 ;;
+  auth)
+    if [[ "$AGY_AUTH" == vertex ]]; then
+      echo "agy could not authenticate to Vertex AI with $AGY_ADC, twice. This skill never uses agy's own login, whatever agy's message says; rerun in a minute, and if it persists check that key or set PAIR_AGY_AUTH=key. See $ERRLOG" >&2
+    else
+      echo "agy rejected the Gemini API key (authentication failed); check GEMINI_API_KEY or OpenCode's auth.json, or use the Vertex AI route. This skill never uses agy's own login. See $ERRLOG" >&2
+    fi
+    exit 69 ;;
   empty)
     if [[ $RETRIED -eq 1 ]]; then
       echo "no answer: the one retry after the Vertex AI quota error ended without one; see $ERRLOG and $EVENTS" >&2

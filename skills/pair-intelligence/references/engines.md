@@ -121,7 +121,13 @@ Tested on the Antigravity CLI (`agy`) 1.4.12 with a Gemini API key, 2026-11-02.
     minutes of the time limit are left (`PAIR_AGY_RETRY_WAIT` sets the wait). A
     turn that still ends on the quota is `STATUS=quota`, exit 75, with the
     reason there was no retry: wait a few minutes and rerun, with a narrower
-    prompt or a lower `--web-budget`, or set `PAIR_AGY_AUTH=key`;
+    prompt or a lower `--web-budget`, or set `PAIR_AGY_AUTH=key`. A 429 that
+    comes after the answer's step finished (seen twice: a later call hit it)
+    leaves the answer whole, so that run is `STATUS=ok` with no retry and a
+    note in `stderr.log`. If agy fails before any output with "authentication
+    required" (seen once on Vertex, gone on the next run), the script retries
+    once; a second failure is `STATUS=auth`, exit 69. agy's message then says
+    to run `agy` to log in: ignore it, this skill never uses that login;
   - `key`: `"modelProvider": "gemini"` in `--settings` and the key in
     `GEMINI_API_KEY` (from the environment, else OpenCode's `auth.json`). Never
     combine the two: `modelProvider` switches a Vertex run back to the key.
