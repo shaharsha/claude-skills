@@ -65,7 +65,8 @@ usage: pair.sh --prompt-file <abs path> [options]
   --prompt-file <file>    The prompt (required; absolute path)
   --cwd <dir>             Where the model works. Default: the current directory
                           for review/consult; an empty scratch dir otherwise.
-  --image <file>          Image for the model to look at (repeatable)
+  --image <file|dir>      Image for the model to look at (repeatable); a folder
+                          adds every .png/.jpg/.jpeg/.gif/.webp in it, sorted
   --name <label>          Remember this session under <label>
   --resume <label>        Continue a session started with --name
   --label <slug>          Names the run directory (default: <mode>-<engine>)
@@ -89,10 +90,11 @@ usage: pair.sh --prompt-file <abs path> [options]
                           (run after an agy or codex upgrade) and exit
   --list                  Print remembered session labels and exit
 
-Prints RUN_DIR, SESSION_ID, SESSION_NAME and STATUS, with ANSWER=<path> last.
+Prints RUN_DIR, SESSION_ID, SESSION_NAME, STATUS, READS (files the model read)
+and TREE (the commit of --cwd, +uncommitted if it had changes), with ANSWER=<path> last.
 Exit: 0 answered, 64 usage, 66 missing input, 69 missing CLI or credentials, 70 empty answer,
       71 the turn failed or ended without a final step, 75 Gemini quota ran
-      out (retry later), 124 timed out.
+      out (retry later), 72 the model read no file (review/consult), 124 timed out.
 USAGE
   exit "${1:-64}"
 }
@@ -105,7 +107,19 @@ while [[ $# -gt 0 ]]; do
     --mode)        MODE="${2:-}"; shift 2 ;;
     --prompt-file) PROMPT_FILE="${2:-}"; shift 2 ;;
     --cwd)         CWD="${2:-}"; shift 2 ;;
-    --image)       IMAGES+=("${2:-}"); shift 2 ;;
+    --image)
+      if [[ -d "${2:-}" ]]; then
+        while IFS= read -r _img; do IMAGES+=("$_img"); done < <(python3 -c '
+import os, sys
+d = os.path.abspath(sys.argv[1])
+for n in sorted(os.listdir(d)):
+    if n.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")) and os.path.isfile(os.path.join(d, n)):
+        print(os.path.join(d, n))' "$2")
+        [[ ${#IMAGES[@]} -gt 0 ]] || { echo "--image: no images in $2" >&2; exit 66; }
+      else
+        IMAGES+=("${2:-}")
+      fi
+      shift 2 ;;
     --name)        NAME="${2:-}"; shift 2 ;;
     --resume)      RESUME="${2:-}"; shift 2 ;;
     --label)       LABEL="${2:-}"; shift 2 ;;
@@ -189,6 +203,7 @@ case "$MODE" in consult|ideate|research|browse|review) ;; *) echo "unknown --mod
 [[ -n "$PROMPT_FILE" ]] || usage
 [[ "$PROMPT_FILE" = /* ]] || { echo "--prompt-file must be an absolute path" >&2; exit 64; }
 [[ -f "$PROMPT_FILE" ]] || { echo "no such prompt file: $PROMPT_FILE" >&2; exit 66; }
+[[ -n "$(tr -d '[:space:]' < "$PROMPT_FILE")" ]] || { echo "the prompt file is empty: $PROMPT_FILE" >&2; exit 66; }
 for img in ${IMAGES[@]+"${IMAGES[@]}"}; do
   [[ "$img" = /* && -f "$img" ]] || { echo "--image must be an existing absolute path: $img" >&2; exit 66; }
 done
@@ -351,6 +366,9 @@ else
   # but off turns on webfetch.
   case "$MODE" in review|browse) : "${WEB:=off}" ;; research) : "${WEB:=live}" ;; *) : "${WEB:=cached}" ;; esac
 fi
+# Gemini 4 Argon at high effort reviews slowly: 4 of 10 successful reviews on
+# 2026-11-02/04 ran past 1000 s, and one was cut at 1200 s while writing.
+[[ "$ENGINE" == gemini && "$MODE" == review ]] && : "${TIMEOUT:=1800}"
 case "$MODE" in
   review)  : "${TIMEOUT:=1200}" ;;
   research|browse) : "${TIMEOUT:=900}" ;;
@@ -504,7 +522,7 @@ dur() { if [[ $1 -ge 120 ]]; then echo "$(( $1 / 60 )) minutes"; else echo "$1 s
     # at all, so the model is told its budget up front, and the gate enforces it.
     BUDGETLINE=""
     [[ "$WEB" != off ]] && BUDGETLINE=" Web searches and page reads are limited to $WEB_BUDGET in all; spend them on what matters most."
-    printf '<harness>\nYou have about %s for this turn. After about %s every tool call is refused, so finish looking things up by then and leave time to write your answer: a turn cut off by the time limit returns nothing.%s\n</harness>\n\n' \
+    printf '<harness>\nYou have about %s for this turn. After about %s every tool call is refused, so finish looking things up by then and leave time to write your answer: a turn cut off by the time limit returns nothing.%s Quote a file only with text you read from it in this turn, with its path and line; anything you recall or paraphrase, say so.\n</harness>\n\n' \
       "$(dur "$TIMEOUT")" "$(dur $(( TIMEOUT * 7 / 10 )))" "$BUDGETLINE"
   fi
   cat "$PROMPT_FILE"
@@ -528,6 +546,13 @@ run_limited() {
 }
 
 # --- run ------------------------------------------------------------------------
+# What the model read: the commit of --cwd, and whether files there differed
+# from it, recorded before the run because the tree can move during it.
+TREE=""
+if git -C "$CWD" rev-parse --verify -q HEAD >/dev/null 2>&1; then
+  TREE="$(git -C "$CWD" rev-parse HEAD)"
+  [[ -n "$(git -C "$CWD" status --porcelain 2>/dev/null | head -1)" ]] && TREE="$TREE+uncommitted"
+fi
 START="$(date +%s)"
 RETRIED=0
 RETRY_FROM=0
@@ -553,7 +578,9 @@ if [[ "$ENGINE" == "codex" ]]; then
   # write tools) and the ChatGPT app's browser and computer-use plugins, all
   # outside the sandbox. Auth still comes from CODEX_HOME. The project-doc limit
   # it set is restated, or a long CLAUDE.md is cut at 32 KiB.
-  COMMON=(--json --skip-git-repo-check --ignore-user-config -m "$MODEL" -c "model_reasoning_effort=\"$EFFORT\""
+  # shellcheck source=codex_lockdown.sh
+  source "$SKILL_DIR/scripts/codex_lockdown.sh"
+  COMMON=(--json --skip-git-repo-check --ignore-user-config "${CODEX_LOCKDOWN[@]}" -m "$MODEL" -c "model_reasoning_effort=\"$EFFORT\""
           -c 'approval_policy="never"' -c "$WEBCFG" "${TIER[@]}"
           -c 'project_doc_fallback_filenames=["CLAUDE.md"]' -c 'project_doc_max_bytes=400000' -o "$ANSWER")
   [[ -n "$SCHEMA" ]] && COMMON+=(--output-schema "$SCHEMA")
@@ -736,8 +763,9 @@ SECS=$(( $(date +%s) - START ))
 STATUS="failed"; SESSION_ID="-"
 # Written to a file, not read through <(...): bash mis-parses a heredoc this long
 # inside a process substitution.
-python3 - "${BACKEND:-$ENGINE}" "$EVENTS" "$ANSWER" "$RC" "$RUN_DIR/tools.txt" "$ERRLOG" "$RETRY_FROM" > "$RUN_DIR/.status" <<'PY'
-import json, sys, pathlib
+python3 - "${BACKEND:-$ENGINE}" "$EVENTS" "$ANSWER" "$RC" "$RUN_DIR/tools.txt" "$ERRLOG" "$RETRY_FROM" \
+  "$MODE" "$RUN_CWD" > "$RUN_DIR/.status" <<'PY'
+import json, os, sys, pathlib
 engine, events, answer, rc = sys.argv[1], pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3]), int(sys.argv[4])
 errlog = pathlib.Path(sys.argv[6])
 retry_from = int(sys.argv[7])   # agy: events before this line belong to the attempt before a retry
@@ -748,10 +776,15 @@ for i, line in enumerate(events.read_text(errors="replace").splitlines() if even
     if i < retry_from:
         before_retry.add(len(evs) - 1)
 sid, failed, completed, denied, quota, results = "", False, False, False, False, 0
+reads = -1   # files the model read: shell commands for Codex, file tools for agy; -1 unknown
 step = None   # agy: the (type, state) of the last step before each result
 if engine == "codex":
+    reads = 0
     for e in evs:
         t = e.get("type", "")
+        # Codex reads files only through shell commands (cat, rg, git, sed).
+        if t == "item.completed" and (e.get("item") or {}).get("type") == "command_execution":
+            reads += 1
         if t == "thread.started": sid = e.get("thread_id", "") or sid
         elif t == "turn.failed": failed = True
         elif t == "turn.completed": completed = True
@@ -801,6 +834,8 @@ elif engine == "agy":
             elif answer.exists():
                 answer.unlink()
     pathlib.Path(sys.argv[5]).write_text("\n".join(lines) + ("\n" if lines else ""))
+    reads = sum(1 for l in lines if l.split()[:2] in (["DONE", "read_file"], ["DONE", "view_file"])
+                or (l.split()[:2] == ["DONE", "run_command"] and " pair-fs " in " " + l))
 else:
     texts = []
     for e in evs:
@@ -840,9 +875,21 @@ elif not completed:
     status = "incomplete"
 else:
     status = "ok"
-print(status, sid or "-")
+# A review or consult that read nothing answered from the prompt alone, yet looks
+# like any good run (measured three times on 2026-11-02/04: a prompt saying "you
+# cannot run anything", which Codex took as a ban on reading, and a run inside
+# another sandbox). Only when the folder holds something to read besides images.
+mode, cwd = sys.argv[8], sys.argv[9]
+images = (".png", ".jpg", ".jpeg", ".gif", ".webp")
+try:
+    material = any(not n.startswith(".") and not n.lower().endswith(images) for n in os.listdir(cwd))
+except OSError:
+    material = False
+if status == "ok" and reads == 0 and mode in ("review", "consult") and material:
+    status = "unread"
+print(status, sid or "-", reads)
 PY
-read -r STATUS SESSION_ID < "$RUN_DIR/.status" || true
+read -r STATUS SESSION_ID READS < "$RUN_DIR/.status" || true
 rm -f "$RUN_DIR/.status"
 
 if [[ "$STATUS" == "ok" && "$SESSION_ID" != "-" ]]; then
@@ -870,12 +917,13 @@ PY
 fi
 
 python3 - "$RUN_DIR/meta.json" "$ENGINE" "$MODE" "$MODEL" "$EFFORT" "$WEB" "$CWD" "$STATUS" \
-  "$RC" "$SECS" "$SESSION_ID" "${NAME:-$RESUME}" "$DOMAINS" "$BACKEND" "${AGY_AUTH:+$AGY_AUTH${AGY_PROJECT:+:$AGY_PROJECT}}" <<'PY'
+  "$RC" "$SECS" "$SESSION_ID" "${NAME:-$RESUME}" "$DOMAINS" "$BACKEND" "${AGY_AUTH:+$AGY_AUTH${AGY_PROJECT:+:$AGY_PROJECT}}" \
+  "${READS:--1}" "$TREE" <<'PY'
 import json, sys
 keys = ["engine", "mode", "model", "effort", "web", "cwd", "status", "exit_code",
-        "seconds", "session_id", "session_name", "domains", "backend", "auth"]
+        "seconds", "session_id", "session_name", "domains", "backend", "auth", "reads", "tree"]
 meta = dict(zip(keys, sys.argv[2:]))
-meta["exit_code"], meta["seconds"] = int(meta["exit_code"]), int(meta["seconds"])
+meta["exit_code"], meta["seconds"], meta["reads"] = int(meta["exit_code"]), int(meta["seconds"]), int(meta["reads"])
 json.dump(meta, open(sys.argv[1], "w"), indent=2)
 PY
 
@@ -884,6 +932,8 @@ echo "WORK_DIR=$CWD"
 echo "SESSION_ID=$SESSION_ID"
 [[ -n "${NAME:-$RESUME}" ]] && echo "SESSION_NAME=${NAME:-$RESUME}"
 echo "STATUS=$STATUS"
+[[ "${READS:--1}" != -1 ]] && echo "READS=$READS"
+[[ -n "$TREE" ]] && echo "TREE=$TREE"
 echo "ANSWER=$ANSWER"
 case "$STATUS" in
   ok)      exit 0 ;;
@@ -911,6 +961,9 @@ case "$STATUS" in
       echo "agy rejected the Gemini API key (authentication failed); check GEMINI_API_KEY or OpenCode's auth.json, or use the Vertex AI route. This skill never uses agy's own login. See $ERRLOG" >&2
     fi
     exit 69 ;;
+  unread)
+    echo "the model read no file in $RUN_CWD, so its answer rests on your prompt alone; $ANSWER holds it. Usual causes: the prompt said it may not run anything (Codex reads files only through shell commands, so say it may read and run read-only commands), or this ran inside another sandbox (run pair.sh outside your harness's sandbox). If the question needed no file, use the answer as it is." >&2
+    exit 72 ;;
   empty)
     if [[ $RETRIED -eq 1 ]]; then
       echo "no answer: the one retry after the Vertex AI quota error ended without one; see $ERRLOG and $EVENTS" >&2

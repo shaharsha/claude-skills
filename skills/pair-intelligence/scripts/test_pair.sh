@@ -56,6 +56,15 @@ if "--json" in args:
     print(json.dumps({"type": "thread.started", "thread_id": tid}))
 else:
     print(f"session id: {tid}")
+# Codex reads files only through shell commands: one, unless told it read nothing.
+if not os.environ.get("FAKE_CODEX_NOREAD"):
+    if "--json" in args:
+        print(json.dumps({"type": "item.completed", "item": {"type": "command_execution", "command": "cat a.txt", "exit_code": 0}}))
+    else:
+        print("exec\n/bin/zsh -lc 'cat a.txt' in .\n succeeded in 1ms:")
+if mode == "move-head":
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "during"], capture_output=True)
+    mode = "review"
 if mode == "failed":
     print(json.dumps({"type": "turn.failed", "error": {"message": "boom"}})); sys.exit(1)
 if mode == "write":
@@ -66,9 +75,9 @@ if mode == "browse-client":
     open(f"{log}/codex-browse.txt", "w").write(f"rc={r.returncode}\n{r.stdout}{r.stderr}")
     subprocess.run(["pair-browser", "screenshot", "page.png"], capture_output=True)
     mode = "ok"
-if mode == "review" and out:
+if mode in ("review", "review-doubt") and out:
     json.dump({"scan_notes": "read a.txt", "overall_verdict": "sound", "overall_explanation": "fine",
-               "overall_confidence": 0.9, "findings": []}, open(out, "w"))
+               "overall_confidence": 0.2 if mode == "review-doubt" else 0.9, "findings": []}, open(out, "w"))
 elif mode == "ok" and out:
     open(out, "w").write("the answer\n")
 if "--json" in args:
@@ -155,6 +164,9 @@ for name, targs in json.loads(os.environ.get("FAKE_AGY_TOOLS", "[]")):
     with open(f"{log}/agy-tools-{n}.jsonl", "a") as f:
         f.write(json.dumps({"tool": name, "decision": d["decision"], "output": info.get("output", "")}) + "\n")
     ev(event="step_update", step_update={"step_type": "tool", "tool_name": name, "state": state, "tool_info": info})
+if not os.environ.get("FAKE_AGY_TOOLS") and not os.environ.get("FAKE_AGY_NOREAD"):
+    ev(event="step_update", step_update={"step_type": "tool", "tool_name": "read_file", "state": "DONE",
+                                         "tool_info": {"parameters": {"Path": "/x/notes.txt"}}})
 if mode == "nores" or (mode == "quota-nores" and n == 1):
     sys.exit(0)
 if mode in ("quota-after-answer", "quota-mid-answer") and n == 0:
@@ -226,6 +238,7 @@ check "codex ok: read-only via -s and -c"         '[[ "$(jq_py "$A" "\" \".join(
 check "codex ok: consult uses cached web search"  '[[ "$(jq_py "$A" "\" \".join(d[\"args\"])")" == *"web_search=\"cached\""* ]]'
 check "codex ok: prompt arrives on stdin"         'grep -q "2+2" "$LOG/codex-stdin-0.txt"'
 check "codex: user config ignored (MCP, plugins), doc limit kept" '[[ "$(jq_py "$A" "\" \".join(d[\"args\"])")" == *"--ignore-user-config"*"project_doc_max_bytes=400000"* ]]'
+check "codex: app connectors, plugins, browser and computer use, hooks off" '[[ "$(jq_py "$A" "\" \".join(d[\"args\"])")" == *"features.apps=false"*"features.plugins=false"*"features.browser_use=false"*"features.computer_use=false"*"features.hooks=false"* ]]'
 RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
 check "codex ok: meta.json is valid JSON"         'python3 -c "import json;json.load(open(\"$RUN/meta.json\"))"'
 
@@ -237,6 +250,28 @@ check "resume: runs in the original directory"    '[[ "$(jq_py "$A" "d[\"cwd\"]"
 
 out="$(FAKE_CODEX=failed bash "$P" --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
 check "codex failed turn: exit 71, STATUS=failed" '[[ $rc -eq 71 && "$out" == *"STATUS=failed"* ]]'
+printf 'facts\n' > "$T/repo/facts.md"
+out="$(cd "$T/repo" && FAKE_CODEX=ok bash "$P" --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+check "codex consult that read a file: READS=1, ok" '[[ $rc -eq 0 && "$out" == *"STATUS=ok"* && "$out" == *"READS=1"* ]]'
+out="$(cd "$T/repo" && FAKE_CODEX=ok FAKE_CODEX_NOREAD=1 bash "$P" --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
+check "codex consult that read nothing beside files: exit 72, STATUS=unread, answer kept" '[[ $rc -eq 72 && "$out" == *"STATUS=unread"* && "$out" == *"READS=0"* && -s "$RUN/answer.md" ]]'
+mkdir -p "$T/onlyimg" && : > "$T/onlyimg/s1.png"
+out="$(FAKE_CODEX=ok FAKE_CODEX_NOREAD=1 bash "$P" --cwd "$T/onlyimg" --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+check "codex consult with nothing but images to read: no unread flag" '[[ $rc -eq 0 && "$out" == *"STATUS=ok"* ]]'
+out="$(FAKE_CODEX=ok FAKE_CODEX_NOREAD=1 bash "$P" --mode ideate --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+check "codex ideate that read nothing: ok (only review and consult are checked)" '[[ $rc -eq 0 ]]'
+mkdir -p "$T/shots" && : > "$T/shots/b.png" && : > "$T/shots/a.jpg" && : > "$T/shots/notes.txt"
+out="$(FAKE_CODEX=ok bash "$P" --mode ideate --image "$T/shots" --prompt-file "$T/prompt.md" 2>&1)"
+check "--image <folder> adds its images, sorted, and nothing else" 'grep -q "$T/shots/a.jpg" "$LOG/codex-stdin-$(( $(ls "$LOG"/codex-stdin-*.txt | wc -l) - 1 )).txt" && ! grep -q notes.txt "$(ls -t "$LOG"/codex-stdin-*.txt | head -1)" && [[ "$(grep -n "shots/" "$(ls -t "$LOG"/codex-stdin-*.txt | head -1)" | head -1)" == *a.jpg* ]]'
+mkdir -p "$T/noshots"
+bash "$P" --image "$T/noshots" --prompt-file "$T/prompt.md" >/dev/null 2>&1
+check "--image on a folder with no images: exit 66" '[[ $? -eq 66 ]]'
+rm -f "$T/repo/facts.md"
+printf '  \n\n' > "$T/blank.md"
+bash "$P" --prompt-file "$T/blank.md" >/dev/null 2>&1; r1=$?
+bash "$SCRIPTS/codex_review.sh" --repo "$T/repo" --prompt-file "$T/blank.md" >/dev/null 2>&1; r2=$?
+check "an empty prompt file is refused by both scripts: exit 66" '[[ $r1 -eq 66 && $r2 -eq 66 ]]'
 out="$(FAKE_CODEX=empty bash "$P" --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
 check "codex empty answer: exit 70"               '[[ $rc -eq 70 && "$out" == *"STATUS=empty"* ]]'
 out="$(FAKE_CODEX=hang bash "$P" --prompt-file "$T/prompt.md" --timeout 2 2>&1)"; rc=$?
@@ -330,9 +365,9 @@ RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
 # The prompt agy got (its stdin is one stream-json line), checked for the numbers
 # the model is told, not the sentences around them.
 agy_prompt() { python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).readline())["message"]["content"])' "$1"; }
-check "agy review: told its 20 minutes and the 14-minute tool cutoff; with web off, not its web budget (17)" 'agy_prompt "$LOG/agy-stdin-0.txt" | grep -qE "(^|[^0-9])20 minutes" && agy_prompt "$LOG/agy-stdin-0.txt" | grep -qE "(^|[^0-9])14 minutes" && ! agy_prompt "$LOG/agy-stdin-0.txt" | grep -qw 17'
+check "agy review: told its 30 minutes (the Gemini review default) and the 21-minute tool cutoff; with web off, not its web budget (17)" 'agy_prompt "$LOG/agy-stdin-0.txt" | grep -qE "(^|[^0-9])30 minutes" && agy_prompt "$LOG/agy-stdin-0.txt" | grep -qE "(^|[^0-9])21 minutes" && ! agy_prompt "$LOG/agy-stdin-0.txt" | grep -qw 17'
 until_s="$(jq_py "$RUN/agy-policy.json" "d[\"tools_until\"]")"
-check "agy: policy stops tools at 70% of the 1200 s timeout" '[[ $until_s -ge $((t0 + 840)) && $until_s -le $((t1 + 840)) ]]'
+check "agy: policy stops tools at 70% of the 1800 s timeout" '[[ $until_s -ge $((t0 + 1260)) && $until_s -le $((t1 + 1260)) ]]'
 reset_log
 out="$(cd "$T/arepo" && FAKE_AGY=ok FAKE_AGY_TOOLS='[["search_web",{"query":"a"}],["search_web",{"query":"b"}],["search_web",{"query":"c"}]]' bash "$P" --engine gemini --backend agy --web-budget 2 --prompt-file "$T/prompt.md" 2>&1)"
 RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
@@ -356,6 +391,8 @@ out="$(cd "$T/arepo" && FAKE_AGY=error bash "$P" --engine gemini --backend agy -
 check "agy error result: exit 71"                  '[[ $rc -eq 71 && "$out" == *"STATUS=failed"* ]]'
 out="$(cd "$T/arepo" && FAKE_AGY=nores bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
 check "agy stream without a result: not ok"        '[[ $rc -ne 0 && "$out" != *"STATUS=ok"* ]]'
+out="$(cd "$T/arepo" && FAKE_AGY=ok FAKE_AGY_NOREAD=1 bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+check "agy consult that read nothing in a repo: exit 72, STATUS=unread" '[[ $rc -eq 72 && "$out" == *"STATUS=unread"* ]]'
 out="$(cd "$T/arepo" && FAKE_AGY=hang bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" --timeout 2 2>&1)"; rc=$?
 check "agy hang: exit 124"                         '[[ $rc -eq 124 ]]'
 bash "$P" --engine gemini --backend agy --cwd "$HOME" --prompt-file "$T/prompt.md" >/dev/null 2>&1
@@ -430,6 +467,8 @@ check "pair-fs refuses a symlink out of the root"  '! FS ls etclink >/dev/null 2
 check "pair-fs grep skips secret files"            '[[ "$(FS grep SECRET123)" == "no matches" ]]'
 FS grep --pre=/bin/sh x >/dev/null 2>&1; r1=$?; FS grep -- -x >/dev/null 2>&1; r2=$?
 check "pair-fs grep refuses unknown flags, takes a dash pattern after --" '[[ $r1 -eq 2 && $r2 -eq 0 ]]'
+out="$(cd "$AREPO" && FAKE_CODEX=ok bash "$P" --cwd "$AREPO" --prompt-file "$T/prompt.md" 2>&1)"
+check "TREE names the commit of --cwd, marked when files differ from it" '[[ "$out" == *"TREE=$(git -C "$AREPO" rev-parse HEAD)+uncommitted"* ]]'
 check "pair-fs git log, show and cat work"        'FS git log --oneline | grep -q init && FS git show --stat HEAD | grep -q a.txt && FS git cat HEAD a.txt | grep -q "^a$"'
 git -C "$AREPO" config core.fsmonitor "touch $T/fsmonitor_ran"
 git -C "$AREPO" config core.pager "touch $T/pager_ran"
@@ -439,6 +478,14 @@ git -C "$AREPO" config --unset core.fsmonitor; git -C "$AREPO" config --unset co
 git -C "$AREPO" config gpg.program "touch $T/gpg_ran"
 check "pair-fs git refuses gpg.program in repo config" '! FS git log --oneline >/dev/null 2>&1 && [[ ! -e "$T/gpg_ran" ]]'
 git -C "$AREPO" config --unset gpg.program
+git -C "$AREPO" config branch.feature-driver-helper.merge refs/heads/feature-driver-helper
+git -C "$AREPO" config remote.command-center.url https://example.com/x.git
+check "pair-fs git: a branch or remote whose name holds driver, helper or command is fine" 'FS git log --oneline >/dev/null 2>&1'
+git -C "$AREPO" config filter.lfs.clean "touch $T/clean_ran"; git -C "$AREPO" config diff.pdf.textconv "touch $T/tc_ran"
+FS git log --oneline >/dev/null 2>&1; r1=$?; git -C "$AREPO" config --unset filter.lfs.clean
+FS git log --oneline >/dev/null 2>&1; r2=$?; git -C "$AREPO" config --unset diff.pdf.textconv
+check "pair-fs git still refuses filter and textconv programs" '[[ $r1 -ne 0 && $r2 -ne 0 && ! -e "$T/clean_ran" && ! -e "$T/tc_ran" ]]'
+git -C "$AREPO" config --remove-section branch.feature-driver-helper; git -C "$AREPO" config --remove-section remote.command-center
 mkdir -p "$AREPO/narrow"
 wider="$(PAIR_FS_ROOTS="[\"$AREPO/narrow\"]" /usr/bin/python3 -I "$SCRIPTS/pair_fs.py" git log --oneline 2>&1)"
 check "pair-fs git refuses a repo wider than its roots" '[[ "$wider" == *"wider than the folders you may read"* ]]'
@@ -792,6 +839,16 @@ reset_log
 out="$(cd "$T/arepo" && PAIR_AGY_AUTH=key PAIR_AGY_RETRY_WAIT=0 FAKE_AGY=auth bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
 check "API-key auth failure: exit 69, not retried" '[[ $rc -eq 69 && $(ls "$LOG"/agy-args-*.json | wc -l) -eq 1 && "$out" != *"Run '"'"'agy'"'"' to log in"* ]]'
 
+# --- pair_stage.sh ----------------------------------------------------------------------
+mkdir -p "$T/st1" && git -C "$T/st1" init -q && mkdir -p "$T/st1/src" && printf 'v1\n' > "$T/st1/src/a.txt" && printf 'top\n' > "$T/st1/top.txt"
+git -C "$T/st1" add . && git -C "$T/st1" -c user.email=t@t -c user.name=t commit -qm one && git -C "$T/st1" tag v1
+printf 'v2\n' > "$T/st1/src/a.txt" && git -C "$T/st1" -c user.email=t@t -c user.name=t commit -qam two && printf 'local edit\n' > "$T/st1/src/a.txt"
+out="$(bash "$SCRIPTS/pair_stage.sh" "$T/staged" "$T/st1@v1:src" "$T/st1" 2>&1)"; rc=$?
+check "pair_stage: a ref with paths and the checked-out commit, side by side, with SHAS.md" '[[ $rc -eq 0 && "$(cat "$T/staged/st1/src/a.txt")" == v1 && ! -e "$T/staged/st1/top.txt" && "$(cat "$T/staged/st1-2/src/a.txt")" == v2 && -e "$T/staged/st1-2/top.txt" ]] && grep -q "$(git -C "$T/st1" rev-parse v1)" "$T/staged/SHAS.md" && grep -q "$(git -C "$T/st1" rev-parse HEAD)" "$T/staged/SHAS.md"'
+bash "$SCRIPTS/pair_stage.sh" "$T/staged" "$T/st1" >/dev/null 2>&1; r1=$?
+bash "$SCRIPTS/pair_stage.sh" "$T/staged2" "$T/st1@nope" >/dev/null 2>&1; r2=$?
+check "pair_stage: refuses a non-empty folder (64) and a missing ref (66)" '[[ $r1 -eq 64 && $r2 -eq 66 ]]'
+
 # --- pair.sh: argument checks -----------------------------------------------------
 bash "$P" --help >/dev/null 2>&1;                                         check "--help exits 0" '[[ $? -eq 0 ]]'
 bash "$P" --prompt-file prompt.md >/dev/null 2>&1;                        check "relative prompt path: exit 64" '[[ $? -eq 64 ]]'
@@ -825,6 +882,9 @@ out="$(FAKE_CODEX=review bash "$SCRIPTS/codex_review.sh" --repo "$T/docs" --prom
 MD="$(sed -n 's/^REVIEW_MD=//p' <<<"$out")"
 check "codex_review: non-git repo accepted, exit 0" '[[ $rc -eq 0 && -f "$MD" ]]'
 check "codex_review: ignores the user config"     '[[ "$(jq_py "$(last_args codex)" "\" \".join(d[\"args\"])")" == *"--ignore-user-config"*"project_doc_max_bytes=400000"* ]]'
+check "codex_review: connectors off, and web search off unless asked for" '[[ "$(jq_py "$(last_args codex)" "\" \".join(d[\"args\"])")" == *"features.apps=false"*"web_search=\"disabled\""* ]]'
+out="$(FAKE_CODEX=review bash "$SCRIPTS/codex_review.sh" --repo "$T/docs" --prompt-file "$T/prompt.md" --label t2 --out-dir "$T/evidence" --search 2>&1)"
+check "codex_review --search: cached web search" '[[ "$(jq_py "$(last_args codex)" "\" \".join(d[\"args\"])")" == *"web_search=\"cached\""* ]]'
 check "codex_review: passes --skip-git-repo-check" '[[ "$(jq_py "$(last_args codex)" "\" \".join(d[\"args\"])")" == *"--skip-git-repo-check"* ]]'
 check "codex_review: artifacts under --out-dir only" '[[ "$MD" == "$T/evidence/"* && ! -e "$T/docs/.codex-review" ]]'
 check "codex_review: provenance says not a git repo" 'grep -q "^tree=not a git repository" "$T"/evidence/*.provenance'
@@ -833,6 +893,25 @@ check "codex_review: no _tbd_ columns"            '! grep -q "_tbd_" "$MD"'
 mkdir -p "$T/fresh"
 bash "$SCRIPTS/codex_review.sh" --repo "$T/fresh" --list >/dev/null 2>&1
 check "codex_review --list creates nothing"       '[[ ! -e "$T/fresh/.codex-review" ]]'
+out="$(FAKE_CODEX=review bash "$SCRIPTS/codex_review.sh" --repo "$T/docs" --prompt-file "$T/prompt.md" --label t3 --out-dir "$T/evidence" 2>&1)"; rc=$?
+check "codex_review: verdict, findings, reads and seconds on stdout before REVIEW_MD" '[[ $rc -eq 0 && "$out" == *"VERDICT=sound"*"FINDINGS=0"*"READS=1"*"SECONDS="*"REVIEW_MD="* ]]'
+out="$(FAKE_CODEX=review FAKE_CODEX_NOREAD=1 bash "$SCRIPTS/codex_review.sh" --repo "$T/docs" --prompt-file "$T/prompt.md" --label t4 --out-dir "$T/evidence" 2>&1)"; rc=$?
+MD="$(sed -n 's/^REVIEW_MD=//p' <<<"$out")"
+check "codex_review that read no file: exit 72, the review still written with a warning on top" '[[ $rc -eq 72 && "$out" == *"READS=0"* && -f "$MD" ]] && head -3 "$MD" | grep -q "⚠️" && grep -q "^reads=0$" "${MD%.md}.provenance"'
+out="$(FAKE_CODEX=review-doubt bash "$SCRIPTS/codex_review.sh" --repo "$T/docs" --prompt-file "$T/prompt.md" --label t5 --out-dir "$T/evidence" 2>&1)"; rc=$?
+MD="$(sed -n 's/^REVIEW_MD=//p' <<<"$out")"
+check "codex_review: no findings at low confidence is flagged on top, exit 0" '[[ $rc -eq 0 ]] && head -3 "$MD" | grep -q "⚠️"'
+mkdir -p "$T/crepo" && git -C "$T/crepo" init -q && printf 'a\n' > "$T/crepo/a.txt" && git -C "$T/crepo" add a.txt && git -C "$T/crepo" -c user.email=t@t -c user.name=t commit -qm init
+printf 'facts\n' > "$T/crepo/facts-for-review.md"
+out="$(FAKE_CODEX=move-head bash "$SCRIPTS/codex_review.sh" --repo "$T/crepo" --prompt-file "$T/prompt.md" --label t6 2>&1)"; rc=$?
+MD="$(sed -n 's/^REVIEW_MD=//p' <<<"$out")"; PROV="${MD%.md}.provenance"
+check "codex_review: names the uncommitted files, and records a HEAD that moved during the round" 'grep -q "facts-for-review.md" "$MD" && [[ "$(sed -n "s/^head_after=//p" "$PROV")" != "$(sed -n "s/^sha=//p" "$PROV")" ]]'
+check "codex_review: its .codex-review/ is not untracked clutter" '! git -C "$T/crepo" status --porcelain | grep -q codex-review'
+git -C "$T/crepo" worktree add -q "$T/crepo-wt" -b wt >/dev/null 2>&1
+out="$(FAKE_CODEX=review bash "$SCRIPTS/codex_review.sh" --repo "$T/crepo-wt" --prompt-file "$T/prompt.md" --label t7 2>&1)"
+check "codex_review in a worktree: .codex-review/ is not untracked there" '[[ -d "$T/crepo-wt/.codex-review" ]] && ! git -C "$T/crepo-wt" status --porcelain | grep -q codex-review'
+out="$(FAKE_CODEX=review bash "$SCRIPTS/codex_review.sh" --repo "$T/crepo-wt" --prompt-file "$T/prompt.md" --label t8 --out-dir "$T/crepo/.codex-review-t8" 2>&1)"
+check "codex_review --out-dir inside another repo: not untracked there either" '[[ -d "$T/crepo/.codex-review-t8" ]] && ! git -C "$T/crepo" status --porcelain | grep -q codex-review-t8'
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [[ $FAIL -eq 0 ]]

@@ -29,7 +29,7 @@ NAME=""
 RESUME=""
 SCHEMA="$SKILL_DIR/assets/findings.schema.json"
 EPHEMERAL=0
-SEARCH=0
+WEB="disabled"
 OUT_OVERRIDE=""
 DOMAINS=""
 RUNNABLE=0
@@ -48,8 +48,9 @@ usage: codex_review.sh --repo <dir> --prompt-file <file> [options]
   --effort <level>      low|medium|high|xhigh|max (default: high)
   --schema <file>       JSON Schema for the result (default: bundled findings schema)
   --no-schema           Ask for prose instead of structured findings
-  --search              Give the reviewer web search. Runs server-side, so it
-                        works under the read-only sandbox with no local network.
+  --web off|cached|live Web search for the reviewer (default off), as in pair.sh.
+                        Runs server-side, so it works under the read-only sandbox.
+  --search              Same as --web cached
   --ephemeral           Don't persist the session (cannot be resumed later)
   --out-dir <dir>       Write artifacts here instead of <repo>/.codex-review/.
                         Use a durable directory when the repo is a worktree that
@@ -63,7 +64,10 @@ usage: codex_review.sh --repo <dir> --prompt-file <file> [options]
                         run tests and write files, network off. Not resumable.
   --list                Print known session labels for --repo and exit
 
-Prints the paths it wrote, with REVIEW_MD=<path> last.
+Prints the paths it wrote, then VERDICT, FINDINGS, CONFIDENCE, READS (commands
+the reviewer ran; 0 means it read no file) and SECONDS, with REVIEW_MD=<path> last.
+Exit: 0 reviewed, 64 usage, 66 missing input, 69 missing CLI, 70 no output,
+      72 the reviewer read no file (the .md is written, with a warning on top).
 USAGE
   exit 64
 }
@@ -80,7 +84,9 @@ while [[ $# -gt 0 ]]; do
     --effort)      EFFORT="${2:-}"; shift 2 ;;
     --schema)      SCHEMA="${2:-}"; shift 2 ;;
     --no-schema)   SCHEMA=""; shift ;;
-    --search)      SEARCH=1; shift ;;
+    --search)      WEB="cached"; shift ;;
+    --web)         case "${2:-}" in off) WEB="disabled" ;; cached|live) WEB="$2" ;;
+                     *) echo "--web must be off, cached or live" >&2; exit 64 ;; esac; shift 2 ;;
     --ephemeral)   EPHEMERAL=1; shift ;;
     --out-dir)     OUT_OVERRIDE="${2:-}"; shift 2 ;;
     --domains)     DOMAINS="${2:-}"; shift 2 ;;
@@ -140,6 +146,7 @@ fi
 
 [[ -n "$PROMPT_FILE" ]] || usage
 [[ -f "$PROMPT_FILE" ]] || { echo "no such prompt file: $PROMPT_FILE" >&2; exit 66; }
+[[ -n "$(tr -d '[:space:]' < "$PROMPT_FILE")" ]] || { echo "the prompt file is empty: $PROMPT_FILE" >&2; exit 66; }
 command -v codex >/dev/null || { echo "codex CLI not found on PATH" >&2; exit 69; }
 [[ -n "$RESUME" && "$EPHEMERAL" -eq 1 ]] && { echo "--resume and --ephemeral are incompatible" >&2; exit 64; }
 if [[ $RUNNABLE -eq 1 ]]; then
@@ -155,14 +162,28 @@ mkdir -p "$OUT_DIR"
 OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 
 # Keep review artifacts out of git without touching the tracked .gitignore.
-# .git/info/exclude is local to this clone, so it never shows up as a change.
-GIT_DIR="$(git -C "$REPO" rev-parse --git-dir 2>/dev/null || true)"
-if [[ -n "$GIT_DIR" ]]; then
-  [[ "$GIT_DIR" = /* ]] || GIT_DIR="$REPO/$GIT_DIR"
-  EXCLUDE="$GIT_DIR/info/exclude"
-  mkdir -p "$(dirname "$EXCLUDE")"
-  grep -qxF '.codex-review/' "$EXCLUDE" 2>/dev/null || echo '.codex-review/' >> "$EXCLUDE"
+# info/exclude is local to the clone, so it never shows up as a change. Git reads
+# it from the COMMON dir: a worktree's own git dir has one it never reads, so an
+# exclude written there left .codex-review/ showing as untracked. An --out-dir
+# inside some repository (a lane's .codex-review-<ticket>/ in the main checkout)
+# is excluded in that repository too.
+exclude_in() {  # $1: a folder inside a git work tree; excludes that folder there
+  local top common rel
+  top="$(git -C "$1" rev-parse --show-toplevel 2>/dev/null)" || return 0
+  common="$(cd "$1" && git rev-parse --git-common-dir 2>/dev/null)" || return 0
+  [[ "$common" = /* ]] || common="$(cd "$1" && cd "$common" && pwd)"
+  rel="$(python3 -c 'import os,sys; print(os.path.relpath(os.path.realpath(sys.argv[1]), os.path.realpath(sys.argv[2])))' "$1" "$top")"
+  [[ "$rel" != "." && "$rel" != ..* ]] || return 0
+  mkdir -p "$common/info"
+  grep -qxF "/$rel/" "$common/info/exclude" 2>/dev/null || echo "/$rel/" >> "$common/info/exclude"
+}
+if git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
+  COMMON_DIR="$(cd "$REPO" && git rev-parse --git-common-dir)"
+  [[ "$COMMON_DIR" = /* ]] || COMMON_DIR="$(cd "$REPO" && cd "$COMMON_DIR" && pwd)"
+  mkdir -p "$COMMON_DIR/info"
+  grep -qxF '.codex-review/' "$COMMON_DIR/info/exclude" 2>/dev/null || echo '.codex-review/' >> "$COMMON_DIR/info/exclude"
 fi
+exclude_in "$OUT_DIR"
 
 # Resolve --resume through the label map; fall through if it's already a UUID.
 RESUME_ID=""
@@ -354,11 +375,18 @@ else
   echo "codex_review: citing $PROMPT_FILE, which this script does not control and may not outlive the round." >&2
 fi
 REVIEW_SHA="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || echo unknown)"
+DIRTY_FILES=""
+START_SECS="$(date +%s)"
 REVIEW_BRANCH="$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
 if [[ $IS_GIT -eq 0 ]]; then
   REVIEW_DIRTY="not a git repository — this verdict covers the files as they were read"
 elif [[ -n "$(git -C "$REPO" status --porcelain 2>/dev/null)" ]]; then
   REVIEW_DIRTY="DIRTY — uncommitted changes present; this verdict covers the WORKING TREE, not $REVIEW_SHA"
+  # Which files, so a deliberate untracked facts file reads as that and not as an accident.
+  DIRTY_FILES="$(git -C "$REPO" status --porcelain 2>/dev/null | python3 -c '
+import sys
+rows = [l.rstrip("\n") for l in sys.stdin if l.strip()]
+print(", ".join("`%s`" % r for r in rows[:10]) + (" and %d more" % (len(rows) - 10) if len(rows) > 10 else ""))')"
 else
   REVIEW_DIRTY="clean"
 fi
@@ -401,6 +429,13 @@ if [[ -n "$DOMAINS" || $RUNNABLE -eq 1 ]]; then
   } > "$RUN_PROMPT"
 fi
 
+# shellcheck source=codex_lockdown.sh
+source "$SKILL_DIR/scripts/codex_lockdown.sh"
+# Web search is set explicitly every run. Left unset, Codex gives the reviewer
+# its web tool by default (measured 2026-11-04, codex-cli 0.165), and a page or
+# file can steer a model into sending what it read out in a query. `codex exec`
+# rejects a --search flag; the config key is the only route, and the search runs
+# server-side at OpenAI, so it needs no egress from the sandbox.
 if [[ -n "$DOMAINS" ]]; then
   # Read-only (or the writable copy) with one unix socket open, the broker's.
   SANDBOX_TIER=("${CODEX_BROKER_TIER[@]}")
@@ -433,16 +468,13 @@ COMMON=(
   # CODEX_HOME. The project-doc limit that config raised is restated, or a long
   # CLAUDE.md (torque's is ~394 KB) is cut at 32 KiB.
   --ignore-user-config
+  "${CODEX_LOCKDOWN[@]}"
   -c 'project_doc_max_bytes=400000'
+  -c "web_search=\"$WEB\""
   -o "$RAW"
 )
 [[ -n "$SCHEMA" ]] && COMMON+=(--output-schema "$SCHEMA")
 [[ $IS_GIT -eq 0 ]] && COMMON+=(--skip-git-repo-check)
-# `codex exec` rejects the --search flag; the config key is the only route. The
-# search runs server-side at OpenAI, so it needs no egress from the sandbox --
-# which is the only way to get web access here at all, since read-only blocks
-# curl outright and macOS seatbelt ignores network_access even in write modes.
-[[ "$SEARCH" -eq 1 ]] && COMMON+=(-c 'tools.web_search=true')
 
 if [[ -n "$RESUME_ID" ]]; then
   # resume accepts neither -s nor -C. The working root comes from the original
@@ -467,6 +499,37 @@ if [[ $STATUS -ne 0 ]]; then
 fi
 [[ -s "$RAW" ]] || { echo "codex produced no output; see $LOG" >&2; exit 70; }
 
+SECS=$(( $(date +%s) - START_SECS ))
+# Codex reads files only through shell commands, each logged as a line "exec".
+# None means the verdict rests on the prompt alone: measured 2026-11-02, a
+# prompt saying the reviewer "cannot run anything" gave 0 findings at confidence
+# 0.2, and every other check passed.
+READS="$(grep -cx 'exec' "$LOG" 2>/dev/null)" || READS=0
+HEAD_AFTER="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || echo unknown)"
+WARNINGS=()
+[[ "$READS" -eq 0 ]] && WARNINGS+=("**The reviewer ran no command, so it read no file.** Its verdict rests on the prompt alone. Usual causes: the prompt said it may not run anything (it reads only through shell commands: say it may read and run read-only commands), or this ran inside another sandbox.")
+if [[ $IS_GIT -eq 1 && "$HEAD_AFTER" != "$REVIEW_SHA" ]]; then
+  WARNINGS+=("**HEAD moved during the review**, from \`$REVIEW_SHA\` to \`$HEAD_AFTER\`: a prompt that names HEAD may have been read at either. Name the sha in the prompt.")
+fi
+SUMMARY=""
+if [[ -n "$SCHEMA" ]]; then
+  SUMMARY="$(python3 - "$RAW" <<'PY'
+import json, sys, collections
+try:
+    d = json.load(open(sys.argv[1]))
+except (OSError, ValueError):
+    raise SystemExit(0)
+f = d.get("findings") or []
+c = collections.Counter(x.get("severity", "?") for x in f)
+sev = ", ".join("%d %s" % (c[s], s) for s in ("critical", "high", "medium", "low") if c[s])
+print("%s\t%d%s\t%s" % (d.get("overall_verdict", "?"), len(f), " (%s)" % sev if sev else "", d.get("overall_confidence", "?")))
+PY
+)"
+  IFS=$'\t' read -r V_VERDICT V_FINDINGS V_CONF <<< "$SUMMARY" || true
+  if [[ "${V_FINDINGS%% *}" == 0 ]] && python3 -c 'import sys; sys.exit(0 if float(sys.argv[1]) < 0.5 else 1)' "${V_CONF:-1}" 2>/dev/null; then
+    WARNINGS+=("**No findings, at confidence ${V_CONF}.** A clean verdict the reviewer itself doubts: check that it reached the source before counting this round.")
+  fi
+fi
 SESSION_ID="$(grep -oE 'session id: [0-9a-f-]{36}' "$LOG" | head -1 | awk '{print $3}' || true)"
 [[ -z "$SESSION_ID" && -n "$RESUME_ID" ]] && SESSION_ID="$RESUME_ID"
 
@@ -499,8 +562,19 @@ fi
 # the rendered-markdown path -- without --schema the .md is a copy of the raw
 # JSON, and prepending prose would corrupt it, so that case gets the sidecar only.
 if [[ -n "$SCHEMA" && -f "$MD" ]]; then
-  PROV="$(printf '> **Reviewed:** `%s` on `%s` — working tree %s\n> **Prompt artifact:** `%s`  sha256 `%s`\n> **Prompt origin:** `%s`\n> **Label:** `%s` · **Session:** `%s`\n>\n> *A verdict covers the bytes it read — the repo sha AND the prompt hash. For a PLAN\n> round the repo sha is nearly meaningless and the prompt hash is the whole claim.\n> Cite them, or the citation is about a revision nobody has.*\n\n' \
+  WARN_LINES=""
+  for w in ${WARNINGS[@]+"${WARNINGS[@]}"}; do WARN_LINES+="> ⚠️ $w"$'\n'; done
+  [[ -n "$WARN_LINES" ]] && WARN_LINES+=">"$'\n'
+  DIRTY_LINE=""
+  [[ -n "$DIRTY_FILES" ]] && DIRTY_LINE="> **Uncommitted:** $DIRTY_FILES"$'\n'
+  PROV="$WARN_LINES$(printf '> **Reviewed:** `%s` on `%s` — working tree %s\n> **Prompt artifact:** `%s`  sha256 `%s`\n> **Prompt origin:** `%s`\n> **Label:** `%s` · **Session:** `%s`\n>\n> *A verdict covers the bytes it read — the repo sha AND the prompt hash. For a PLAN\n> round the repo sha is nearly meaningless and the prompt hash is the whole claim.\n> Cite them, or the citation is about a revision nobody has.*\n\n' \
       "$REVIEW_SHA" "$REVIEW_BRANCH" "$REVIEW_DIRTY" "$PROMPT_CITE" "$PROMPT_SHA" "$PROMPT_ORIGIN" "$LABEL" "${SESSION_ID:-unknown}")"
+  # The uncommitted list goes right under the Reviewed line.
+  [[ -n "$DIRTY_LINE" ]] && PROV="$(python3 -c '
+import sys
+prov, line = sys.argv[1], sys.argv[2]
+head, sep, rest = prov.partition("\n> **Prompt artifact:**")
+print(head + "\n" + line.rstrip("\n") + sep + rest)' "$PROV" "$DIRTY_LINE")"
   printf '%s\n\n' "$PROV" | cat - "$MD" > "$MD.tmp" && mv "$MD.tmp" "$MD"
 fi
 # Hash of the artifact AS IT FINALLY STANDS. Two things about this are load-bearing.
@@ -561,6 +635,7 @@ printf 'sha=%s\nbranch=%s\ntree=%s\nprompt=%s\nprompt_relative=%s\nprompt_sha256
 # What the run added to the reviewed prompt: a browser (its domains) and/or a
 # runnable copy. New keys at the end, so existing readers are unaffected.
 printf 'browser_domains=%s\nrunnable=%s\n' "${DOMAINS:-none}" "$([[ $RUNNABLE -eq 1 ]] && echo yes || echo no)" >> "$BASE.provenance"
+printf 'reads=%s\nhead_after=%s\nseconds=%s\n' "$READS" "$HEAD_AFTER" "$SECS" >> "$BASE.provenance"
 
 echo "RAW_JSON=$RAW"
 echo "CODEX_LOG=$LOG"
@@ -570,6 +645,11 @@ echo "REVIEWED_TREE=$REVIEW_DIRTY"
 [[ -n "${SESSION_KEY:-}" ]] && echo "SESSION_NAME=$SESSION_KEY"
 keep_shots
 [[ -d "$BASE.shots" ]] && echo "SHOTS=$BASE.shots"
+for w in ${WARNINGS[@]+"${WARNINGS[@]}"}; do echo "codex_review: WARNING ${w//\*\*/}" >&2; done
+[[ -n "$SUMMARY" ]] && { echo "VERDICT=$V_VERDICT"; echo "FINDINGS=$V_FINDINGS"; echo "CONFIDENCE=$V_CONF"; }
+echo "READS=$READS"
+echo "SECONDS=$SECS"
 echo "REVIEW_MD=$MD"
+[[ "$READS" -eq 0 ]] && exit 72
 exit 0
 }
