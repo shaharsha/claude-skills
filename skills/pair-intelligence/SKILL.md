@@ -66,7 +66,9 @@ Models, flags and traps per engine: `references/engines.md`.
 1. **Write the prompt** to a file with an absolute path, shaped as the mode's file
    says. In every mode, give facts, constraints and the question, and withhold your
    own answer, lean or confidence: a reviewer told "this is fine" finds less.
-2. **Run it**, in the background (a round takes 10 seconds to 5 minutes):
+2. **Run it**, in the background (a round takes 10 seconds to 5 minutes; a
+   Gemini review up to 30). The scripts are in this skill's folder,
+   `~/.claude/skills/pair-intelligence/scripts/`:
 
    ```bash
    bash scripts/pair.sh --engine codex --mode consult --prompt-file /abs/prompt.md
@@ -78,14 +80,17 @@ Models, flags and traps per engine: `references/engines.md`.
    directory; browse sessions are not resumable), `--domains` (a live browser,
    in any mode), `--runnable` (Codex may run tests in a disposable copy), `--web`,
    `--web-budget` (Gemini: searches plus page reads), `--effort`, `--timeout`.
-   `--help` lists the rest. After an agy or codex
+   `--help` lists the rest. To show the model other repositories or another
+   ref, stage them first with `bash scripts/pair_stage.sh` (see `consult.md`). After an agy or codex
    upgrade, run `bash scripts/pair.sh --selftest` (a few cents of live checks).
 
    If your shell tool runs commands inside its own sandbox, run these scripts
    outside it: an engine's sandbox cannot start inside another one, and the
    engine still enforces read-only itself.
 3. **Check it ran.** `pair.sh`: exit 0 with `STATUS=ok`, then open the `ANSWER=`
-   file. `codex_review.sh`: exit 0, then open the `REVIEW_MD=` file. Either way,
+   file. `codex_review.sh`: exit 0, then open the `REVIEW_MD=` file. `READS=0`
+   (exit 72, `STATUS=unread`) means the model read no file and answered from your
+   prompt alone. Either way,
    confirm the answer shows the model reached the material: a file and line, a
    quote, a URL, or for an image, measurements and quoted on-screen text. A
    brainstorm round with no source material shows it in the answer itself. A
@@ -150,12 +155,13 @@ For each claim, open the source and give one verdict:
 - **Out of scope:** real, but not part of this change.
 - **Uncertain:** you cannot settle it by reading; say so and hand it to the user.
 
-The other model cannot run anything, so a claim about runtime behaviour or how a
-page renders is inference: reproduce it (run the test, measure in a real browser)
+The other model reads files but cannot run code (unless `--runnable`), so a claim
+about runtime behaviour or how a page renders is inference: reproduce it (run the test, measure in a real browser)
 before you fix it. Check the extent of a confirmed finding (it often names four of
 five cases), judge the suggested remedy separately from the finding, and read the
-model's notes, not only its conclusions. Verify quotes, numbers and URLs: a
-citation can be wrong while the claim is right. Watch for two pulls in yourself: deferring to the other
+model's notes, not only its conclusions. Grep every quote it attributes to a file
+(Gemini has invented some), and verify numbers and URLs: a citation can be wrong
+while the claim is right, and the other way round. Watch for two pulls in yourself: deferring to the other
 model's confidence, and defending your own work.
 
 Report a verdict table, keep the other model's claims labelled apart from your own

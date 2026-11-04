@@ -47,13 +47,20 @@ a merge gate in a shared clone, read `references/review-evidence.md`.
 1. Write the prompt from `references/prompts.md`: the `code`, `plan` or
    `code-vs-plan` template, or the short `small change` one for a config, docs or
    few-line diff. Facts and constraints in, your verdict out. Name the base
-   (`git diff <base>...HEAD`) and the files to read beyond the diff, including
-   tests that pin values the change touches.
+   (`git diff <base>...<sha>`, a sha rather than `HEAD`: a commit made while the
+   round runs changes what HEAD means) and the files to read beyond the diff,
+   including tests that pin values the change touches. Use `--runnable` up front
+   when correctness depends on what a library emits (serialisation, crypto, a
+   protocol) or when the change edits text that repo-wide tests read (structure
+   tests that grep the source): a reader sees neither.
 2. Run `bash scripts/codex_review.sh --repo <repo> --prompt-file <abs> --label
    <ticket>-r<N>` in the background, outside your harness's own sandbox. Add
    `--out-dir <durable dir>` when the repo is a worktree that will be removed.
    Use `--effort medium` for small changes.
-3. Open the `REVIEW_MD` path and check that it cites real files and lines.
+3. Read the summary lines (`VERDICT=`, `FINDINGS=`, `READS=`), then open the
+   `REVIEW_MD` path and check that it cites real files and lines. `READS=0` (exit
+   72) means the reviewer ran no command and read no file: rerun with a prompt
+   that lets it read, outside your harness's sandbox.
 4. Adjudicate every finding against the source; reproduce runtime and UI claims.
 5. Apply the stopping rule in "Rounds and stopping" below.
 
@@ -275,6 +282,17 @@ artifact and the other was real, and a discriminator that separated them
 whole time. Re-check each finding against the flaw; don't let the flaw stand in
 for a verdict on any of them.
 
+**Check every quote before the finding it supports.** Grep each string the
+reviewer attributes to the artifact. Measured on 2026-11-04: a Gemini review
+quoted plan text that was not there ("333 batch runs", a `fromJSON(...)`
+expression), and the two findings resting on those quotes were refuted; its
+observations about the code were real.
+
+**Reproduce with the versions that ship.** A confirmation or refutation that
+depends on a library holds only for the version the deployed artifact pins.
+Measured on 2026-11-02: a first reproduction used a stale local lock (lxml 6.1.1
+where main pinned 6.1.3) and nearly went out as the answer.
+
 Two failure modes to watch in yourself:
 
 - **Deferring to the reviewer.** Reviews of agent-written code skew heavily
@@ -362,9 +380,14 @@ rule; use it unless the user sets another.
   point, not a guard that reads source text or structure.
 - **At most 4 rounds**, each a fresh reviewer, never a resumed conversation.
 - **From round 3, only a real high-severity finding blocks.**
-- **The same class of high finding twice means redesign**, not another patch.
-  It fired twice on 2026-11-01 and both redesigns came out better.
-- **The last round reviews only the fix**, named as a diff.
+- **The same class of finding twice, high or medium, means redesign**, not
+  another patch. It fired twice on 2026-11-01 and both redesigns came out
+  better; on 2026-11-03 a medium repeat was the signal, and the redesign's round
+  came back clean.
+- **The last round reviews only the fix**, named as a diff, and the final fix
+  always gets one, past the cap and however small: the small-change template at
+  `--effort medium` takes two or three minutes. Twice on 2026-11-04 a lane
+  merged its last two-line fix unreviewed.
 - **Declare unfixed medium and low findings** in the PR body.
 - **A "Brittle test:" finding** is low or medium and never blocks a merge on
   its own. When it is on a test this change adds or edits, fix it in the same

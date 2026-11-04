@@ -114,8 +114,9 @@ those directly.
 </intent>
 
 <your_constraints>
-You are running with the filesystem read-only, so you cannot execute anything
-that writes: test runners fail on their own temp directories. Every statement
+Read any file and run read-only commands (cat, rg, git log, git show) as often as
+you need to check what you claim. The filesystem is read-only, so you cannot
+execute anything that writes: test runners fail on their own temp directories. Every statement
 you make about runtime behaviour is therefore inference from reading, not
 observation. Where a finding turns on behaviour you could not observe, say so in
 its evidence and let that show in its confidence.
@@ -136,14 +137,14 @@ suggested fix may include one test of that behaviour through the code's entry
 point, never one per member of a list. A refactor that keeps behaviour needs no
 new test.
 
-Do report a test this change adds, or an assertion it adds or re-stamps in an
-existing test, that a harmless edit would turn red: it pins line numbers,
-source text or a digest of code, copies a value from another file or layer,
-keeps a hand-made list in step with the code, or repeats an assertion an
-existing test already makes. Title it "Brittle test: ...", file
-it as maintainability, put the harmless edit that breaks it in
-failure_scenario, and in suggested_fix the behaviour to test instead or the
-existing test to extend.
+Do report a test this change adds, or an assertion it adds, that a harmless
+edit would turn red: it pins line numbers, source text or a digest of code,
+copies a value from another file or layer, keeps a hand-made list in step with
+the code, or repeats an assertion an existing test already makes. Title it
+"Brittle test: ...", file it as maintainability, put the harmless edit that
+breaks it in failure_scenario, and in suggested_fix the behaviour to test
+instead or the existing test to extend. A pin that predates the change and that
+the change only re-stamps goes in scan_notes, not findings.
 
 Severity is about the consequence if the scenario occurs, confidence is about
 whether the scenario is real. Keep them independent — a certain cosmetic issue
@@ -156,6 +157,14 @@ is a valid outcome and a better answer than a padded one.
 
 Return your result as JSON conforming to the supplied schema.
 ```
+
+---
+
+**No diff** (a module or a staged folder reviewed as it stands): put the files in
+`{{SCOPE}}` and replace "Read the diff yourself with git, then read enough of the
+surrounding files" with "Read these files as they stand, and enough of their
+callers and tests". Drop the "pre-existing problem" sentence from
+`<what_counts>`: with no change, everything is in scope.
 
 ---
 
@@ -184,10 +193,11 @@ edits; rules elsewhere in the same document that this text contradicts.
 </check>
 
 Report only defects with a concrete wrong outcome. An empty findings list is a
-valid answer. A missing test is not a defect. A test this change adds, or an
-assertion it adds or re-stamps, that a harmless edit would turn red (it pins line
-numbers, source text or a digest of code) is one: title it "Brittle test: ...",
-with that edit as the failure scenario. Return JSON conforming to the supplied
+valid answer. A missing test is not a defect. A test or assertion this change
+adds that a harmless edit would turn red (it pins line numbers, source text or a
+digest of code) is one: title it "Brittle test: ...", with that edit as the
+failure scenario. A pin that predates the change and that it only re-stamps goes
+in scan_notes. Return JSON conforming to the supplied
 schema.
 ```
 
@@ -211,7 +221,8 @@ does not match the actual repository is the primary thing to catch.
 </intent>
 
 <your_constraints>
-You are running with the filesystem read-only and cannot execute anything that
+Read any file and run read-only commands (cat, rg, git log, git show) as often as
+you need. The filesystem is read-only and you cannot execute anything that
 writes, so you cannot try the plan's steps — you can only check them against
 what the repository actually contains. Where a step's viability turns on
 behaviour you could not observe, say so in its evidence and let that show in its
@@ -273,8 +284,9 @@ Untracked files are part of the change and `git diff` will not show them — che
 </intent>
 
 <your_constraints>
-You are running with the filesystem read-only, so you cannot execute anything
-that writes: test runners fail on their own temp directories. Every statement
+Read any file and run read-only commands (cat, rg, git log, git show) as often as
+you need to check what you claim. The filesystem is read-only, so you cannot
+execute anything that writes: test runners fail on their own temp directories. Every statement
 you make about runtime behaviour is therefore inference from reading. Where a
 requirement's satisfaction turns on behaviour you could not observe, say so in
 its evidence and let that show in its confidence.
@@ -294,11 +306,11 @@ requirements are satisfied, not only which are not; a plan fully implemented is
 a valid and useful outcome.
 
 A missing test is an unmet requirement only when the plan names that test.
-Report a test the change adds, or an assertion it adds or re-stamps in an
-existing test, that a harmless edit would turn red (it pins line numbers,
-source text or a digest of code, copies a value from another file, keeps a
-hand-made list in step with the code, or repeats an existing test's
-assertion): title it "Brittle test: ...", with the harmless edit in
+Report a test or assertion the change adds that a harmless edit would turn red
+(it pins line numbers, source text or a digest of code, copies a value from
+another file, keeps a hand-made list in step with the code, or repeats an
+existing test's assertion; a pin that predates the change and that it only
+re-stamps goes in scan_notes): title it "Brittle test: ...", with the harmless edit in
 failure_scenario and the behaviour to test instead in suggested_fix.
 </what_counts>
 
@@ -395,14 +407,14 @@ suggested fix may include one test of that behaviour through the code's entry
 point, never one per member of a list. A refactor that keeps behaviour needs no
 new test.
 
-Do report a test this change adds, or an assertion it adds or re-stamps in an
-existing test, that a harmless edit would turn red: it pins line numbers,
-source text or a digest of code, copies a value from another file or layer,
-keeps a hand-made list in step with the code, or repeats an assertion an
-existing test already makes. Title it "Brittle test: ...", file
-it as maintainability, put the harmless edit that breaks it in
-failure_scenario, and in suggested_fix the behaviour to test instead or the
-existing test to extend.
+Do report a test this change adds, or an assertion it adds, that a harmless
+edit would turn red: it pins line numbers, source text or a digest of code,
+copies a value from another file or layer, keeps a hand-made list in step with
+the code, or repeats an assertion an existing test already makes. Title it
+"Brittle test: ...", file it as maintainability, put the harmless edit that
+breaks it in failure_scenario, and in suggested_fix the behaviour to test
+instead or the existing test to extend. A pin that predates the change and that
+the change only re-stamps goes in scan_notes, not findings.
 
 Severity is about the consequence if the scenario occurs, confidence is about
 whether the scenario is real. Keep them independent.
