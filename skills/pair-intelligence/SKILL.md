@@ -56,6 +56,8 @@ Read the mode's file before you write the prompt. Images work in any mode: add
 Use Codex unless the user names Gemini, Codex is unavailable or rate-limited, or
 you want two lineages. **Both engines:** for a high-stakes review or a contested
 decision, send the identical prompt to each in parallel and adjudicate the union.
+Keep their logs and `PAIR_OUT` outside `--cwd`: each can read whatever lands there,
+the other's answer included (`pair.sh` warns when it sees that).
 Agreement is weak evidence, because models from different vendors still share a
 large part of their errors; disagreement shows you where to look.
 

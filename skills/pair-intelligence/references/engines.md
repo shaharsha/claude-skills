@@ -171,7 +171,8 @@ Tested on the Antigravity CLI (`agy`) 1.4.12 with a Gemini API key, 2026-11-02.
     `read_url_content` included. Two limits keep a turn from ending with nothing
     (see traps): after 70% of `--timeout` every tool is refused with a reason
     telling the model to answer now, and searches plus `pair-fetch` reads stop
-    at `--web-budget` (default 40 for research, 20 otherwise; reads of local
+    at `--web-budget` (default 40 for research, 20 otherwise; ignored with a
+    warning on Codex and OpenCode, whose search nothing can count; reads of local
     files do not count). The prompt states both up front, and asks the model to
     quote a file only with text it read in that turn, with path and line
     (2026-11-04: a Gemini review quoted plan text that was not there). A
