@@ -233,8 +233,12 @@ fi
 if [[ -n "$WEB_BUDGET" ]]; then
   [[ "$WEB_BUDGET" =~ ^[0-9]+$ ]] || { echo "--web-budget takes a whole number" >&2; exit 64; }
   # Only agy's tool calls pass through a gate this script owns; Codex and OpenCode
-  # search inside their own process, where nothing can count.
-  [[ "$BACKEND" == "agy" ]] || { echo "--web-budget applies to --engine gemini on agy only" >&2; exit 64; }
+  # search inside their own process, where nothing can count. A warning, not a
+  # refusal: a run started in the background with both engines' flags should go on.
+  if [[ "$BACKEND" != "agy" ]]; then
+    echo "pair.sh: WARNING --web-budget applies to Gemini on agy only; ignored for this run" >&2
+    WEB_BUDGET=""
+  fi
 fi
 
 GEMINI_KEY=""
@@ -426,6 +430,37 @@ fi
 if [[ "$BACKEND" == "agy" ]] && [[ "$CWD" == "/" || "$CWD" == "$(cd "$HOME" && pwd)" ]]; then
   echo "Gemini reads only inside --cwd, and $CWD is too wide; pass the project folder" >&2; exit 64
 fi
+
+# Say where the run lives before it starts: events.jsonl there grows as the model
+# works, which is the only progress there is until STATUS.
+echo "pair.sh: started; follow $RUN_DIR/events.jsonl" >&2
+# The model reads --cwd. Output written inside it (this run's own stdout or
+# stderr, or the run folder) is readable by it, and by a second engine asked the
+# same question in the same folder (measured 2026-11-05: each engine's run log
+# sat where the other could read it). The paths of fds 1 and 2 come from the OS.
+python3 - "$CWD" "$RUN_DIR" <<'PY' || true
+import fcntl, os, sys
+cwd, run_dir = os.path.realpath(sys.argv[1]), os.path.realpath(sys.argv[2])
+def inside(p):
+    return os.path.commonpath((cwd, p)) == cwd   # also right for --cwd /
+def path_of(fd):
+    try:
+        if hasattr(fcntl, "F_GETPATH"):          # macOS
+            return os.path.realpath(fcntl.fcntl(fd, fcntl.F_GETPATH, b"\0" * 1024).split(b"\0", 1)[0].decode())
+        return os.path.realpath(os.readlink("/proc/self/fd/%d" % fd))   # Linux
+    except (OSError, ValueError):
+        return ""
+seen = []
+for fd, label in ((1, "stdout"), (2, "stderr")):
+    p = path_of(fd)
+    if p and os.path.isfile(p) and inside(p):
+        seen.append("%s goes to %s" % (label, p))
+if inside(run_dir):
+    seen.append("the run folder is %s" % run_dir)
+if seen:
+    sys.stderr.write("pair.sh: WARNING %s, inside --cwd %s: the model can read it, and so can a second engine asked "
+                     "in the same folder. Write logs and PAIR_OUT outside --cwd.\n" % ("; ".join(seen), cwd))
+PY
 
 PROMPT="$RUN_DIR/prompt.md"
 EVENTS="$RUN_DIR/events.jsonl"
@@ -901,6 +936,11 @@ if status == "ok" and reads == 0 and mode in ("review", "consult") and material:
 print(status, sid or "-", reads)
 PY
 read -r STATUS SESSION_ID READS < "$RUN_DIR/.status" || true
+# agy cites search results as grounding redirect links, which a reader cannot
+# check as given; the answer gets the pages they point to (pair_links.py).
+if [[ "$BACKEND" == agy && -s "$ANSWER" ]] && grep -q 'vertexaisearch\.cloud\.google\.com/grounding-api-redirect/' "$ANSWER"; then
+  python3 "$SKILL_DIR/scripts/pair_links.py" "$ANSWER" "$RUN_DIR/source-links.json" >&2 || true
+fi
 rm -f "$RUN_DIR/.status"
 
 if [[ "$STATUS" == "ok" && "$SESSION_ID" != "-" ]]; then

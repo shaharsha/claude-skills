@@ -14,6 +14,17 @@ Ask for the URL behind every claim and open the important ones yourself.
 - **Gemini on OpenCode** has no search (its search tool returns "Web search
   cancelled"); it fetches URLs it knows or guesses.
 
+**Check Gemini's sources before its confidence.** agy cites search results as
+Google grounding links (`vertexaisearch.cloud.google.com/grounding-api-redirect/...`),
+which cannot be checked as given; `pair.sh` replaces each in the answer with the
+page it points to and keeps the pairs in `RUN_DIR/source-links.json`. Measured on
+2026-11-05, the same 35-company research to both engines: every Codex claim that
+was opened held, and it said "not found" when unsure; Gemini rated two company
+identities "high" that the registries contradicted (a payments subsidiary that was
+a shell with no stated business, a game publisher that was a dissolved IT
+consultancy). For who owns what, who publishes what, or what a company does, open
+the registry or the source page, not the snippet behind the claim.
+
 ## Images
 
 ```bash

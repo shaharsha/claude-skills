@@ -84,8 +84,9 @@ and it worked well in practice (11 of 11 findings held up on a legal review):
 - If you dispute a specific claim, resume the same session once with the evidence
   ("`pay.py:42` takes the lock before the read at line 47") and ask it to re-derive
   the claim against the source, not whether it agrees with you.
-- For a contested call, ask both engines with the identical prompt, in parallel.
-  Compare picks: where they differ, read the source before deciding.
+- For a contested call, ask both engines with the identical prompt, in parallel,
+  with their logs written outside `--cwd` (each could otherwise read the other's
+  answer). Compare picks: where they differ, read the source before deciding.
 
 ## Example run
 

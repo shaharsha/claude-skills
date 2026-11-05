@@ -193,6 +193,9 @@ if mode == "quota":
 if mode in ("quota-after-answer", "quota-mid-answer") and n == 0:
     res.update(status="ERROR", conversation_id="conv-q", response="the whole review, findings and verdict",
                error="API error (attempt 1): RESOURCE_EXHAUSTED (code 429): TPM quota exhausted.")
+if mode == "links":
+    res.update(response="see [a](https://vertexaisearch.cloud.google.com/grounding-api-redirect/AAA111) and "
+                        "[b](https://vertexaisearch.cloud.google.com/grounding-api-redirect/BBB222=)")
 if mode == "cut":
     res.update(response="partial essay")
     sys.stderr.write("[agy] print timeout after 590s with turn in progress; returning partial output\n")
@@ -379,10 +382,10 @@ check "agy --web-budget 2: two searches, the third refused; the prompt says 2" '
 out="$(FAKE_AGY=ok bash "$P" --engine gemini --backend agy --mode research --prompt-file "$T/prompt.md" 2>&1)"
 RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
 check "agy research: web budget 40 by default"     '[[ "$(jq_py "$RUN/agy-policy.json" "d[\"web_budget\"]")" == 40 ]]'
-bash "$P" --web-budget 5 --prompt-file "$T/prompt.md" >/dev/null 2>&1; r1=$?
-bash "$P" --engine gemini --backend opencode --web-budget 5 --prompt-file "$T/prompt.md" >/dev/null 2>&1; r2=$?
+w1="$(FAKE_CODEX=ok bash "$P" --web-budget 5 --prompt-file "$T/prompt.md" 2>&1)"; r1=$?
+FAKE_OC=ok bash "$P" --engine gemini --backend opencode --web-budget 5 --prompt-file "$T/prompt.md" >/dev/null 2>&1; r2=$?
 bash "$P" --engine gemini --backend agy --web-budget lots --prompt-file "$T/prompt.md" >/dev/null 2>&1; r3=$?
-check "--web-budget: refused for Codex and OpenCode, and when not a number: exit 64" '[[ $r1 -eq 64 && $r2 -eq 64 && $r3 -eq 64 ]]'
+check "--web-budget on Codex or OpenCode: a warning and the run goes on; not a number: exit 64" '[[ $r1 -eq 0 && $r2 -eq 0 && $r3 -eq 64 && "$w1" == *WARNING*web-budget* ]]'
 reset_log
 out="$(FAKE_AGY=ok FAKE_AGY_TOOLS='[["read_url_content",{"Url":"https://example.com"}]]' bash "$P" --engine gemini --backend agy --mode research --prompt-file "$T/prompt.md" 2>&1)"
 check "agy research: read_url_content refused (pair-fetch is the reader)" '[[ "$(dec)" == deny ]]'
@@ -397,6 +400,34 @@ out="$(cd "$T/arepo" && FAKE_AGY=nores bash "$P" --engine gemini --backend agy -
 check "agy stream without a result: not ok"        '[[ $rc -ne 0 && "$out" != *"STATUS=ok"* ]]'
 out="$(cd "$T/arepo" && FAKE_AGY=ok FAKE_AGY_NOREAD=1 bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
 check "agy consult that read nothing in a repo: exit 72, STATUS=unread" '[[ $rc -eq 72 && "$out" == *"STATUS=unread"* ]]'
+# A local stand-in for Google's redirect host: one link redirects, one does not.
+cat > "$T/redirect_server.py" <<'PYS'
+import http.server, sys
+class H(http.server.BaseHTTPRequestHandler):
+    def do_HEAD(self):
+        if self.path.endswith("/AAA111"):
+            self.send_response(302); self.send_header("Location", "https://example.com/source-a"); self.end_headers()
+        else:
+            self.send_response(404); self.end_headers()
+    def log_message(self, *a):
+        pass
+s = http.server.HTTPServer(("127.0.0.1", 0), H)
+print(s.server_address[1], flush=True)
+s.serve_forever()
+PYS
+python3 "$T/redirect_server.py" > "$T/redirect.port" & RPID=$!
+for _ in 1 2 3 4 5 6 7 8 9 10; do [[ -s "$T/redirect.port" ]] && break; sleep 0.2; done
+out="$(FAKE_AGY=links PAIR_LINKS_ORIGIN="http://127.0.0.1:$(cat "$T/redirect.port")" bash "$P" --engine gemini --backend agy --mode research --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+kill $RPID 2>/dev/null
+RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
+check "Gemini's grounding links are replaced by their sources; one that does not resolve stays; the pairs are kept" '[[ $rc -eq 0 ]] && grep -q "(https://example.com/source-a)" "$RUN/answer.md" && grep -q "grounding-api-redirect/BBB222=" "$RUN/answer.md" && ! grep -q "AAA111" "$RUN/answer.md" && grep -q AAA111 "$RUN/source-links.json"'
+# Output the model can read: a log inside --cwd, or PAIR_OUT inside it.
+mkdir -p "$T/logcwd" && printf 'x\n' > "$T/logcwd/notes.md"
+FAKE_CODEX=ok bash "$P" --cwd "$T/logcwd" --prompt-file "$T/prompt.md" > "$T/logcwd/run.log" 2> "$T/logcwd-err.txt"
+FAKE_CODEX=ok bash "$P" --cwd "$T/logcwd" --prompt-file "$T/prompt.md" > "$T/outside.log" 2> "$T/logcwd-err2.txt"
+FAKE_CODEX=ok PAIR_OUT="$T/logcwd/runs" bash "$P" --cwd "$T/logcwd" --prompt-file "$T/prompt.md" > "$T/outside3.log" 2> "$T/logcwd-err3.txt"
+check "a log or PAIR_OUT inside --cwd draws a warning, a log outside does not" 'grep -q "WARNING.*run.log" "$T/logcwd-err.txt" && ! grep -q WARNING "$T/logcwd-err2.txt" && grep -q "WARNING.*run folder" "$T/logcwd-err3.txt"'
+check "the run folder is named on stderr" 'grep -q "started.*$T/out/.*events.jsonl" "$T/logcwd-err2.txt"'
 out="$(cd "$T/arepo" && FAKE_AGY=hang bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" --timeout 2 2>&1)"; rc=$?
 check "agy hang: exit 124"                         '[[ $rc -eq 124 ]]'
 bash "$P" --engine gemini --backend agy --cwd "$HOME" --prompt-file "$T/prompt.md" >/dev/null 2>&1
