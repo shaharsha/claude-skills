@@ -53,9 +53,9 @@ def main():
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
         found = dict(zip(links, pool.map(resolve, links)))
     resolved = {k: v for k, v in found.items() if v}
-    # Longest first, so no link is replaced inside a longer one.
-    for link in sorted(resolved, key=len, reverse=True):
-        text = text.replace(link, resolved[link])
+    # Whole matches only: a plain replace of one link would also rewrite a
+    # longer link that begins with it and did not resolve.
+    text = LINK.sub(lambda m: resolved.get(m.group(0), m.group(0)), text)
     with open(answer, "w", encoding="utf-8") as f:
         f.write(text)
     with open(mapping, "w") as f:

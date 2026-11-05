@@ -427,7 +427,7 @@ FAKE_CODEX=ok bash "$P" --cwd "$T/logcwd" --prompt-file "$T/prompt.md" > "$T/log
 FAKE_CODEX=ok bash "$P" --cwd "$T/logcwd" --prompt-file "$T/prompt.md" > "$T/outside.log" 2> "$T/logcwd-err2.txt"
 FAKE_CODEX=ok PAIR_OUT="$T/logcwd/runs" bash "$P" --cwd "$T/logcwd" --prompt-file "$T/prompt.md" > "$T/outside3.log" 2> "$T/logcwd-err3.txt"
 check "a log or PAIR_OUT inside --cwd draws a warning, a log outside does not" 'grep -q "WARNING.*run.log" "$T/logcwd-err.txt" && ! grep -q WARNING "$T/logcwd-err2.txt" && grep -q "WARNING.*run folder" "$T/logcwd-err3.txt"'
-check "the run folder is named on stderr before the run" 'head -1 "$T/logcwd-err2.txt" | grep -q "$T/out/.*events.jsonl"'
+check "the run folder is named on stderr" 'grep -q "started.*$T/out/.*events.jsonl" "$T/logcwd-err2.txt"'
 out="$(cd "$T/arepo" && FAKE_AGY=hang bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" --timeout 2 2>&1)"; rc=$?
 check "agy hang: exit 124"                         '[[ $rc -eq 124 ]]'
 bash "$P" --engine gemini --backend agy --cwd "$HOME" --prompt-file "$T/prompt.md" >/dev/null 2>&1

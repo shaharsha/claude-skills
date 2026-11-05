@@ -442,7 +442,7 @@ python3 - "$CWD" "$RUN_DIR" <<'PY' || true
 import fcntl, os, sys
 cwd, run_dir = os.path.realpath(sys.argv[1]), os.path.realpath(sys.argv[2])
 def inside(p):
-    return p == cwd or p.startswith(cwd + os.sep)
+    return os.path.commonpath((cwd, p)) == cwd   # also right for --cwd /
 def path_of(fd):
     try:
         if hasattr(fcntl, "F_GETPATH"):          # macOS
