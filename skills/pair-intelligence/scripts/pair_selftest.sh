@@ -14,7 +14,8 @@
 #   secret file stays unread, a model refused for its web budget still answers,
 #   and agy's own timeout is still detected.
 # Codex: the read-only sandbox with one broker socket still passes the preflight,
-#   and a command reaches the browser through the broker.
+#   a command reaches the browser through the broker, and no app connector or
+#   other MCP server is reachable.
 # Runnable copies: a disposable worktree is made with the uncommitted changes and
 #   removed without trace.
 #
@@ -191,6 +192,33 @@ if [[ "$WHICH" == all || "$WHICH" == codex ]]; then
     else
       fail "codex browser: the answer does not show the page title: $(head -c 200 "$run/answer.md")"
     fi
+  fi
+
+  # Codex turns account-level features on by default (ChatGPT app connectors,
+  # plugins, browser and computer use); codex_lockdown.sh turns them off. A new
+  # Codex that adds one shows up here as an MCP server the model can list.
+  printf 'Call the list_mcp_resources tool once with no arguments, then reply with the distinct "server" values it returned, or "none".\n' > "$T/codex-mcp.md"
+  out="$(bash "$P" --engine codex --mode consult --effort low --web off --cwd "$C" --prompt-file "$T/codex-mcp.md" 2>&1)"
+  run="$(field RUN_DIR "$out")"
+  servers="$(python3 -c '
+import json, sys
+names, probed = set(), False
+for line in open(sys.argv[1]):
+    try: e = json.loads(line)
+    except ValueError: continue
+    it = e.get("item") or {}
+    if it.get("type") == "mcp_tool_call" and it.get("tool") == "list_mcp_resources" and e.get("type") == "item.completed":
+        probed = probed or it.get("status") == "completed"
+        for part in (it.get("result") or {}).get("content") or []:
+            try: names |= {r.get("server", "?") for r in json.loads(part.get("text", "{}")).get("resources", [])}
+            except ValueError: pass
+print(("probed " if probed else "") + " ".join(sorted(names)))' "$run/events.jsonl" 2>/dev/null)"
+  if [[ "$servers" != probed* ]]; then
+    warn "codex lockdown: the model did not call list_mcp_resources, so the check went untested"
+  elif [[ -n "${servers#probed }" && "$servers" != probed ]]; then
+    fail "codex lockdown: the model can reach MCP servers: ${servers#probed } (a Codex upgrade added a feature; turn it off in codex_lockdown.sh)"
+  else
+    pass "codex lockdown: no app connectors or other MCP servers reachable"
   fi
 fi
 

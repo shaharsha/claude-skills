@@ -20,6 +20,23 @@ Tested on codex-cli 0.165.0, signed in with a ChatGPT plan.
   sandbox. A reviewer of untrusted code gets none of them. Auth still comes from
   `~/.codex`; the script restates `project_doc_max_bytes=400000`, which that
   config raised so torque's ~394 KB CLAUDE.md is not cut at 32 KiB.
+- **Features off, on every call (`codex_lockdown.sh`).** `--ignore-user-config`
+  is not enough: Codex turns some account-level features on with no config at
+  all. Measured 2026-11-04: a read-only consult could list the account's ChatGPT
+  app connectors (`list_mcp_resources` → `codex_apps`), which act through your
+  account outside the sandbox. The script sets `features.<name>=false` for app
+  connectors, plugins, browser and computer use, hooks, image generation and
+  plugin installs; with them off, the same call lists nothing, and
+  `--selftest` checks that after every upgrade. `codex_review.sh` also sets
+  `web_search` on every call (off unless `--web`/`--search`): left unset, Codex
+  gives the reviewer its web tool by default.
+- **Reads are counted.** Codex reads files only through shell commands, so
+  `pair.sh` prints `READS=` (commands it ran) and stops a review or consult
+  that read nothing in a folder with something to read: `STATUS=unread`, exit
+  72, the answer kept. `codex_review.sh` does the same from its log (exit 72,
+  a warning on top of the review). Measured three times, 2026-11-02 to 11-04,
+  each with every other check passing: a prompt saying the model "cannot run
+  anything" (taken as a ban on reading) and a run inside another sandbox.
 - **A live browser** (`--domains`, any mode, browse included) swaps the sandbox
   flags for a permission profile: `default_permissions="pair_browse"` extending
   `:read-only` (`:workspace` with `--runnable`), with
@@ -66,7 +83,9 @@ Traps, each seen in testing:
 - **`codex exec --search` is rejected.** Use `-c web_search="live"`.
 - **Nested sandboxes fail.** Started inside another tool's sandbox it reports
   `sandbox_apply: Operation not permitted` or that "the shell host failed during
-  handshake", and may still exit 0 with an apology for an answer. Run it outside.
+  handshake", and may still exit 0 with an apology for an answer, or answer
+  confidently from the prompt alone ("I could not independently read checkout
+  files", 2026-11-04). Run it outside; `READS=0` is the sign.
 - **Chrome will not start inside its sandbox**, and its built-in browser cannot
   run from `codex exec` ("The browser access host is unavailable": it needs a
   pipe only the desktop app provides, and its Chrome backend is your logged-in
@@ -121,7 +140,13 @@ Tested on the Antigravity CLI (`agy`) 1.4.12 with a Gemini API key, 2026-11-02.
     minutes of the time limit are left (`PAIR_AGY_RETRY_WAIT` sets the wait). A
     turn that still ends on the quota is `STATUS=quota`, exit 75, with the
     reason there was no retry: wait a few minutes and rerun, with a narrower
-    prompt or a lower `--web-budget`, or set `PAIR_AGY_AUTH=key`;
+    prompt or a lower `--web-budget`, or set `PAIR_AGY_AUTH=key`. A 429 that
+    comes after the answer's step finished (seen twice: a later call hit it)
+    leaves the answer whole, so that run is `STATUS=ok` with no retry and a
+    note in `stderr.log`. If agy fails before any output with "authentication
+    required" (seen once on Vertex, gone on the next run), the script retries
+    once; a second failure is `STATUS=auth`, exit 69. agy's message then says
+    to run `agy` to log in: ignore it, this skill never uses that login;
   - `key`: `"modelProvider": "gemini"` in `--settings` and the key in
     `GEMINI_API_KEY` (from the environment, else OpenCode's `auth.json`). Never
     combine the two: `modelProvider` switches a Vertex run back to the key.
@@ -147,7 +172,11 @@ Tested on the Antigravity CLI (`agy`) 1.4.12 with a Gemini API key, 2026-11-02.
     (see traps): after 70% of `--timeout` every tool is refused with a reason
     telling the model to answer now, and searches plus `pair-fetch` reads stop
     at `--web-budget` (default 40 for research, 20 otherwise; reads of local
-    files do not count). The prompt states both up front. Its decisions land in
+    files do not count). The prompt states both up front, and asks the model to
+    quote a file only with text it read in that turn, with path and line
+    (2026-11-04: a Gemini review quoted plan text that was not there). A
+    review's default `--timeout` is 30 minutes on Gemini (20 on Codex): 4 of 10
+    good Gemini reviews ran past 1000 s. Its decisions land in
     `RUN_DIR/gate.log`;
   - a settings floor under the gate: writes, MCP, URL reads and actuation, and
     the metacharacter pattern denied, so a broken gate still cannot write;
@@ -165,7 +194,9 @@ Tested on the Antigravity CLI (`agy`) 1.4.12 with a Gemini API key, 2026-11-02.
   files by pathspec. `pair-fs git cat REV PATH` reads a file
   at a revision with the path checked. Git runs only when the repository sits
   inside the roots (its history would show the rest) and its config names no
-  program (filters, `gpg.program`, pagers, drivers, includes and the like); on
+  program (filters, `gpg.program`, pagers, drivers, includes and the like),
+  judged on each key's section and variable: a branch or remote whose name holds
+  "driver" or "helper" no longer turns git off (it did, 2026-11-04); on
   top, fsmonitor, pager, external diff, textconv, hooks and signature checks
   are switched off per call. Protection is by file name: a secret pasted into
   `config.py` is just code to it.

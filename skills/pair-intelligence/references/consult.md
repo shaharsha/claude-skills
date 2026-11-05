@@ -37,12 +37,19 @@ model given your conclusion grades the conclusion instead of the problem. You
 may say where you are least sure ("the retry path is what I most want checked"),
 which directs attention without supplying an answer.
 
-The model cannot run anything in read-only mode (even `python3` fails in Codex's
-macOS sandbox), so say so in the prompt and treat every claim about runtime
-behaviour as inference. When the decision turns on one, run it yourself: call the
+Tell the model what it may do, in these words: "You may read any file and run
+read-only commands (cat, rg, git log); you cannot write files or run tests."
+Codex reads files only through shell commands, so a prompt saying it "cannot run
+anything" gets an answer from the prompt alone: three rounds did on 2026-11-02 to
+11-04, and pair.sh now stops such a round with `STATUS=unread`. A claim about
+runtime behaviour is still inference (in read-only mode even `python3` fails in
+Codex's macOS sandbox); when the decision turns on one, run it yourself: call the
 function on sample inputs, run the test.
 
-Point `--cwd` at the narrowest directory that holds what the question needs. When
+Point `--cwd` at the narrowest directory that holds what the question needs. To
+show it other repositories, or a ref other than the checked-out one, stage them:
+`bash scripts/pair_stage.sh /tmp/<name> <repo>[@<ref>][:<paths>] ...` writes a
+snapshot of each with a `SHAS.md` of the commits; cite that file in the prompt. When
 the repository is a grab-bag of unrelated private files, or the file in question
 embeds a secret, copy the relevant files (redacted) into a temp directory and
 point `--cwd` there. Without `--cwd`, consult runs in the current directory.

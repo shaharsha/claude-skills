@@ -245,9 +245,23 @@ GIT_VALUE = re.compile(r"^(--max-count|--unified|--since|--until|--after|--befor
                        r"--grep|--format|--pretty|--date)=.+$|^-[0-9]+$|^-U[0-9]+$|^-n[0-9]+$")
 # Repository config that names a program git could run, directly or through a
 # driver: refused outright, since -c can only switch off the keys it names.
-RISKY_CONFIG = re.compile(r"^(include|includeif)\.|program|command|helper|\.(clean|smudge|process)$|pager|editor|"
-                          r"driver|fsmonitor|textconv|showsignature|alternate|hookspath|^alias\.|^uploadpack\.|"
-                          r"^core\.(sshcommand|askpass|gitproxy)", re.IGNORECASE)
+# Judged on a key's section and variable only: the subsection between them is a
+# name the user chose (a branch, a remote, a driver), and matching it refused a
+# repository whose branch name held "driver" or "helper" (2026-11-04, a
+# branch.<name>.merge key).
+RISKY_SECTIONS = {"include", "includeif", "alias", "uploadpack", "pager"}
+RISKY_VARIABLE = re.compile(r"program|command|helper|pager|editor|driver|fsmonitor|textconv|showsignature|"
+                            r"alternate|hookspath|askpass|gitproxy|external|uploadpack|receivepack")
+
+
+def risky_config(key):
+    parts = key.lower().split(".")
+    section, variable = parts[0], parts[-1]
+    if section in RISKY_SECTIONS:
+        return True
+    if section == "filter" and variable in ("clean", "smudge", "process"):
+        return True
+    return bool(RISKY_VARIABLE.search(variable))
 REV = re.compile(r"^[A-Za-z0-9_@^~{}+-][A-Za-z0-9._/@^~{}+-]*$")  # no ":" anywhere
 SECRET_EXCLUDES = [":(exclude,icase,glob)**/" + g for g in SECRET_GLOBS]
 GIT_HELP = "pair-fs git <sub> [flags] [revs] [-- paths]\n" + "\n".join(
@@ -272,7 +286,7 @@ def git_toplevel():
                 die("git history covers the whole repository at %s, wider than the folders you may read; "
                     "pair-fs git is off for this run" % top)
             rc, cfg, _ = run([git, "-C", top, "config", "--list", "--includes", "--name-only"], top, GIT_ENV)
-            risky = sorted({k for k in cfg.split() if RISKY_CONFIG.search(k)})
+            risky = sorted({k for k in cfg.split() if risky_config(k)})
             if risky:
                 die("this repository's git config sets %s, which can make git run a program; "
                     "pair-fs git is off for it" % ", ".join(risky[:5]))

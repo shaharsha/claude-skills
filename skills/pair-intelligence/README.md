@@ -168,6 +168,9 @@ bash scripts/codex_review.sh --repo /abs/repo --runnable \
 
 # A Codex code review with structured findings
 bash scripts/codex_review.sh --repo /abs/repo --prompt-file /abs/review.md --label my-change
+
+# Two repositories at chosen refs in one folder for the model to read, with SHAS.md
+bash scripts/pair_stage.sh /tmp/review-src ~/src/api@origin/main ~/src/infra@v2.3:modules/dns
 ```
 
 Every `pair.sh` run prints `STATUS=` and ends with `ANSWER=<path>`; `codex_review.sh`
@@ -192,6 +195,12 @@ non-git and `--out-dir` paths. It spends no model quota.
   repo, still without network, so tests that download anything fail.
 - Gemini's secret-file protection works by file name (`.env`, key files); a
   secret pasted into an ordinary file is just text to it.
+- Codex turns some account features on even with no config, ChatGPT app
+  connectors among them; both scripts switch them off on every call, and
+  `--selftest` checks that none is reachable after an upgrade.
+- A prompt that says the model "cannot run anything" makes Codex read nothing:
+  say it may read files and run read-only commands. A round that read no file
+  ends `STATUS=unread` (exit 72).
 - A Vertex AI project's tokens-per-minute quota can run out on a long Gemini
   review (`429 RESOURCE_EXHAUSTED`, `STATUS=quota`, exit 75); retry later, lower
   `--web-budget`, or set `PAIR_AGY_AUTH=key`.
