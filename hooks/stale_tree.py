@@ -126,10 +126,11 @@ BUDGET = 7.5
 SAVE_DEADLINE = 8.0
 # Parallel Bash calls land in context in MESSAGE order but run their hooks in TIME
 # order, so inside a parallel batch the state cannot know which stamp is last in
-# context. Every run records when it started; runs that started this close together
-# are one batch, and a batch stamps without saving a key, so the call after it stamps
-# the current answer. Sequential calls are further apart: the model has to read one
-# result before it writes the next call.
+# context. Every run records when it started, as its own file (no lock needed, so no
+# run can erase another's); runs that started this close together are one batch, and
+# a batch stamps without saving a key, so the call after it stamps the current
+# answer. Sequential calls are further apart: the model has to read one result before
+# it writes the next call (measured: 0.1% of 49,411 started within 2 s).
 BATCH_WINDOW = 2.0
 # Upper bound on silence: even with nothing changed, stamp again after this long. It
 # bounds what a missed --reset (hook not registered, cancelled, failed) can cost.
@@ -366,10 +367,8 @@ def read_record(path):
     try:
         with open(path) as fh:
             rec = json.load(fh)
-        starts = [t for t in rec.get("starts", []) if isinstance(t, (int, float))]
         at = rec.get("at")
-        return {"key": rec.get("key"), "at": at if isinstance(at, (int, float)) else None,
-                "starts": starts}
+        return {"key": rec.get("key"), "at": at if isinstance(at, (int, float)) else None}
     except Exception:                    # OSError, bad JSON, RecursionError, wrong shape
         return None
 
@@ -420,19 +419,52 @@ def lock(path):
 
 
 _t0 = None                        # set by main(): wall-clock start of this run
+_run_id = None                    # set by register_start(): this run's start file
+
+
+def starts_dir(path):
+    return path[:-len(".json")] + ".starts"
 
 
 def register_start(path):
-    """Record this run's start, so a parallel batch can see itself. False if not recorded."""
-    fd = lock(path)
-    if fd is None:
-        return False
+    """Record this run's start as its own file. False if it could not be recorded."""
+    global _run_id
+    d = starts_dir(path)
+    name = f"{_t0:.6f}-{os.getpid()}"
     try:
-        rec = read_record(path) or {"key": None, "at": None, "starts": []}
-        rec["starts"] = [t for t in rec["starts"] if abs(_t0 - t) < 60] + [_t0]
-        return write_record(path, rec)
-    finally:
-        os.close(fd)                      # closing the descriptor releases the lock
+        os.makedirs(d, exist_ok=True)
+        os.close(os.open(os.path.join(d, name), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
+    except OSError:
+        return False
+    _run_id = name
+    try:                                  # prune starts no batch can still reach
+        for other in os.listdir(d):
+            try:
+                if abs(_t0 - float(other.split("-")[0])) > 60:
+                    os.unlink(os.path.join(d, other))
+            except (ValueError, OSError):
+                pass
+    except OSError:
+        pass
+    return True
+
+
+def in_batch(path):
+    """True if another run of this conversation started within BATCH_WINDOW of this one."""
+    if _run_id is None:
+        return True
+    try:
+        for other in os.listdir(starts_dir(path)):
+            if other == _run_id:
+                continue
+            try:
+                if abs(float(other.split("-")[0]) - _t0) < BATCH_WINDOW:
+                    return True
+            except ValueError:
+                return True               # a start we cannot read: assume a peer
+    except OSError:
+        return True
+    return False
 
 
 def stamp(payload, key, context):
@@ -447,29 +479,32 @@ def stamp(payload, key, context):
     record that reads back intact with the same key, younger than MAX_SILENCE, in a
     directory this run could also have written (so a reset that failed to delete
     cannot leave a key that suppresses). Everything else stamps.
+
+    Known limit: if the state's files become unwritable, so that neither unlink nor
+    emptying in place works, and later writable again, a key can outlive a stamp
+    that should have replaced it. Nothing here changes those permissions, and
+    MAX_SILENCE bounds it: no key is trusted for more than 2 hours.
     """
     path = state_file(payload)
     if path is None:
         emit(context)
         return
-    fd = lock(path) if _registered else None
+    fd = lock(path) if _run_id is not None else None
     try:
+        batch = in_batch(path)
         rec = read_record(path) if fd is not None else None
         now = time.time()
-        batch = rec is None or any(t != _t0 and abs(t - _t0) < BATCH_WINDOW for t in rec["starts"])
-        if (not batch and rec["key"] == key and rec["at"] is not None
-                and now - rec["at"] < MAX_SILENCE and os.access(os.path.dirname(path), os.W_OK)):
+        if (fd is not None and not batch and rec is not None and rec["key"] == key
+                and rec["at"] is not None and now - rec["at"] < MAX_SILENCE
+                and os.access(os.path.dirname(path), os.W_OK)):
             return
-        saved = False
-        if fd is not None and time.monotonic() < _save_by:
-            rec = rec or {"starts": []}
-            saved = write_record(path, {"key": None if batch else key, "at": now,
-                                        "starts": rec["starts"]})
+        saved = (fd is not None and time.monotonic() < _save_by
+                 and write_record(path, {"key": None if batch else key, "at": now}))
         if not saved:
             forget(path)
     finally:
         if fd is not None:
-            os.close(fd)
+            os.close(fd)                  # closing the descriptor releases the lock
     emit(context)
 
 
@@ -508,11 +543,10 @@ def reset():
 
 
 _save_by = float("inf")           # set by main(): monotonic SAVE_DEADLINE
-_registered = False               # set by main(): this run's start is on record
 
 
 def main():
-    global _deadline, _save_by, _t0, _registered
+    global _deadline, _save_by, _t0
     started, _t0 = time.monotonic(), time.time()
     _deadline, _save_by = started + BUDGET, started + SAVE_DEADLINE
     try:
@@ -544,7 +578,8 @@ def main():
     if rc != 0:
         return 0                                   # not a git repo: nothing to say
     path = state_file(payload)
-    _registered = path is not None and register_start(path)
+    if path is not None:
+        register_start(path)
     try:
         return measure(payload, cwd, top)
     except OutOfTime:
