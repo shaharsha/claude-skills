@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Music cues and sound effects from ElevenLabs, from one spec file.
 
-  ELEVENLABS_API_KEY=... python3 generate_music_and_sfx.py sounds.json out/ [--only op whoosh] [--force]
+  python3 generate_music_and_sfx.py sounds.json out/ [--only op whoosh] [--force]
 
 sounds.json:
   {"op":     {"type": "music", "prompt": "Upbeat cartoon title theme ... No vocals.", "seconds": 52},
@@ -10,7 +10,7 @@ sounds.json:
 Music: POST /v1/music with model_id music_v2_5 (the endpoint still defaults to music_v1) and
 force_instrumental true unless the entry says "vocals": true. Ask for more seconds than the cue must cover:
 a cue that ends inside its window just stops. SFX: POST /v1/sound-generation (duration_seconds,
-prompt_influence 0.5). Writes out/<name>.mp3 only for a real mp3; an error prints the API's own message
+prompt_influence 0.5; an entry's "model" is sent as model_id). Writes out/<name>.mp3 only for a real mp3; an error prints the API's own message
 (missing_permissions, paid_plan_required, quota_exceeded) and leaves no file. Existing files are skipped.
 """
 import argparse, json, os, sys, time, urllib.error, urllib.request
@@ -18,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from generate_tts import is_mp3  # noqa: E402
+from el_common import api_key  # noqa: E402
 
 API = "https://api.elevenlabs.io/v1"
 
@@ -29,8 +30,11 @@ def request_for(name, spec):
                                 "model_id": spec.get("model", "music_v2_5"),
                                 "force_instrumental": not spec.get("vocals", False)}
     if kind == "sfx":
-        return f"{API}/sound-generation", {"text": spec["prompt"], "duration_seconds": spec["seconds"],
-                                           "prompt_influence": spec.get("influence", 0.5)}
+        body = {"text": spec["prompt"], "duration_seconds": spec["seconds"],
+                "prompt_influence": spec.get("influence", 0.5)}
+        if spec.get("model"):
+            body["model_id"] = spec["model"]
+        return f"{API}/sound-generation", body
     raise ValueError(f"{name}: type must be 'music' or 'sfx', got {kind!r}")
 
 
@@ -68,7 +72,7 @@ def main():
     ap.add_argument("--only", nargs="*"); ap.add_argument("--force", action="store_true")
     ap.add_argument("--concurrency", type=int, default=3)
     a = ap.parse_args()
-    key = os.environ.get("ELEVENLABS_API_KEY") or sys.exit("ELEVENLABS_API_KEY not set")
+    key = api_key()
     spec = json.load(open(a.spec, encoding="utf-8"))
     os.makedirs(a.out_dir, exist_ok=True)
     todo = []

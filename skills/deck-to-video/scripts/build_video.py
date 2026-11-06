@@ -142,9 +142,11 @@ def main():
             return
         ov = Image.new("RGBA", fr.size, (0, 0, 0, 0))
         d = ImageDraw.Draw(ov)
+        washed = {act["card"]}  # a region highlighted twice must not wash itself, or another twice
         for w in wins:
-            if w is act:
+            if w["card"] in washed:
                 continue
+            washed.add(w["card"])
             x, y, ww, hh = w["box"]
             base_rgb = (0, 0, 0) if w.get("dim") == "black" else (255, 255, 255)
             d.rounded_rectangle([x, y, x + ww, y + hh], radius=10,
@@ -212,7 +214,7 @@ def main():
             if wins:
                 cache[(glow_key(wins, sec), int(sec))] = path
         seg = os.path.join(work, f"seg{i:02d}.mp4")
-        cmd = [ff, "-y", "-loglevel", "error",
+        cmd = [ff, "-nostdin", "-y", "-loglevel", "error",
             "-framerate", str(fps), "-i", os.path.join(seqdir, "f%05d.jpg"),
             "-i", aud_path, "-af", f"apad=pad_dur={args.pad}",
             "-c:v", "libx264", "-preset", "medium", "-crf", str(args.crf),
@@ -220,10 +222,13 @@ def main():
             "-c:a", "aac", "-b:a", "160k", "-ar", "44100",
             "-t", str(seg_dur), seg]
         # timeout + one retry: ffmpeg has been observed hanging at 0% CPU after
-        # finishing its output — a killed/timed-out attempt leaves an INVALID file
+        # finishing its output — a killed/timed-out attempt leaves an INVALID file.
+        # -nostdin and a closed stdin remove the likeliest cause: inside an agent's
+        # shell, ffmpeg can sit waiting to read keyboard commands from stdin.
         for attempt in (1, 2):
             try:
-                r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=300,
+                                   stdin=subprocess.DEVNULL)
             except subprocess.TimeoutExpired:
                 print(f"slide {i:02d}: ffmpeg timed out (attempt {attempt}) — retrying", flush=True)
                 if os.path.exists(seg):
@@ -241,9 +246,9 @@ def main():
     with open(concat, "w") as f:
         f.writelines(f"file '{s}'\n" for s in segs)
     try:
-        r = subprocess.run([ff, "-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
+        r = subprocess.run([ff, "-nostdin", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
                             "-i", concat, "-c", "copy", "-movflags", "+faststart", args.out],
-                           capture_output=True, text=True, timeout=300)
+                           capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired:
         sys.exit("concat timed out")
     if r.returncode:

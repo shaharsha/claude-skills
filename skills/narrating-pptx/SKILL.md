@@ -1,19 +1,19 @@
 ---
 name: narrating-pptx
-description: Use when adding voice narration, voiceover, or TTS audio to a PowerPoint/pptx deck in ANY language (Hebrew, English, mixed) — making a deck self-presenting, generating per-slide speech with ElevenLabs, or when embedded pptx audio won't autoplay or triggers PowerPoint's "found a problem / Repair" dialog. Use whenever the user mentions narration, voiceover, audio in slides, TTS for a presentation, ElevenLabs + pptx, or a self-playing deck — even if they don't say "narration" explicitly.
+description: Use when adding voice narration, voiceover, or TTS audio to a PowerPoint/pptx or Google Slides deck in ANY language (Hebrew, English, mixed) — making a deck self-presenting, generating per-slide speech with ElevenLabs, re-narrating slides after edits, or when embedded pptx audio won't autoplay, triggers PowerPoint's "found a problem / Repair" dialog, or goes silent after the deck is pushed to Google Slides. Use whenever the user mentions narration, voiceover, audio in slides, TTS for a presentation, ElevenLabs + pptx or Google Slides, or a self-playing deck — even if they don't say "narration" explicitly.
 ---
 
 # Narrating PPTX (ElevenLabs → per-slide autoplay)
 
 ## Overview
 
-Turn any pptx into a self-presenting deck: write presenter-style narration scripts (any language), generate one clip per slide with ElevenLabs, embed the clips, and make each autoplay on slide entry.
+Turn any deck into a self-presenting one: write presenter-style narration scripts (any language), generate one clip per slide with ElevenLabs, and make each clip play on slide entry — in a **pptx** (steps 3-5) or in **Google Slides** (its own section below). Where the deck will be watched decides which; ask if it isn't clear. A Google Slides copy pushed from a pptx loses its audio every time, so narrating the pptx does not narrate the Slides copy.
 
 **REQUIRED SUB-SKILL: elevenlabs-tts** — owns everything about the voice: model (`eleven_v4`), audio tags, stability, voices, the batch generator, leak checks, and timings. This skill owns what is specific to a deck: what the narration says, and getting the audio into PowerPoint without corrupting the file.
 
 **The iron rule (paid for in blood): NEVER hand-write `<p:timing>` autoplay XML.** Hand-rolled timing XML corrupts the file — PowerPoint shows "found a problem… Repair". The only reliable method is letting **real PowerPoint author the XML itself** via AppleScript play-settings (`scripts/set_autoplay.sh`). If you're tempted to inject timing XML "just this once" — that's the exact failure this skill exists to prevent.
 
-**Requirements:** macOS + Microsoft PowerPoint installed (for the autoplay step), `python-pptx`, `ELEVENLABS_API_KEY` env var, a voice ID (elevenlabs-tts lists the defaults).
+**Requirements:** an ElevenLabs key and a voice ID (elevenlabs-tts covers both). For a pptx: macOS + Microsoft PowerPoint (the autoplay step) and `python-pptx`. For Google Slides: ffmpeg, `google-auth`, and the service account the gslides-sync skill uses.
 
 ## Pipeline (5 steps, in order)
 
@@ -23,9 +23,11 @@ Turn any pptx into a self-presenting deck: write presenter-style narration scrip
 
 **Language: exactly what the user asks for.** Hebrew, English, or mixed. For Hebrew (or any non-English), write like a native presenter in that language who naturally keeps technical terms in English (e.g., Israeli hi-tech register: "ה-agent מנתח את הדאטה וכותב manifest"). Don't translate terms the audience uses in English.
 
-**Depth: the voice IS the presenter, not a caption reader.** Target ~600–900 chars per slide (≈45–75 s). Each script: open with context → work through what the slide actually shows → explain the *why* → bridge to the next slide. **Describe position only when the viewer needs it to follow.** On a diagram, "the dashed box inside" is orientation they cannot get otherwise; over three cards of text, "on the left… in the middle… on the right" is audio-description rather than presenting (see **self-presenting-decks**). Short caption-style scripts (~200 chars) feel like labels, not a presentation — users reject them.
+**Depth: the voice IS the presenter, not a caption reader.** Target ~600–900 chars per slide (≈45–75 s), **within a budget for the whole deck**: 26 slides at that depth is over 20 minutes. Agree a total with the user for long decks, and give near-identical slides less (360–740 chars worked across 22 similar slides). Each script: open with context → work through what the slide actually shows → explain the *why* → bridge to the next slide. **Describe position only when the viewer needs it to follow.** On a diagram, "the dashed box inside" is orientation they cannot get otherwise; over three cards of text, "on the left… in the middle… on the right" is audio-description rather than presenting (see **self-presenting-decks**). Short caption-style scripts (~200 chars) feel like labels, not a presentation — users reject them.
 
-**Numbers on slides:** the slide shows "9 days → 4 hours"; the script says "nine days… to four hours". Write them as words (elevenlabs-tts explains why); subtitles generated from the alignment will then read as words too, which is fine.
+**Numbers on slides:** the slide shows "9 days → 4 hours"; the script says "nine days… to four hours". Write them as words (elevenlabs-tts explains why); subtitles generated from the alignment will then read as words too, which is fine. In Hebrew the number words agree in gender with their noun, and a relative date ("כשבדקנו", "when we checked") ages better than "two weeks ago".
+
+**Who is speaking.** Write as the person whose voice it is. In the user's own cloned voice the script is the user presenting, in first person; a script written as an assistant explaining things *to* the user sounds wrong in their voice. Switching voices after approval means rewriting the script, not only regenerating it.
 
 **Direct the delivery with audio tags** — follow elevenlabs-tts ("Write the script"): English bracket tags at the beat they modify, tagging the *shifts* in the performance, descriptive v4 directions (`[Warm, conversational tone]`, `[Pause, dry amusement]`). Default to a clean professional read; go denser only when the user wants an expressive performance.
 
@@ -36,11 +38,10 @@ Turn any pptx into a self-presenting deck: write presenter-style narration scrip
 Use elevenlabs-tts' generator — it writes exactly the `audio/slideNN.mp3` names the next steps expect:
 
 ```bash
-export ELEVENLABS_API_KEY=...   # env var only — NEVER paste the key into output
 python3 <elevenlabs-tts-dir>/scripts/generate_tts.py scripts.json VOICE_ID audio/ --model eleven_v4 --stability 0.5
 ```
 
-Sample one tag-rich slide first (and A/B stability if the brief is expressive) — elevenlabs-tts "Generate — sample first". One model, one stability, one voice for every slide; mixing is audible across slide changes. Verify durations before embedding: `afinfo audio/slide01.mp3 | grep duration`.
+Sample one tag-rich slide first (and A/B stability if the brief is expressive) — elevenlabs-tts "Generate — sample first". Generate the sample into the same `audio/` with the batch's settings, then batch the rest with `--only`, so the manifest records every slide. One model, one stability, one voice for every slide; mixing is audible across slide changes. The generator prints each clip's length.
 
 ### 3. Embed one clip per slide
 
@@ -48,7 +49,7 @@ Sample one tag-rich slide first (and A/B stability if the brief is expressive) �
 ```bash
 python3 scripts/add_audio.py deck.pptx audio/ narrated.pptx
 ```
-Adds a small speaker icon bottom-right of each slide (click-to-play at this point — that's expected).
+Adds a small speaker icon bottom-right of each slide (click-to-play at this point — that's expected). Look at the render: on a busy layout the icon can cover a content card. Move it with python-pptx (see *Progress bar*), not by shrinking it below 0.5 in.
 
 **Deck you're building with pptxgenjs:** add per slide instead:
 ```js
@@ -70,6 +71,36 @@ Expect output `autoplay set on N media shapes` where **N == number of narrated s
 - Export through real PowerPoint (use the **office-render** skill if available): a successful PDF export of all slides == no repair dialog. LibreOffice validation is NOT sufficient — it tolerates XML that PowerPoint rejects.
 - Re-check N from step 4 equals expected.
 - The human must ear-test autoplay once: slideshow mode (⌘⇧↩), audio should start on slide entry. You cannot verify sound headlessly — say so; never claim you heard it.
+
+## Google Slides
+
+Google's pptx import **drops embedded audio every time**: each slide keeps the speaker icon as a silent picture. The Slides API cannot insert audio, only Drive or YouTube videos. So each slide gets a small Drive video (a still badge plus that slide's mp3) that autoplays in a corner. `scripts/gslides_narration.py` does each step:
+
+```bash
+S=<this-skill-dir>/scripts/gslides_narration.py
+python3 $S videos audio/ videos/                                       # 1. one mp4 per clip, cut to the audio's exact length
+python3 $S upload videos/ --folder FOLDER_ID --sa-key SA.json          # 2. into a Drive folder
+python3 $S wait   videos/ --folder FOLDER_ID --sa-key SA.json          # 3. until Drive has processed them
+python3 $S insert --pres PRES_ID --folder FOLDER_ID --sa-key SA.json   # 4. on the slides, autoplaying [--skip 12 13]
+python3 $S check  --pres PRES_ID --folder FOLDER_ID --sa-key SA.json --videos videos/   # 5. read-only proof
+```
+
+- **Push the clean pptx to Slides, not the narrated one** (gslides-sync). The narrated one leaves a dead speaker icon on every slide.
+- **The service account cannot create Drive files** in a My Drive folder: 403 "Service Accounts do not have storage quota". `upload` lists the files for the user to drag into the folder once, and every later run overwrites them in place, which works. A shared-drive folder the account belongs to avoids the manual step.
+- **Wait before inserting.** Until Drive has processed a file, the slide shows a broken or old-length video; `wait` polls for the thumbnail and the new length.
+- **Re-run `insert` after every gslides-sync.** A re-push wipes the videos, and can change the page size (720×405 to 960×540 pt), so the badge is placed as a fraction of the page. `insert` replaces its own earlier videos (object IDs `narr_…`) and nothing else, so re-running is safe; `--dry-run` shows the plan first.
+- **Share the folder with the deck's audience.** A viewer without access to the videos sees a deck that won't play.
+- **Slides cannot advance when a clip ends.** The viewer clicks to the next slide. For hands-free playback, ship the video too (deck-to-video).
+
+## Updating a narrated deck
+
+- **Changed slides only:** edit those scripts, get them approved, then `generate_tts.py … --only 04 07` with the voice and settings read from `audio/_manifest.json`. Rebuild the narrated pptx (or re-run `upload`, `wait`, `insert`) from the full audio set.
+- **A slide inserted or deleted** in the middle: `python3 scripts/renumber_slides.py scripts.json audio/ --insert 5` for a new slide 5, i.e. one added after slide 4 (or `--delete 5` to drop slide 5, and `--alignment alignment/` if the video uses it) moves every later clip, script and manifest entry by one, so audio can't land on the wrong slide. Then write and generate only the new slide's clip. On Google Slides the Drive videos are matched by slide number, so rebuild and re-upload the videos for that slide and every later one (`videos`, `upload`, `wait`, `insert`).
+- Keep the previous narrated file until the user has the new one.
+
+## Handing it over
+
+Give every deliverable as an absolute path, or send the file itself if the host can: never "it's in narration/". For a Google Slides deck, give its link.
 
 ## Timings, subtitles, highlights
 
@@ -106,10 +137,15 @@ Avoid AppleScript for geometry (its `top`/`left position` properties fight the c
 | Icon ≤0.3 in | User can't hover → "no progress bar" complaints | 0.5 in icon, bottom-right (default in add_audio.py) |
 | `shape_type == MEDIA` in python-pptx | Finds 0 audio shapes (they report as PICTURE) | Match `'audioFile' in sh._element.xml` |
 | AppleScript for shape geometry | `top`/`left position` compile errors | python-pptx for geometry; AppleScript only for play settings |
+| Pushing the narrated pptx to Google Slides | Silent speaker icons on every slide: "i dont hear the narration" | Push the clean pptx; add narration with `gslides_narration.py` |
+| `ffmpeg -loop 1 … -shortest` for a still + audio video | The video runs 30–50% past its audio | `-t <audio seconds>` (the `videos` step) |
+| Inserting videos before Drive has processed them | Broken or old-length video on the slide | `wait`, then `insert` |
+| Not re-running `insert` after a gslides-sync | The re-push wiped every narration video | `insert` after every sync; `check` proves it |
+| Copying an approved sample into the batch by hand | The manifest has no record of that slide | Generate the sample into `audio/`, batch the rest with `--only` |
 
 ## Caveats
 
-- Autoplay survives PowerPoint (desktop/365). **Google Slides import and LibreOffice are unreliable** with embedded audio autoplay; PDF export drops audio entirely.
+- Autoplay survives PowerPoint (desktop/365). **Google Slides import drops embedded audio every time** (use the Google Slides section); LibreOffice is unreliable with it; PDF export drops audio entirely.
 - File grows ~0.3–1.5 MB per narrated minute (mp3 128kbps).
 - Keep a clean (non-narrated) copy — narration is a variant, not a replacement.
-- Deck edits after narration are fine; re-run step 4 only if you re-add media.
+- Deck edits after narration are fine; re-run step 4 only if you re-add media. Inserted or deleted slides need `renumber_slides.py` first.
