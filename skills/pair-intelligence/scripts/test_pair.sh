@@ -894,6 +894,14 @@ git init -q --bare "$T/st-remote.git" && git -C "$T/st1" remote add origin "$T/s
 git clone -q -b main "$T/st-remote.git" "$T/st-other" 2>/dev/null && printf 'v3\n' > "$T/st-other/top.txt" && git -C "$T/st-other" -c user.email=t@t -c user.name=t commit -qam three && git -C "$T/st-other" push -q origin main 2>/dev/null
 out="$(bash "$SCRIPTS/pair_stage.sh" "$T/staged4" "$T/st1@origin/main" 2>&1)"; rc=$?
 check "pair_stage: a remote ref behind its remote is staged, with a warning and a note in SHAS.md" '[[ $rc -eq 0 && "$out" == *WARNING* ]] && grep -q "behind origin" "$T/staged4/SHAS.md"'
+git -C "$T/st1" remote add team/upstream "$T/st-remote.git" && git -C "$T/st1" fetch -q team/upstream && git -C "$T/st1" update-ref refs/remotes/team/upstream/main HEAD~1
+out="$(bash "$SCRIPTS/pair_stage.sh" "$T/staged5" "$T/st1@team/upstream/main" 2>&1)"; rc=$?
+check "pair_stage: a remote whose name holds a slash is asked correctly" '[[ $rc -eq 0 && "$out" == *WARNING* ]] && grep -q "behind team/upstream" "$T/staged5/SHAS.md"'
+mkdir -p "$T/files-repo/files" && git -C "$T/files-repo/files" init -q && printf 'r\n' > "$T/files-repo/files/r.txt" && git -C "$T/files-repo/files" add r.txt && git -C "$T/files-repo/files" -c user.email=t@t -c user.name=t commit -qm r
+out="$(bash "$SCRIPTS/pair_stage.sh" "$T/staged6" "$T/files-repo/files" "file:$T/loose/settings.json" 2>&1)"; rc=$?
+check "pair_stage: a repository named files does not land in the loose-files folder" '[[ $rc -eq 0 && -e "$T/staged6/files-2/r.txt" && ! -e "$T/staged6/files/r.txt" ]]'
+bash "$SCRIPTS/pair_stage.sh" "$T/loose/stage" "file:$T/loose" >/dev/null 2>&1; r1=$?
+check "pair_stage: a loose folder holding the destination is refused" '[[ $r1 -eq 64 && ! -e "$T/loose/stage/files" ]]'
 
 # --- pair.sh: argument checks -----------------------------------------------------
 bash "$P" --help >/dev/null 2>&1;                                         check "--help exits 0" '[[ $? -eq 0 ]]'
@@ -940,7 +948,7 @@ mkdir -p "$T/fresh"
 bash "$SCRIPTS/codex_review.sh" --repo "$T/fresh" --list >/dev/null 2>&1
 check "codex_review --list creates nothing"       '[[ ! -e "$T/fresh/.codex-review" ]]'
 out="$(FAKE_CODEX=review bash "$SCRIPTS/codex_review.sh" --repo "$T/docs" --prompt-file "$T/prompt.md" --label t3 --out-dir "$T/evidence" 2>&1)"; rc=$?
-check "codex_review: names its log before the review runs" '[[ "$out" == *"codex_review: started; follow "*".log"* ]]'
+check "codex_review: names its log on stderr as well as in CODEX_LOG=" '[[ $(grep -c -F "$(sed -n "s/^CODEX_LOG=//p" <<<"$out")" <<<"$out") -ge 2 ]]'
 check "codex_review: verdict, findings, reads and seconds on stdout before REVIEW_MD" '[[ $rc -eq 0 && "$out" == *"VERDICT=sound"*"FINDINGS=0"*"READS=1"*"SECONDS="*"REVIEW_MD="* ]]'
 out="$(FAKE_CODEX=review FAKE_CODEX_NOREAD=1 bash "$SCRIPTS/codex_review.sh" --repo "$T/docs" --prompt-file "$T/prompt.md" --label t4 --out-dir "$T/evidence" 2>&1)"; rc=$?
 MD="$(sed -n 's/^REVIEW_MD=//p' <<<"$out")"

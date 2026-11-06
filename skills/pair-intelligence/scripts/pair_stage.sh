@@ -46,6 +46,9 @@ for spec in "$@"; do
     src="${spec#file:}"
     [[ -e "$src" ]] || { echo "no such file or folder: $src" >&2; exit 66; }
     src="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$src")"
+    if [[ -d "$src" ]] && python3 -c 'import os,sys; d,s=os.path.realpath(sys.argv[1]),sys.argv[2]; sys.exit(0 if os.path.commonpath((d,s))==s else 1)' "$DEST" "$src"; then
+      echo "$DEST is inside $src, so the copy would include itself; stage into a folder outside it" >&2; exit 64
+    fi
     target="$DEST/files$src"
     mkdir -p "$(dirname "$target")"
     if [[ -d "$src" ]]; then
@@ -69,10 +72,18 @@ for spec in "$@"; do
   sha="$(git -C "$repo" rev-parse --verify -q "$ref^{commit}")" || { echo "$repo has no commit $ref" >&2; exit 66; }
   # A remote-tracking ref is only as fresh as the last fetch, and `git fetch
   # origin main` does not always move it (seen 2026-11-06): ask the remote.
-  note=""
+  note=""; remote=""
   full="$(git -C "$repo" rev-parse --symbolic-full-name "$ref" 2>/dev/null || true)"
   if [[ "$full" == refs/remotes/*/* ]]; then
-    remote="${full#refs/remotes/}"; branch="${remote#*/}"; remote="${remote%%/*}"
+    # A remote's name may hold a slash (team/upstream): take the longest
+    # configured remote the ref starts with.
+    tracking="${full#refs/remotes/}"; remote=""
+    while IFS= read -r r; do
+      [[ -n "$r" && "$tracking" == "$r"/* && ${#r} -gt ${#remote} ]] && remote="$r"
+    done < <(git -C "$repo" remote)
+    branch="${tracking#"$remote"/}"
+  fi
+  if [[ -n "${remote:-}" && "$full" == refs/remotes/*/* ]]; then
     there="$(GIT_TERMINAL_PROMPT=0 perl -e 'alarm 15; exec @ARGV' git -C "$repo" ls-remote "$remote" "refs/heads/$branch" 2>/dev/null | cut -f1 || true)"
     if [[ -n "$there" && "$there" != "$sha" ]]; then
       note=" (behind $remote, now at \`${there:0:12}\`)"
@@ -82,7 +93,8 @@ for spec in "$@"; do
   fi
   name="$(basename "$(cd "$repo" && pwd)")"
   folder="$name"; n=2
-  while [[ -e "$DEST/$folder" ]]; do folder="$name-$n"; n=$((n + 1)); done
+  # files/ is reserved for loose files, whichever comes first.
+  while [[ -e "$DEST/$folder" || "$folder" == files ]]; do folder="$name-$n"; n=$((n + 1)); done
   mkdir -p "$DEST/$folder"
   path_args=()
   if [[ -n "$paths" ]]; then IFS=',' read -r -a path_args <<< "$paths"; fi
