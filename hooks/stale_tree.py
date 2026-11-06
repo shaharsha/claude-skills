@@ -73,8 +73,11 @@ the fetch age inside its bucket. The same 14 days under this rule: $29-45.
                 compact, fork): after a compaction the old stamp is gone from context,
                 so the next call must stamp again. SessionStart carries no agent_id,
                 so the whole session's state goes, subagents included.
-    fail-open   no session_id, or state that cannot be read or written -> stamp, as
-                before. Suppression is the optimisation; a stamp is the safe default.
+    fail-open   no session_id, state that cannot be read, written or locked, a run near
+                the hook's timeout, or two different answers in parallel calls ->
+                stamp, as before. Suppression is the optimisation; a stamp is the safe
+                default. Even with nothing changed, a conversation is re-stamped every
+                2 hours, which bounds what a missed reset can cost.
 
 WHICH BASE (2026-11-06)
 -----------------------
@@ -87,6 +90,7 @@ keeps meeting.
 Now, first that resolves: `git config staletree.base`, then origin/HEAD (the remote's
 default branch, refreshed by the background fetch), then main, master, develop.
 """
+import fcntl
 import hashlib
 import json
 import os
@@ -113,20 +117,46 @@ REFETCH_COOLDOWN = 600.0   # 10 min between attempts per repo, success or failur
 STAMPS = os.path.join(os.path.expanduser("~/.claude"), ".stale_tree_fetch")
 STATE_DIR = os.path.join(os.path.expanduser("~/.claude"), ".stale_tree_state")
 STATE_MAX_AGE = 7 * 86400  # --reset prunes other sessions' state older than this
-# The settings give this hook a 10 s timeout. A run killed after saving state but
-# before Claude Code read its stamp would suppress a stamp nobody saw, so a slow run
-# skips the save and the next call stamps again.
-SAVE_DEADLINE = 7.0
+# The settings give this hook a 10 s timeout, and Claude Code discards the output of a
+# hook it cancels. So: at most BUDGET seconds of git, then CANNOT DETERMINE is stamped
+# rather than nothing; and state is saved only before SAVE_DEADLINE, because a run
+# killed after saving but before Claude Code read its stamp would suppress a stamp
+# nobody saw. A late run forgets the state instead, and the next call stamps again.
+BUDGET = 7.5
+SAVE_DEADLINE = 8.0
+# Parallel Bash calls land in context in MESSAGE order but run their hooks in TIME
+# order, so when two calls with different answers overlap, the state cannot know which
+# stamp is last in context. Two different answers this close together -> forget, and
+# let the next call stamp.
+OVERLAP_WINDOW = 5.0
+# Upper bound on silence: even with nothing changed, stamp again after this long. It
+# bounds what a missed --reset (hook not registered, cancelled, failed) can cost.
+MAX_SILENCE = 7200.0
 # Fetch-age buckets, in seconds. A stamp is re-issued when the age moves into another
 # bucket; the background fetch keeps a working repo inside the first one.
 AGE_BUCKETS = (1800.0, 7200.0, 43200.0)   # 30 min, 2 h, 12 h
 
 
+class OutOfTime(Exception):
+    """The run's git budget is spent; main() stamps CANNOT DETERMINE instead."""
+
+
+_deadline = float("inf")          # set by main(): monotonic end of the git budget
+
+
 def git(args, cwd):
+    left = _deadline - time.monotonic()
+    if left <= 0.05:
+        raise OutOfTime()
+    limit = min(TIMEOUT, left)
     try:
         p = subprocess.run(["git"] + args, cwd=cwd, capture_output=True,
-                           text=True, timeout=TIMEOUT)
+                           text=True, timeout=limit)
         return (p.returncode, p.stdout.strip(), p.stderr.strip())
+    except subprocess.TimeoutExpired:
+        if limit < TIMEOUT:
+            raise OutOfTime()
+        return (127, "", "git timed out")
     except (OSError, subprocess.SubprocessError):
         return (127, "", "git unavailable or timed out")
 
@@ -194,9 +224,15 @@ def maybe_refresh(top, repo, base, age):
         # nothing -- a guard whose failure is invisible because its output is
         # indistinguishable from its success.
         #
-        # Keyed on the repo's COMMON gitdir, not the worktree: every worktree of a
-        # repo shares its remote refs, so one fetch serves all ~226 of them.
-        cooldown = os.path.join(STAMPS, _digest(repo))
+        # Keyed on the repo's COMMON gitdir plus the base, not the worktree: every
+        # worktree of a repo shares its remote refs, so one fetch serves all ~226 of
+        # them, and a worktree measuring another base keeps its own slot.
+        name = base[len("refs/remotes/"):] if base.startswith("refs/remotes/") else base
+        remote, _, ref = name.partition("/")
+        rc, remotes, _ = git(["remote"], top)
+        if rc != 0 or not ref or remote not in remotes.split():
+            return                        # a local base (or unknown remote): no fetch
+        cooldown = os.path.join(STAMPS, _digest(f"{repo}\0{base}"))
         try:
             if time.time() - os.path.getmtime(cooldown) < REFETCH_COOLDOWN:
                 return
@@ -204,9 +240,6 @@ def maybe_refresh(top, repo, base, age):
             pass
         with open(cooldown, "w") as fh:   # written BEFORE the spawn, so a fetch that
             fh.write(repo)                # hangs still consumes its cooldown slot
-        remote, _, ref = base.partition("/")
-        if not ref:
-            return                        # a configured local branch: nothing to fetch
         # Two more jobs ride on the same detached fetch:
         #   · the marker is touched only when THIS base was fetched successfully, so
         #     ref_age() can tell "base checked" from "some other ref fetched";
@@ -320,40 +353,83 @@ def state_file(payload):
     return os.path.join(STATE_DIR, _digest(sid), _digest(str(agent)) + ".json")
 
 
-def last_stamp(path):
+def read_record(path):
     try:
         with open(path) as fh:
-            return json.load(fh).get("key")
-    except (OSError, ValueError, AttributeError):
+            rec = json.load(fh)
+        return rec if isinstance(rec, dict) and isinstance(rec.get("at"), (int, float)) else None
+    except (OSError, ValueError):
         return None
 
 
-def save_stamp(path, key):
+def save_record(path, key, now):
     try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
         tmp = f"{path}.{os.getpid()}.tmp"
         with open(tmp, "w") as fh:
-            json.dump({"key": key, "at": time.time()}, fh)
-        os.replace(tmp, path)             # atomic: a parallel call reads old or new
+            json.dump({"key": key, "at": now}, fh)
+        os.replace(tmp, path)             # atomic: a reader sees old or new
+        return True
     except OSError:
-        pass                              # unsaved -> the next call stamps again
+        return False
 
 
-def stamp(payload, key, context, started):
+def forget(path):
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+
+def lock(path):
+    """A per-conversation lock, held for the read-decide-save step. None if not got."""
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        fd = os.open(path + ".lock", os.O_RDWR | os.O_CREAT, 0o600)
+    except OSError:
+        return None
+    give_up = time.monotonic() + 1.0
+    while True:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return fd
+        except OSError:
+            if time.monotonic() > give_up:
+                os.close(fd)
+                return None
+            time.sleep(0.02)
+
+
+def stamp(payload, key, context):
     """
     Emit `context` unless the last stamp in this conversation had the same key.
 
-    ⚠️ Every way this can fail ends in a stamp, never in silence: no session_id,
-    an unreadable state file, a save that failed or ran late -- each leaves no
-    matching key behind, so this call or the next one stamps. The only silent
-    outcome is a key read back intact and equal to this call's.
+    ⚠️ The state must always describe the LAST stamp delivered, or be absent. So the
+    new key is saved BEFORE the stamp is printed, and whenever that cannot be
+    guaranteed -- no lock, a save that failed or would land too close to the hook's
+    timeout, two different answers overlapping (see OVERLAP_WINDOW) -- the state is
+    forgotten instead. Silence needs all of: the lock, a record that reads back
+    intact with the same key, younger than MAX_SILENCE, in a directory this run
+    could also have written (so a reset that failed to delete cannot leave a key
+    that suppresses). Everything else stamps.
     """
     path = state_file(payload)
-    if path is not None and last_stamp(path) == key:
+    if path is None:
+        emit(context)
         return
+    fd = lock(path)
+    try:
+        rec = read_record(path) if fd is not None else None
+        now = time.time()
+        if (rec is not None and rec.get("key") == key and now - rec["at"] < MAX_SILENCE
+                and os.access(os.path.dirname(path), os.W_OK)):
+            return
+        overlap = rec is not None and rec.get("key") != key and now - rec["at"] < OVERLAP_WINDOW
+        if fd is None or overlap or time.monotonic() >= _save_by or not save_record(path, key, now):
+            forget(path)
+    finally:
+        if fd is not None:
+            os.close(fd)                  # closing the descriptor releases the lock
     emit(context)
-    if path is not None and time.monotonic() - started < SAVE_DEADLINE:
-        save_stamp(path, key)
 
 
 def reset():
@@ -384,8 +460,13 @@ def reset():
     return 0
 
 
+_save_by = float("inf")           # set by main(): monotonic SAVE_DEADLINE
+
+
 def main():
+    global _deadline, _save_by
     started = time.monotonic()
+    _deadline, _save_by = started + BUDGET, started + SAVE_DEADLINE
     try:
         payload = json.load(sys.stdin)
     except (ValueError, OSError):
@@ -408,16 +489,30 @@ def main():
     if not os.path.isdir(cwd):
         return 0
 
-    rc, top, _ = git(["rev-parse", "--show-toplevel"], cwd)
+    try:
+        rc, top, _ = git(["rev-parse", "--show-toplevel"], cwd)
+    except OutOfTime:
+        rc = 127                                   # same as git timing out here
     if rc != 0:
         return 0                                   # not a git repo: nothing to say
+    try:
+        return measure(payload, cwd, top)
+    except OutOfTime:
+        # Out of budget means Claude Code would have cancelled the hook and dropped
+        # whatever it printed. Saying so is the floor; silence is not allowed here.
+        stamp(payload, ["cannot", top, "time"],
+              f"⚠️ STALENESS: CANNOT DETERMINE: the check of {top} ran out of time "
+              "(git slow under load). Not a pass; treat evidence from this tree as unattributed.")
+        return 0
 
+
+def measure(payload, cwd, top):
     rc, head, _ = git(["rev-parse", "HEAD"], cwd)
     rc2, branch, _ = git(["rev-parse", "--abbrev-ref", "HEAD"], cwd)
     if rc != 0:
         stamp(payload, ["cannot", top, "head"],
               f"⚠️ STALENESS: CANNOT DETERMINE — `git rev-parse HEAD` failed in {top}. "
-              "Not a pass; treat any evidence from this tree as unattributed.", started)
+              "Not a pass; treat any evidence from this tree as unattributed.")
         return 0
     if branch == "HEAD":
         branch = "DETACHED"
@@ -441,7 +536,7 @@ def main():
             if rcc != 0 or not count.isdigit():
                 stamp(payload, ["cannot", top, "rev-list", base],
                       f"⚠️ STALENESS: CANNOT DETERMINE against {base} in {top}: "
-                      "rev-list failed. Not a pass.", started)
+                      "rev-list failed. Not a pass.")
                 return 0
             raw_age = ref_age(gitdir, base) if rcg == 0 else None
             # Report the PRE-fetch age, then ask for a refresh for next time. Order
@@ -461,13 +556,13 @@ def main():
                            f"revision {n} commit(s) older than {base}.")
             else:
                 context = f"TREE: {line}"
-            stamp(payload, [top, head, branch, base, n, age_bucket(raw_age)], context, started)
+            stamp(payload, [top, head, branch, base, n, age_bucket(raw_age)], context)
             return 0
 
     stamp(payload, ["cannot", top, "no-base"],
           f"⚠️ STALENESS: CANNOT DETERMINE — no {'/'.join(bases)} ref in {top}. "
           "The tree may be current or 1000 behind; this check did not run. "
-          "exit 0 here is NOT a clean result.", started)
+          "exit 0 here is NOT a clean result.")
     return 0
 
 
