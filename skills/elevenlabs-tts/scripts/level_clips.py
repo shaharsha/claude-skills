@@ -42,14 +42,14 @@ def weak_spots(rms_db, win=0.15, rel_db=-12.0):
 
 
 def voiced_levels(path):
-    r = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-af", f"{VOICED},volumedetect",
+    r = subprocess.run(["ffmpeg", "-nostdin", "-hide_banner", "-nostats", "-i", path, "-af", f"{VOICED},volumedetect",
                         "-f", "null", "-"], capture_output=True, text=True)
     return parse_volumedetect(r.stderr)
 
 
 def rms_windows(path, win=0.15):
     n = int(44100 * win)
-    r = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-af",
+    r = subprocess.run(["ffmpeg", "-nostdin", "-hide_banner", "-nostats", "-i", path, "-af",
                         f"aresample=44100,asetnsamples=n={n}:p=0,astats=metadata=1:reset=1,"
                         "ametadata=print:key=lavfi.astats.Overall.RMS_level",
                         "-f", "null", "-"], capture_output=True, text=True)
@@ -60,7 +60,7 @@ def rms_windows(path, win=0.15):
 def apply_gain(src, dst, gain_db):
     tmp = dst + ".part.mp3"
     try:
-        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", src, "-af",
+        subprocess.run(["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", src, "-af",
                         f"volume={gain_db:.2f}dB,alimiter=limit=0.891:level=false", "-ar", "44100", "-b:a", "160k", tmp],
                        check=True)
     except subprocess.CalledProcessError:

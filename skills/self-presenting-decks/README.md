@@ -27,10 +27,10 @@ deck (pptx) ──▶ narration (audio + autoplay pptx) ──▶ video (mp4)
 
 | Stage | Skill | Output |
 |---|---|---|
-| 0. Intake | — | ElevenLabs voice ID + `ELEVENLABS_API_KEY` (env var, never echoed); language and register choices |
+| 0. Intake | — | Where it will be watched (PowerPoint, Google Slides, video), voice, language and register |
 | 1. Build/edit the deck | Anthropic's `pptx` skill (pptxgenjs or template editing); [presentation-generator](../presentation-generator) for AI-image decks | `deck.pptx` — the clean copy, keep it |
 | 2. Validate rendering | [office-render](../office-render) — real PowerPoint → PDF → images | Layout proof, **and the PDF the video will reuse** |
-| 3. Narrate | [narrating-pptx](../narrating-pptx) — scripts → human approval → TTS via [elevenlabs-tts](../elevenlabs-tts) → embed → PowerPoint-authored autoplay → validation | `narration/scripts.json`, `narration/slideNN.mp3`, `deck-narrated.pptx` |
+| 3. Narrate | [narrating-pptx](../narrating-pptx) — scripts → human approval → TTS via [elevenlabs-tts](../elevenlabs-tts) → embed → PowerPoint-authored autoplay → validation, or autoplaying Drive videos on a Google Slides copy | `narration/scripts.json`, `narration/slideNN.mp3`, `deck-narrated.pptx` and/or narrated Google Slides |
 | 4. Video | [deck-to-video](../deck-to-video) — the stage-2 clean PDF + the same mp3s | `deck.mp4` |
 
 Keep `narration/` and every artifact as siblings next to the deck.
@@ -61,15 +61,16 @@ Ask for the outcome, not the stage:
 - "make my deck self-presenting"
 - "the pace is too slow — fix it and rebuild everything"
 
-## Three artifacts, three audiences
+## The artifacts, and who each is for
 
 | Artifact | For | Note |
 |---|---|---|
-| **Clean pptx** | Live presenting | A human talks over it |
+| **Clean pptx** | Live presenting | A human talks over it; also the source of any Google Slides copy |
 | **Narrated pptx** | Guided self-review | Viewer can linger, skip, re-listen per slide |
+| **Narrated Google Slides** | The same, in the browser | One autoplaying Drive video per slide; viewers need access to that folder |
 | **mp4** | Zero-friction async sharing | Plays anywhere, but forces the narration's pace |
 
-Never ship *only* the mp4 to someone who needs to study the content. Name all three as siblings (`Deck.pptx`, `Deck_Narrated.pptx`, `Deck.mp4`) so nobody presents the narrated copy live by accident.
+Build what the destination needs rather than all of them by default. Never ship *only* the mp4 to someone who needs to study the content. Name the files as siblings (`Deck.pptx`, `Deck_Narrated.pptx`, `Deck.mp4`) so nobody presents the narrated copy live by accident.
 
 ## The update matrix
 
@@ -78,6 +79,8 @@ Never ship *only* the mp4 to someone who needs to study the content. Name all th
 | Slide content / visuals | Deck → re-render the **whole** PDF (PDFs aren't patchable per page) → **re-check affected narration scripts** (they reference what's visible) → regenerate only changed clips → re-embed + autoplay → video |
 | Narration text only | The changed clips → re-embed + autoplay pptx → video |
 | Narration pace ("too slow") | `ffmpeg -filter:a atempo=1.1` on the mp3s (pitch-preserving, no TTS cost) → re-embed → video |
+| A slide inserted or deleted | `renumber_slides.py` → generate only the new slide's clip → re-embed / re-insert → video |
+| Deck re-synced to Google Slides | The sync wipes the narration videos → `gslides_narration.py insert`, then `check` |
 | Video overlay only (bar, counter) | Video only — pptx artifacts untouched |
 
 ## Choosing the entry point

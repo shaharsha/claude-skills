@@ -1,8 +1,8 @@
 # ElevenLabs API — the parts beyond one-clip TTS
 
-Read this when the task needs multiple voices in one clip, real-time/streaming speech, Studio projects, pronunciation dictionaries, a non-mp3 output, or cost/concurrency planning. Facts as of 2026-10-02; v4 is "under active, continuous development" and ElevenLabs recommends periodic re-testing.
+Read this when the task needs multiple voices in one clip, real-time/streaming speech, Studio projects, pronunciation dictionaries, a non-mp3 output, or cost/concurrency planning. Facts as of 2026-10-02, re-checked against the docs and changelog on 2026-11-06; v4 is "under active, continuous development" and ElevenLabs recommends periodic re-testing.
 
-Sources: [models](https://elevenlabs.io/docs/overview/models) · [v4](https://elevenlabs.io/docs/overview/capabilities/text-to-speech/eleven-v4) · [OpenAPI](https://api.elevenlabs.io/openapi.json) · [changelog 2026-09-28](https://elevenlabs.io/docs/changelog/2026/9/28) · [request stitching](https://elevenlabs.io/docs/eleven-api/guides/how-to/text-to-speech/request-stitching) · [Text to Dialogue](https://elevenlabs.io/docs/overview/capabilities/text-to-dialogue) · [WebSockets](https://elevenlabs.io/docs/eleven-api/guides/how-to/websockets/tts-vs-ttd-websockets) · [forced alignment](https://elevenlabs.io/docs/overview/capabilities/forced-alignment) · [API pricing](https://elevenlabs.io/pricing/api)
+Sources: [models](https://elevenlabs.io/docs/overview/models) · [v4](https://elevenlabs.io/docs/overview/capabilities/text-to-speech/eleven-v4) · [OpenAPI](https://api.elevenlabs.io/openapi.json) · [changelog 2026-09-28](https://elevenlabs.io/docs/changelog/2026/9/28) · [request stitching](https://elevenlabs.io/docs/eleven-api/guides/how-to/text-to-speech/request-stitching) · [Text to Dialogue](https://elevenlabs.io/docs/overview/capabilities/text-to-dialogue) · [WebSockets](https://elevenlabs.io/docs/eleven-api/guides/how-to/websockets/tts-vs-ttd-websockets) · [forced alignment](https://elevenlabs.io/docs/overview/capabilities/forced-alignment) · [API pricing](https://elevenlabs.io/pricing/api) · [changelog 2026-10-26](https://elevenlabs.io/docs/changelog/2026/10/26) · [changelog 2026-11-02](https://elevenlabs.io/docs/changelog/2026/11/2)
 
 ## Contents
 1. Full TTS request schema
@@ -28,6 +28,7 @@ Sources: [models](https://elevenlabs.io/docs/overview/models) · [v4](https://el
 | `model_id` | **the endpoint default is still `eleven_multilingual_v2`** — always send it |
 | `voice_settings.stability` | 0–1, default 0.5. Continuous on v4 (0.3 verified accepted) |
 | `voice_settings.similarity_boost` | 0–1, default 0.75. Honoured on v4 (v3 ignored it) |
+| `voice_settings.clone_strength` | 0–1, added 2026-10-26, for professional clones (docs suggest 0). Omitted: the voice's saved clone strength is used |
 | `voice_settings.style`, `.speed`, `.use_speaker_boost` | accepted by the schema, **not part of v4's controls** ("Style and Speed sliders are not available") — third-party tests with a fixed seed found speed/style ignored. Don't rely on them |
 | `seed` | 0–4294967295, best-effort determinism |
 | `language_code` | ISO 639-1; enforces language + normalization. Unsupported codes are ignored, not rejected |
@@ -35,7 +36,8 @@ Sources: [models](https://elevenlabs.io/docs/overview/models) · [v4](https://el
 | `previous_text`, `next_text` | continuity hints (text form) |
 | `previous_request_ids`, `next_request_ids` | ≤3 each; win over the `_text` forms |
 | `pronunciation_dictionary_locators` | ≤3 |
-| `use_pvc_as_ivc` | un-deprecated 2026-09-28 |
+| `use_pvc_as_ivc` | un-deprecated 2026-09-28; on Text to Dialogue it is deprecated again in favour of `clone_strength` (2026-10-26) |
+| `audio_effects` | optional, added 2026-10-12, no extra cost: filter, reverb, background noise, pan (catalog: `GET /v1/audio-effects/catalog`). Reverb and non-zero pan are rejected for `ulaw_*`, `alaw_*` and `pcm_*` outputs. Leave it off narration that will be force-aligned or mixed later |
 
 No SSML on v4 — `<break>`, `<phoneme>`, `<emphasis>` are dropped or disabled.
 
@@ -62,12 +64,12 @@ Median ~100 ms inference, ~150 ms to first speech over WebSocket. **The TTS WebS
 
 ## 6. Studio projects
 
-Studio supports v4, but **its default model is still Multilingual v2** — set `default_model_id`. Limits: 500 chapters/project, 400 paragraphs/chapter, 5,000 chars/paragraph. Changing a project's model does not regenerate existing audio. `project_voice_ref_id` replaced `voice_id` (2026-06-15); `quality_preset` may be `null` (= best for the tier).
+Studio supports v4 and recommends it since 2026-11-02, but **its default model is still Multilingual v2** — set `default_model_id`. Limits: 500 chapters/project, 400 paragraphs/chapter, 5,000 chars/paragraph. Changing a project's model does not regenerate existing audio. `project_voice_ref_id` replaced `voice_id` (2026-06-15); `quality_preset` may be `null` (= best for the tier).
 
 ## 7. Pronunciation
 
 - **IPA inline (v4):** wrap the transcription in slashes inside double quotes: `The term "/ˌbaɪoʊˈkemɪstri/" refers to…`. Include stress marks, use selectively, regenerate a few times — results vary by voice.
-- **Dictionaries:** PLS or TXT, alias or phoneme rules, case-sensitive, first match wins; ≤3 per request.
+- **Dictionaries:** PLS or TXT, alias or phoneme rules (phoneme rules only on Flash v2, so use alias rules on v4), case-sensitive, first match wins; ≤3 per request. Since 2026-11-02 an expansion beyond 50× the input length plus 10,000 characters returns 400 `pronunciation_dictionary_expansion_too_large`.
 - `<phoneme>` SSML works only on `eleven_flash_v2` — not v4.
 
 ## 8. Output formats
@@ -76,22 +78,23 @@ Studio supports v4, but **its default model is still Multilingual v2** — set `
 
 ## 9. Concurrency and 429s
 
-HTTP concurrency (models page, no separate v4 column): Free 2 · Starter 3 · Creator 5 · Pro 10 · Scale 15 · Business 15 (pricing page says 25). Response headers `current-concurrent-requests` / `maximum-concurrent-requests` tell you where you are. A 429 is concurrency, not quota — back off and retry; `--concurrency 4` suits Creator.
+HTTP concurrency (models page, no separate v4 column): Free 2 · Starter 3 · Creator 5 · Pro 10 · Scale 15 · Business 15 (pricing page says 25). Response headers `current-concurrent-requests` / `maximum-concurrent-requests` tell you where you are. A 429 is concurrency, not quota — back off and retry; `--concurrency 4` suits Creator. Since 2026-10-26 the limit is enforced per workspace group across TTS, Voice Changer, Music and Dubbing, so two sessions generating at once share it. `max_characters_request_*` in `GET /v1/models` is deprecated; read `maximum_text_length_per_request`.
 
 ## 10. Pricing (per 1,000 chars, API)
 
 | Model | Price |
 |---|---|
-| `eleven_v4` | $0.022 **until 2026-10-12** (72% launch discount), list $0.08 |
-| `eleven_v4_turbo` | $0.011 until 2026-10-12, list $0.04 |
+| `eleven_v4` | $0.08 (the 72% launch discount ended 2026-10-12) |
+| `eleven_v4_turbo` | $0.04 |
 | `eleven_v3`, Multilingual v2 | $0.08 |
 
-Tags count as characters. At list price v4 = v3, so there is no cost reason to stay on v3.
+Tags count as characters, and since 2026-10-26 a request under one credit is billed as one. v4 = v3 in price, so there is no cost reason to stay on v3. Subscription plans include a monthly character allowance and bill overage beyond it.
 
 ## 11. Voices: clones, library, design
 
 - Every Voice Library voice works on v4 (17,500+).
-- **Your own** IVCs/PVCs made before 2026-09-28 should be retrained on v4 (My Voices → hover → "+" next to Eleven v4). A retrained clone "may sound quite different from its v3 version", and v4 reproduces recording flaws more faithfully.
+- **Instant clones (IVC)** need no training for v4. **Professional clones (PVC)** need v4 fine-tuning (My Voices → hover → "+" next to Eleven v4; open to all workspaces since 2026-11-02). A fine-tuned clone "may sound quite different from its v3 version", and v4 reproduces recording flaws more faithfully.
+- Speech-to-speech is now **Voice Changer**, `POST /v1/voice-changer/{voice_id}` (2026-10-26); the old `/v1/speech-to-speech` paths still work but are deprecated. It has no v4 model.
 - Voice Design has no v4 model (`eleven_multilingual_ttv_v2`, `eleven_ttv_v3`); designed voices work on v4 but "may be less performative".
 
 ## 12. SDK

@@ -1,6 +1,6 @@
 # elevenlabs-tts
 
-Script → speech with ElevenLabs **Eleven v4**, in any language (Hebrew, English, mixed): directing the performance with v4 audio tags, generating a consistent batch of clips, checking that no tag was read aloud — without ears — and getting trustworthy word timings for subtitles and synced animation.
+Script → speech with ElevenLabs **Eleven v4**, in any language (Hebrew, English, mixed): short spoken briefings ("make me an MP3 explaining this"), directing the performance with v4 audio tags, generating a consistent batch of clips, checking that no tag was read aloud — without ears — and getting trustworthy word timings for subtitles and synced animation.
 
 Part of [shaharsha/claude-skills](../..). MIT.
 
@@ -16,6 +16,8 @@ Eleven v4 (released 2026-09-28) moves all delivery control into the text. There 
 - **The endpoint's default model is still Multilingual v2.** Forget `model_id` and your tags are ignored.
 - **A tag stripper written for v3 silently breaks on v4.** `\[[a-zA-Z ]+\]` doesn't match `[Pause, dry amusement]`, so the tag reaches the forced aligner and every subtitle after it drifts.
 - **`/with-timestamps` returns the tags too**, and each tag's characters hold the time of the pause or reaction it caused.
+
+Most real use turned out not to be decks at all but **spoken briefings**: one listener, one file, a plan or a set of decisions explained in a minute or two. Every session that made one rebuilt the same pieces by hand: loading the key, joining sections into one file (an ffmpeg call that hung in an agent shell), and getting the file to the listener as something that plays. The skill now has a recipe for that, and `join_clips.py`.
 
 And one thing that hasn't changed: the agent can't hear the result. The skill splits verification into what a machine can check (a speech-to-text pass that catches tags spoken aloud, durations, alignment length) and what it hands to a human with an explicit "I have not listened to this".
 
@@ -49,7 +51,7 @@ ln -s "$PWD/claude-skills/skills/elevenlabs-tts" ~/.claude/skills/elevenlabs-tts
 
 ## Requirements
 
-- `ELEVENLABS_API_KEY` as an env var, never pasted into output. The key needs Text to Speech; the leak check and alignment also use Speech to Text; music and sound effects need their own permissions on the key.
+- An API key in `ELEVENLABS_API_KEY` or in `~/.config/elevenlabs/api_key` (chmod 600), never pasted into output. The key needs Text to Speech; the leak check and alignment also use Speech to Text; music and sound effects need their own permissions on the key.
 - A voice ID
 - Python 3. The scripts use only the standard library.
 - ffmpeg and ffprobe (the trim, level, A/B and music scripts need them; `afinfo` on macOS also gives durations)
@@ -57,7 +59,14 @@ ln -s "$PWD/claude-skills/skills/elevenlabs-tts" ~/.claude/skills/elevenlabs-tts
 ## Quick start
 
 ```bash
-export ELEVENLABS_API_KEY=...
+# a spoken briefing: one clip named after its topic, checked, ready to send
+#   brief.json: {"rollout-plan-2026-11-06-en": "[Warm, conversational tone] Three decisions today…"}
+python3 scripts/generate_tts.py brief.json VOICE_ID audio/ --prefix ""
+python3 scripts/check_tags_spoken.py brief.json audio/
+
+# several sections joined into one file, with each section's start time printed
+python3 scripts/join_clips.py plan.mp3 audio/part*.mp3 --gap 0.8
+
 # scripts.json: {"01": "[Warm, conversational tone] Text…", "02": "…"}
 
 # 1. sample one representative clip, check it, let a human listen / pick stability
@@ -85,8 +94,9 @@ python3 scripts/generate_music_and_sfx.py sounds.json audio/
 
 | Script | What it does |
 |---|---|
-| `generate_tts.py` | One clip per `scripts.json` entry; parallel with 429 backoff; validates responses are real mp3 (not error JSON); refuses over-limit scripts per model; `--seed`, `--language-code`, `--stitch` (request stitching); writes `_manifest.json` and warns when a directory mixes settings |
-| `check_tags_spoken.py` | Transcribes clips with Scribe and flags `LEAK` (a tag word was spoken) or `EXTRA` (transcript longer than the tag-free script — catches a tag spoken in another alphabet) |
+| `generate_tts.py` | One clip per `scripts.json` entry; parallel with 429 backoff; validates responses are real mp3 (not error JSON); refuses over-limit scripts per model; `--seed`, `--language-code`, `--stitch` (request stitching); prints each clip's length and pace and flags an outlier; writes `_manifest.json` (file names and settings) and warns when a directory mixes settings |
+| `join_clips.py` | Joins clips into one mp3 with a pause between them, resampling everything to one format; prints each clip's start time; `-nostdin` and a timeout so it can't hang |
+| `check_tags_spoken.py` | Transcribes clips with Scribe and flags `LEAK` (a tag word was spoken), `EXTRA` (transcript longer than the tag-free script — catches a tag spoken in another alphabet) or `SHORT` (much shorter, even allowing for numbers written as digits); finds clips through the manifest |
 | `align_narration.py` | Forced alignment against the tag-stripped script; verifies `len(characters) == len(text)` so character offsets map to timestamps |
 | `trim_to_words.py` | Cuts short clips to the first-to-last aligned word (lead 0.04 s, tail 0.14 s, short fades); drops a repeated word or a stray sigh; never touches the originals |
 | `level_clips.py` | Levels clips to one **voiced** loudness (silence excluded) with a limiter; `--report` lists 150 ms windows where a word sagged |
@@ -113,10 +123,12 @@ python3 scripts/generate_music_and_sfx.py sounds.json audio/
 | Regenerating a few clips at new settings | Audible seam | Regenerate the set; the manifest warns |
 | Size-based error check | Short real clips rejected and re-billed | Check mp3 magic bytes |
 | "It sounds right" | You can't hear | Leak check + durations + a human ear-check |
+| ffmpeg from an agent shell without `-nostdin` | Hangs on stdin | `-nostdin`; the bundled scripts set it |
+| A briefing left in `/tmp` as a path | The listener can't play it | Save beside the work; send it as a playable file |
 
 ## Related skills
 
-- [narrating-pptx](../narrating-pptx) — embeds these clips one per slide into a pptx with PowerPoint-authored autoplay.
+- [narrating-pptx](../narrating-pptx) — puts these clips one per slide on a deck: a pptx with PowerPoint-authored autoplay, or Google Slides.
 - [deck-to-video](../deck-to-video) — builds an mp4 from the same clips and uses `alignment/` for subtitles and highlights.
 - [self-presenting-decks](../self-presenting-decks) — the deck → narration → video map.
 

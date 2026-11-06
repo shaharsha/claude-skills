@@ -104,7 +104,7 @@ One page often has trailing whitespace — crop to content before placing it els
 - **`.xlsx` → PDF:** `osascript`: `save active workbook in PDF as PDF file format` — best-effort; spreadsheets paginate awkwardly, so set a print area in the file for clean output.
 - **PDF → images:** `pdftoppm -jpeg -r 150`.
 
-The script copies the input into `~/Downloads/.office-render`, quits the target app for a clean state, converts there, then moves the PDF to `--out` and renders it. On failure it reports the exact fix — usually a missing Automation permission.
+The script copies the input into `~/Downloads/.office-render`, quits the target app for a clean state (it stops instead if the app has documents open, unless `--force-quit`), converts there, then moves the PDF to `--out` and renders it. On failure it reports the exact fix — usually a missing Automation permission.
 
 ## Related skills
 

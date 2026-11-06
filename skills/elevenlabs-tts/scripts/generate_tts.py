@@ -2,19 +2,30 @@
 """Generate one ElevenLabs clip per script entry, in parallel and 429-safe.
 
 Usage:
-  ELEVENLABS_API_KEY=... python3 generate_tts.py scripts.json VOICE_ID outdir/
+  python3 generate_tts.py scripts.json VOICE_ID outdir/
       [--model eleven_v4] [--stability 0.5] [--similarity 0.75] [--seed N]
-      [--language-code he] [--concurrency 4] [--stitch] [--prefix slide]
+      [--language-code he] [--concurrency 4] [--stitch] [--prefix slide] [--only 03 07]
 
 scripts.json: {"01": "text...", "02": "text...", ...}  ->  outdir/<prefix><KEY>.mp3
 Texts may contain audio tags: [warm], [pause], [Warm, conversational tone].
+For one named file, use a descriptive key and an empty prefix:
+  {"rollout-plan-2026-11-05-he": "..."} --prefix ""  ->  outdir/rollout-plan-2026-11-05-he.mp3
 
-Writes outdir/_manifest.json recording the model and settings of every clip, so a
-batch that mixes stabilities (audible) or models can be spotted after the fact.
-Never prints the API key.
+The key comes from ELEVENLABS_API_KEY, else ~/.config/elevenlabs/api_key. Never printed.
+
+Prints each clip's length and speaking pace (spoken characters per second). A clip
+whose pace is far from the rest of the batch may have dropped or repeated words:
+listen to it, or run check_tags_spoken.py on it.
+
+Writes outdir/_manifest.json recording the file name, model and settings of every
+clip, so a batch that mixes stabilities (audible) or models can be spotted after the
+fact, and the checker and aligner find the files without being told --prefix again.
 """
-import argparse, json, os, sys, time, urllib.request, urllib.error
+import argparse, json, os, statistics, sys, time, urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from el_common import MP3_128_BYTES_PER_SECOND, api_key, mmss, spoken_chars
 
 # Per-request character caps. Unknown models fall back to the conservative 5,000.
 CHAR_LIMITS = {"eleven_v4": 10_000, "eleven_v3": 5_000}
@@ -54,7 +65,9 @@ def tts(key, voice, clip_id, text, a, previous_ids=None):
             if not is_mp3(data):
                 raise RuntimeError(f"response is not mp3 ({len(data)}B): {data[:120]!r}")
             open(path, "wb").write(data)
-            return clip_id, True, f"OK {len(data)}B", rid
+            secs = len(data) / MP3_128_BYTES_PER_SECOND
+            pace = spoken_chars(text) / max(secs, 0.1)
+            return clip_id, True, f"OK {mmss(secs)} ({secs:.1f}s, {pace:.1f} chars/s)", rid
         except urllib.error.HTTPError as e:
             if e.code == 429 or e.code >= 500:  # concurrency limit / transient
                 time.sleep(4 * (attempt + 1)); continue
@@ -64,6 +77,19 @@ def tts(key, voice, clip_id, text, a, previous_ids=None):
                 time.sleep(3); continue
             return clip_id, False, f"FAILED {e}", None
     return clip_id, False, "FAILED after retries (429/5xx)", None
+
+
+def pace_outliers(entries, tolerance=0.3):
+    """Keys whose spoken chars/second is more than `tolerance` away from the batch median.
+
+    Needs 3+ clips to have a median worth comparing to. Tag-heavy clips with long
+    performed pauses run slower, so this is a prompt to listen, not a failure.
+    """
+    paces = {k: e["chars"] / e["seconds"] for k, e in entries.items() if e.get("seconds")}
+    if len(paces) < 3:
+        return []
+    med = statistics.median(paces.values())
+    return sorted(k for k, p in paces.items() if abs(p - med) > tolerance * med)
 
 
 def main():
@@ -86,15 +112,20 @@ def main():
                          "(previous_request_ids) for smoother prosody across clips. Slower; "
                          "ids expire after 2 hours")
     ap.add_argument("--prefix", default="slide", help="output filename prefix (default: slide)")
+    ap.add_argument("--only", nargs="+", metavar="KEY",
+                    help="generate just these keys (changed slides), keeping the rest of the set and its manifest")
     a = ap.parse_args()
 
-    key = os.environ.get("ELEVENLABS_API_KEY")
-    if not key:
-        ap.error("set ELEVENLABS_API_KEY env var (never paste the key into commands/output)")
+    key = api_key()
     if not 0 <= a.stability <= 1 or not 0 <= a.similarity <= 1:
         ap.error("--stability and --similarity must be between 0 and 1")
 
     scripts = json.load(open(a.scripts))
+    if a.only:
+        unknown = sorted(set(a.only) - set(scripts))
+        if unknown:
+            ap.error(f"--only keys not in {a.scripts}: {unknown}")
+        scripts = {k: scripts[k] for k in a.only}
     limit = CHAR_LIMITS.get(a.model, 5_000)
     too_long = {k: len(v) for k, v in scripts.items() if len(v) > limit}
     if too_long:
@@ -121,15 +152,30 @@ def main():
     manifest_path = os.path.join(a.outdir, "_manifest.json")
     manifest = json.load(open(manifest_path)) if os.path.exists(manifest_path) else {}
     for k, (_, ok, _, rid) in results.items():
+        old_file = (manifest.get(k) or {}).get("file")
+        if ok and old_file and old_file != f"{a.prefix}{k}.mp3":
+            print(f"WARNING: key {k} was {old_file}, now {a.prefix}{k}.mp3 - keep one set per audio "
+                  "directory, or the checker and aligner will pick the wrong file", file=sys.stderr)
         if ok:
-            manifest[k] = {"model": a.model, "stability": a.stability, "similarity": a.similarity,
-                           "seed": a.seed, "voice": a.voice, "request_id": rid,
+            size = os.path.getsize(os.path.join(a.outdir, f"{a.prefix}{k}.mp3"))
+            manifest[k] = {"file": f"{a.prefix}{k}.mp3", "model": a.model, "stability": a.stability,
+                           "similarity": a.similarity, "seed": a.seed, "voice": a.voice,
+                           "language_code": a.language_code, "request_id": rid,
+                           "chars": spoken_chars(scripts[k]),
+                           "seconds": round(size / MP3_128_BYTES_PER_SECOND, 1),
                            "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
     json.dump(manifest, open(manifest_path, "w"), indent=1, sort_keys=True)
     mixed = {(m["model"], m["stability"], m["voice"]) for m in manifest.values()}
     if len(mixed) > 1:
         print(f"\nWARNING: outdir now mixes settings {sorted(mixed)} - audible across clips; "
               "regenerate all clips at one setting", file=sys.stderr)
+
+    for k in pace_outliers({k: manifest[k] for k, r in results.items() if r[1]}):
+        print(f"PACE? {a.prefix}{k}: {manifest[k]['chars'] / manifest[k]['seconds']:.1f} chars/s is far "
+              "from this batch's median - listen for dropped or repeated words", file=sys.stderr)
+    done = [manifest[k]["seconds"] for k, r in results.items() if r[1]]
+    if done:
+        print(f"\n{len(done)} clip(s), {mmss(sum(done))} of audio in total")
 
     failures = [k for k, r in results.items() if not r[1]]
     if failures:

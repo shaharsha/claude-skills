@@ -88,3 +88,8 @@ The script copies the input into `~/Downloads/.office-render`, quits the target
 app for a clean state, converts **there** (so the sandbox never prompts), then
 moves the PDF to `--out` and renders it. If the convert fails it reports the
 exact fix (usually a missing Automation permission).
+
+**It will not quit an app that has documents open.** Quitting runs `quit saving no`, which
+would throw away the user's unsaved work in any deck or document they have open. If the
+app has documents open (or won't say how many), the script stops and says so: ask the user
+to save and close them, or pass `--force-quit` only when losing unsaved changes is acceptable.

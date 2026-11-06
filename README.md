@@ -50,8 +50,8 @@ Each links to its own README — what it does, why it exists, install, and the g
 | [gslides-sync](skills/gslides-sync) | The same shape for `.pptx` → an existing Google Slides: native `pageObjectId` links, scaled images, RTL per text shape. |
 | [gsheets](skills/gsheets) | Full Sheets API v4 CLI — cells, tabs, freeze/resize/merge, header styling, filters, banding, conditional formatting, plus a raw `batchUpdate` escape hatch. |
 | [presentation-generator](skills/presentation-generator) | 16:9 PDF + PPTX decks where every slide is a custom AI-rendered image. Style locks globally; composition varies per slide. |
-| [elevenlabs-tts](skills/elevenlabs-tts) | Speech with ElevenLabs Eleven v4 in any language — v4 audio-tag direction, consistent 429-safe batches, a speech-to-text check that no tag was read aloud, and forced-alignment timings for subtitles. |
-| [narrating-pptx](skills/narrating-pptx) | Per-slide ElevenLabs narration embedded in a pptx, with autoplay authored by real PowerPoint — the one method that doesn't corrupt the file. |
+| [elevenlabs-tts](skills/elevenlabs-tts) | Speech with ElevenLabs Eleven v4 in any language — short spoken briefings ("explain this to me as an MP3"), v4 audio-tag direction, consistent 429-safe batches, a speech-to-text check that no tag was read aloud, and forced-alignment timings for subtitles. |
+| [narrating-pptx](skills/narrating-pptx) | Per-slide ElevenLabs narration embedded in a pptx, with autoplay authored by real PowerPoint — the one method that doesn't corrupt the file — or added to a Google Slides deck as autoplaying Drive videos. |
 | [deck-to-video](skills/deck-to-video) | Slides + narration → a self-playing mp4 with a progress bar, countdown, and slide counter, baked with PIL because ffmpeg's animated `drawbox` silently renders full. |
 | [self-presenting-decks](skills/self-presenting-decks) | The orchestration map over the whole chain, plus the update matrix for what to rebuild when something changes. |
 

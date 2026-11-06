@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Catch audio tags that were read aloud instead of performed - without ears.
 
-  ELEVENLABS_API_KEY=... python3 check_tags_spoken.py scripts.json audio/ [--prefix slide]
+  python3 check_tags_spoken.py scripts.json audio/ [--only 03 07] [--language-code he]
 
 Transcribes each clip with ElevenLabs Scribe (scribe_v2) and flags a clip when
   LEAK   a word from its tags shows up in the transcript more often than the
@@ -10,7 +10,15 @@ Transcribes each clip with ElevenLabs Scribe (scribe_v2) and flags a clip when
   EXTRA  the transcript runs noticeably longer than the tag-stripped script -
          the tell when a tag was spoken but transcribed in another script
          (an English tag inside Hebrew speech can come back as Hebrew letters).
-Exits non-zero if any clip is flagged. Costs speech-to-text credits per minute of
+  SHORT  the transcript has far fewer words than the script - a sentence may
+         have been dropped.
+"words said/scripted" sits around 0.92-1.01 on a clean clip. Scribe writes spoken
+numbers as digits ("eight hundred and eighty" -> "880"), so a number-heavy clip
+reads low (0.75-0.87 seen on Hebrew decks). Each run of digits counts as one word
+in the printed ratio and as up to three spoken words before SHORT is decided, and
+the script notes the digits instead of flagging them.
+Clips are found through audio/_manifest.json, so the --prefix given to
+generate_tts.py need not be repeated. Exits non-zero if any clip is flagged. Costs speech-to-text credits per minute of
 audio - small next to regenerating a deck, but run it on samples, not on every draft.
 
 This checks *spoken vs performed* only. Whether the performance is the right one
@@ -18,6 +26,9 @@ This checks *spoken vs performed* only. Whether the performance is the right one
 """
 import argparse, json, os, re, sys, urllib.error, urllib.request
 from concurrent.futures import ThreadPoolExecutor
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from el_common import api_key, clip_path
 
 TAG = re.compile(r"\[[^\[\]\n]*\]")
 WORD = re.compile(r"[^\W\d_]+", re.UNICODE)
@@ -52,31 +63,47 @@ def transcribe(mp3, key, language_code=None, retries=3):
     raise RuntimeError("transcription failed")
 
 
-def check(script, transcript, extra_ratio):
+def check(script, transcript, extra_ratio, short_ratio=0.7):
+    """(leaks, ratio, status, note). status is LEAK, EXTRA, SHORT or ok."""
     spoken_script = TAG.sub(" ", script)
     tag_words = {w for t in TAG.findall(script) for w in words(t) if len(w) >= 3 and w not in STOP}
     said, meant = words(transcript), words(spoken_script)
     leaks = sorted(w for w in tag_words if said.count(w) > meant.count(w))
-    ratio = len(said) / max(1, len(meant))
-    return leaks, ratio, ratio > extra_ratio
+    digit_runs = len(re.findall(r"\d+(?:[.,]\d+)*", transcript))
+    ratio = (len(said) + digit_runs) / max(1, len(meant))
+    # a written number stands for several spoken words; allow three each before calling it short
+    generous = (len(said) + 3 * digit_runs) / max(1, len(meant))
+    note = ""
+    if leaks:
+        status = "LEAK"
+    elif ratio > extra_ratio:
+        status = "EXTRA"
+    elif generous < short_ratio:
+        status = "SHORT"
+    else:
+        status = "ok"
+        if ratio < 0.9 and digit_runs:
+            note = " (transcript writes numbers as digits - a lowish ratio is expected)"
+    return leaks, ratio, status, note
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("scripts"); ap.add_argument("audio_dir")
-    ap.add_argument("--prefix", default="slide")
+    ap.add_argument("--prefix", default=None,
+                    help="clip filename prefix; default: the file names in audio/_manifest.json, else slide")
     ap.add_argument("--language-code", default=None, help="ISO code hint for Scribe, e.g. he")
     ap.add_argument("--extra-ratio", type=float, default=1.15,
                     help="flag when transcript words / script words exceeds this")
     ap.add_argument("--only", nargs="*", help="check just these keys (e.g. a one-slide sample)")
     ap.add_argument("--concurrency", type=int, default=3)
     a = ap.parse_args()
-    key = os.environ.get("ELEVENLABS_API_KEY") or sys.exit("ELEVENLABS_API_KEY not set")
+    key = api_key()
     scripts = json.load(open(a.scripts))
     keys = sorted(a.only or scripts)
 
     def one(k):
-        mp3 = os.path.join(a.audio_dir, f"{a.prefix}{k}.mp3")
+        mp3 = clip_path(a.audio_dir, k, a.prefix)
         if not os.path.exists(mp3):
             return k, None, f"MISSING {mp3}"
         text = transcribe(mp3, key, a.language_code)
@@ -86,18 +113,17 @@ def main():
     with ThreadPoolExecutor(max_workers=a.concurrency) as ex:
         for k, res, text in ex.map(one, keys):
             if res is None:
-                flagged.append(k); print(f"  {a.prefix}{k}: {text}"); continue
-            leaks, ratio, extra = res
-            status = "LEAK" if leaks else "EXTRA" if extra else "ok"
+                flagged.append(k); print(f"  {k}: {text}"); continue
+            leaks, ratio, status, note = res
             if status != "ok":
                 flagged.append(k)
-            detail = f" spoken tag words: {leaks}" if leaks else ""
-            print(f"  {a.prefix}{k}: {status:5} words said/scripted={ratio:.2f}{detail}", flush=True)
+            detail = f" spoken tag words: {leaks}" if leaks else note
+            print(f"  {k}: {status:5} words said/scripted={ratio:.2f}{detail}", flush=True)
             if status != "ok":
                 print(f"      transcript: {text[:300]}")
     if flagged:
         sys.exit(f"\n{len(flagged)} clip(s) need an ear-check / regeneration: {flagged}")
-    print("\nno tag was read aloud in any checked clip")
+    print("\nno tag was read aloud, and no checked clip looks cut short")
 
 
 if __name__ == "__main__":

@@ -71,6 +71,7 @@ On success it prints one line per slide — each length **already includes the p
 | `--no-counter` | off | Drop the "N / M" slide counter |
 | `--bar-color HEX` | — | Progress-bar fill colour |
 | `--crf N` | `20` | x264 quality |
+| `--highlights FILE` | — | Glow the element being spoken about, in time with the voice; build the file with `scripts/make_highlights.py` from per-slide phrase markers, the deck's box geometry and the forced alignment |
 
 ## Getting the inputs right
 

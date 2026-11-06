@@ -1,6 +1,6 @@
 # narrating-pptx
 
-Turn any `.pptx` into a self-presenting deck: write presenter-style narration scripts in any language (Hebrew, English, mixed), generate one clip per slide with ElevenLabs (via [elevenlabs-tts](../elevenlabs-tts), on **Eleven v4**), embed the clips, and set autoplay-on-slide-entry through **real PowerPoint** — the one method that doesn't trigger the "found a problem / Repair" dialog.
+Turn any `.pptx` into a self-presenting deck: write presenter-style narration scripts in any language (Hebrew, English, mixed), generate one clip per slide with ElevenLabs (via [elevenlabs-tts](../elevenlabs-tts), on **Eleven v4**), embed the clips, and set autoplay-on-slide-entry through **real PowerPoint** — the one method that doesn't trigger the "found a problem / Repair" dialog. Or narrate a **Google Slides** deck, where the pptx's audio never survives the import, with one autoplaying Drive video per slide.
 
 Part of [shaharsha/claude-skills](../..). MIT.
 
@@ -19,6 +19,7 @@ Everything else here is the same shape — mistakes that each happened once and 
 - **AppleScript `presentation 1` edits the wrong deck.** PowerPoint's "reopen windows" resurrects stale decks that steal index 1. You save changes into a file you weren't looking at.
 - **Caption-length scripts get rejected by users.** ~200 chars per slide reads as a label, not a presentation. The voice *is* the presenter.
 - **Validating with LibreOffice proves nothing** — it tolerates XML that PowerPoint rejects.
+- **Google Slides drops a pptx's audio on every import.** The speaker icons survive, silent. Three separate sessions rebuilt the same workaround by hand — a short Drive video per slide, inserted with autoplay through the Slides API, re-inserted after each sync — and hit the same walls: an ffmpeg `-shortest` overshoot, a service account that can't create Drive files, and Drive still processing the videos. `gslides_narration.py` is that workaround, once.
 
 ## What it does
 
@@ -54,9 +55,8 @@ ln -s "$PWD/claude-skills/skills/narrating-pptx" ~/.claude/skills/narrating-pptx
 
 - **macOS + Microsoft PowerPoint** installed — required for the autoplay step, which has no substitute.
 - `python-pptx`
-- [elevenlabs-tts](../elevenlabs-tts) installed beside it — it generates the audio
-- `ELEVENLABS_API_KEY` as an env var (never pasted into output)
-- An ElevenLabs voice ID (elevenlabs-tts lists the defaults)
+- [elevenlabs-tts](../elevenlabs-tts) installed beside it — it generates the audio, and covers the key and the voice
+- For Google Slides: ffmpeg, `pip install google-auth`, and a service account with Editor on the deck and its Drive folder (the one [gslides-sync](../gslides-sync) uses)
 
 ## Quick start
 
@@ -65,7 +65,6 @@ ln -s "$PWD/claude-skills/skills/narrating-pptx" ~/.claude/skills/narrating-pptx
 #    {"01": "text…", "02": "text…"} — 1-based, zero-padded slide positions
 
 # 2. Generate speech with the elevenlabs-tts skill (parallel, 429-safe)
-export ELEVENLABS_API_KEY=...
 python3 ../elevenlabs-tts/scripts/generate_tts.py scripts.json VOICE_ID audio/ --model eleven_v4
 
 # 3. Embed one clip per slide
@@ -79,6 +78,18 @@ scripts/set_autoplay.sh "$HOME/Downloads/narrated.pptx" SLIDE_COUNT
 # 5. Validate — export through real PowerPoint; a clean PDF of all slides
 #    means no repair dialog. Then a human ear-tests slideshow mode once.
 ```
+
+**Google Slides instead** (push the *clean* pptx with gslides-sync first):
+
+```bash
+python3 scripts/gslides_narration.py videos audio/ videos/                                  # mp4 per clip, exact length
+python3 scripts/gslides_narration.py upload videos/ --folder FOLDER_ID --sa-key SA.json     # in-place after the first time
+python3 scripts/gslides_narration.py wait   videos/ --folder FOLDER_ID --sa-key SA.json
+python3 scripts/gslides_narration.py insert --pres PRES_ID --folder FOLDER_ID --sa-key SA.json   # re-run after every sync
+python3 scripts/gslides_narration.py check  --pres PRES_ID --folder FOLDER_ID --sa-key SA.json --videos videos/
+```
+
+**Slides inserted or deleted after narration:** `python3 scripts/renumber_slides.py scripts.json audio/ --insert 5` (a new slide 5, added after slide 4) shifts every later clip, script and manifest entry, so no audio lands on the wrong slide.
 
 ## Writing the scripts
 
@@ -122,10 +133,14 @@ Avoid AppleScript for geometry — its `top`/`left position` properties fight th
 | Validating with LibreOffice only | Misses PowerPoint-strict corruption | Export via real PowerPoint |
 | Icon ≤ 0.3 in | User can't hover → "no progress bar" | 0.5 in, bottom-right (the default) |
 | `shape_type == MEDIA` in python-pptx | Finds 0 audio shapes | Match `'audioFile' in sh._element.xml` |
+| Pushing the narrated pptx to Google Slides | Silent speaker icons on every slide | Push the clean pptx; `gslides_narration.py` |
+| `ffmpeg -loop 1 … -shortest` (still + audio) | Video runs 30–50% past its audio | `-t <audio seconds>` |
+| A script in the user's own voice written as the assistant talking to them | Sounds wrong in their voice | First person, as the user |
 
 ## Caveats
 
-- Autoplay survives PowerPoint desktop/365. **Google Slides import and LibreOffice are unreliable** with embedded-audio autoplay; PDF export drops audio entirely.
+- Autoplay survives PowerPoint desktop/365. **Google Slides import drops embedded audio every time** — use the Google Slides path; LibreOffice is unreliable with it; PDF export drops audio entirely.
+- Google Slides can't advance to the next slide when a clip ends, and viewers need access to the Drive folder holding the videos.
 - File grows ~0.3–1.5 MB per narrated minute (mp3 128 kbps).
 - Keep a clean, non-narrated copy — narration is a variant, not a replacement.
 - Deck edits after narration are fine; re-run the autoplay step only if you re-add media.
@@ -137,6 +152,7 @@ Avoid AppleScript for geometry — its `top`/`left position` properties fight th
 - [self-presenting-decks](../self-presenting-decks) — the orchestration map this is stage 3 of.
 - [deck-to-video](../deck-to-video) — reuses the same per-slide mp3s to build the mp4.
 - [office-render](../office-render) — the real-PowerPoint export used for validation.
+- [gslides-sync](../gslides-sync) — pushes the clean pptx to Google Slides before the narration videos go on.
 - [presentation-generator](../presentation-generator) — produces decks worth narrating.
 
 ## License
