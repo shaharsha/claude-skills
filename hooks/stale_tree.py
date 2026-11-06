@@ -74,7 +74,7 @@ the fetch age inside its bucket. The same 14 days under this rule: $29-45.
                 so the next call must stamp again. SessionStart carries no agent_id,
                 so the whole session's state goes, subagents included.
     fail-open   no session_id, state that cannot be read, written or locked, a run near
-                the hook's timeout, or two different answers in parallel calls ->
+                the hook's timeout, or a call inside a parallel batch ->
                 stamp, as before. Suppression is the optimisation; a stamp is the safe
                 default. Even with nothing changed, a conversation is re-stamped every
                 2 hours, which bounds what a missed reset can cost.
@@ -125,10 +125,12 @@ STATE_MAX_AGE = 7 * 86400  # --reset prunes other sessions' state older than thi
 BUDGET = 7.5
 SAVE_DEADLINE = 8.0
 # Parallel Bash calls land in context in MESSAGE order but run their hooks in TIME
-# order, so when two calls with different answers overlap, the state cannot know which
-# stamp is last in context. Two different answers this close together -> forget, and
-# let the next call stamp.
-OVERLAP_WINDOW = 5.0
+# order, so inside a parallel batch the state cannot know which stamp is last in
+# context. Every run records when it started; runs that started this close together
+# are one batch, and a batch stamps without saving a key, so the call after it stamps
+# the current answer. Sequential calls are further apart: the model has to read one
+# result before it writes the next call.
+BATCH_WINDOW = 2.0
 # Upper bound on silence: even with nothing changed, stamp again after this long. It
 # bounds what a missed --reset (hook not registered, cancelled, failed) can cost.
 MAX_SILENCE = 7200.0
@@ -295,7 +297,7 @@ def ref_age(gitdir, base):
         marked = None
     if marked is not None:
         try:
-            return min(marked, now - os.path.getmtime(os.path.join(gitdir, "refs", "remotes", base)))
+            return min(marked, now - os.path.getmtime(loose_ref(gitdir, base)))
         except OSError:
             return marked
     for p in (os.path.join(gitdir, "FETCH_HEAD"),):
@@ -306,13 +308,19 @@ def ref_age(gitdir, base):
     # Never fetched in this clone: fall back to the ref, and accept that the
     # number then means "last moved". Better than None, and a fresh clone's ref
     # was written at clone time, which IS when it was last checked.
-    loose = os.path.join(gitdir, "refs", "remotes", base)
-    for p in (loose, os.path.join(gitdir, "packed-refs")):
+    for p in (loose_ref(gitdir, base), os.path.join(gitdir, "packed-refs")):
         try:
             return time.time() - os.path.getmtime(p)
         except OSError:
             continue
     return None
+
+
+def loose_ref(gitdir, base):
+    """The loose ref file of `base`, whether it is written origin/main or refs/remotes/origin/main."""
+    if base.startswith("refs/"):
+        return os.path.join(gitdir, base)
+    return os.path.join(gitdir, "refs", "remotes", base)
 
 
 def human(sec):
@@ -354,19 +362,23 @@ def state_file(payload):
 
 
 def read_record(path):
+    """The conversation's record, or None. Anything unexpected reads as None."""
     try:
         with open(path) as fh:
             rec = json.load(fh)
-        return rec if isinstance(rec, dict) and isinstance(rec.get("at"), (int, float)) else None
-    except (OSError, ValueError):
+        starts = [t for t in rec.get("starts", []) if isinstance(t, (int, float))]
+        at = rec.get("at")
+        return {"key": rec.get("key"), "at": at if isinstance(at, (int, float)) else None,
+                "starts": starts}
+    except Exception:                    # OSError, bad JSON, RecursionError, wrong shape
         return None
 
 
-def save_record(path, key, now):
+def write_record(path, rec):
     try:
         tmp = f"{path}.{os.getpid()}.tmp"
         with open(tmp, "w") as fh:
-            json.dump({"key": key, "at": now}, fh)
+            json.dump(rec, fh)
         os.replace(tmp, path)             # atomic: a reader sees old or new
         return True
     except OSError:
@@ -374,8 +386,16 @@ def save_record(path, key, now):
 
 
 def forget(path):
+    """Make sure no key survives: unlink, else empty the file in place (reads as None)."""
     try:
         os.unlink(path)
+        return
+    except FileNotFoundError:
+        return
+    except OSError:
+        pass
+    try:
+        open(path, "w").close()           # needs only the file writable, not the dir
     except OSError:
         pass
 
@@ -399,36 +419,57 @@ def lock(path):
             time.sleep(0.02)
 
 
+_t0 = None                        # set by main(): wall-clock start of this run
+
+
+def register_start(path):
+    """Record this run's start, so a parallel batch can see itself. False if not recorded."""
+    fd = lock(path)
+    if fd is None:
+        return False
+    try:
+        rec = read_record(path) or {"key": None, "at": None, "starts": []}
+        rec["starts"] = [t for t in rec["starts"] if abs(_t0 - t) < 60] + [_t0]
+        return write_record(path, rec)
+    finally:
+        os.close(fd)                      # closing the descriptor releases the lock
+
+
 def stamp(payload, key, context):
     """
     Emit `context` unless the last stamp in this conversation had the same key.
 
-    ⚠️ The state must always describe the LAST stamp delivered, or be absent. So the
+    ⚠️ The state must always describe the LAST stamp delivered, or hold no key. So the
     new key is saved BEFORE the stamp is printed, and whenever that cannot be
-    guaranteed -- no lock, a save that failed or would land too close to the hook's
-    timeout, two different answers overlapping (see OVERLAP_WINDOW) -- the state is
-    forgotten instead. Silence needs all of: the lock, a record that reads back
-    intact with the same key, younger than MAX_SILENCE, in a directory this run
-    could also have written (so a reset that failed to delete cannot leave a key
-    that suppresses). Everything else stamps.
+    guaranteed the key is dropped instead: no lock, a start that was not recorded,
+    a run inside a parallel batch (BATCH_WINDOW), a save that failed or would land
+    too close to the hook's timeout. Silence needs all of: the lock, no batch, a
+    record that reads back intact with the same key, younger than MAX_SILENCE, in a
+    directory this run could also have written (so a reset that failed to delete
+    cannot leave a key that suppresses). Everything else stamps.
     """
     path = state_file(payload)
     if path is None:
         emit(context)
         return
-    fd = lock(path)
+    fd = lock(path) if _registered else None
     try:
         rec = read_record(path) if fd is not None else None
         now = time.time()
-        if (rec is not None and rec.get("key") == key and now - rec["at"] < MAX_SILENCE
-                and os.access(os.path.dirname(path), os.W_OK)):
+        batch = rec is None or any(t != _t0 and abs(t - _t0) < BATCH_WINDOW for t in rec["starts"])
+        if (not batch and rec["key"] == key and rec["at"] is not None
+                and now - rec["at"] < MAX_SILENCE and os.access(os.path.dirname(path), os.W_OK)):
             return
-        overlap = rec is not None and rec.get("key") != key and now - rec["at"] < OVERLAP_WINDOW
-        if fd is None or overlap or time.monotonic() >= _save_by or not save_record(path, key, now):
+        saved = False
+        if fd is not None and time.monotonic() < _save_by:
+            rec = rec or {"starts": []}
+            saved = write_record(path, {"key": None if batch else key, "at": now,
+                                        "starts": rec["starts"]})
+        if not saved:
             forget(path)
     finally:
         if fd is not None:
-            os.close(fd)                  # closing the descriptor releases the lock
+            os.close(fd)
     emit(context)
 
 
@@ -448,7 +489,13 @@ def reset():
         payload = None
     sid = payload.get("session_id") if isinstance(payload, dict) else None
     if isinstance(sid, str) and sid:
-        shutil.rmtree(os.path.join(STATE_DIR, _digest(sid)), ignore_errors=True)
+        d = os.path.join(STATE_DIR, _digest(sid))
+        shutil.rmtree(d, ignore_errors=True)
+        try:                              # what rmtree could not delete, empty in place
+            for name in os.listdir(d):
+                forget(os.path.join(d, name))
+        except OSError:
+            pass
     try:
         now = time.time()
         for name in os.listdir(STATE_DIR):
@@ -461,11 +508,12 @@ def reset():
 
 
 _save_by = float("inf")           # set by main(): monotonic SAVE_DEADLINE
+_registered = False               # set by main(): this run's start is on record
 
 
 def main():
-    global _deadline, _save_by
-    started = time.monotonic()
+    global _deadline, _save_by, _t0, _registered
+    started, _t0 = time.monotonic(), time.time()
     _deadline, _save_by = started + BUDGET, started + SAVE_DEADLINE
     try:
         payload = json.load(sys.stdin)
@@ -495,6 +543,8 @@ def main():
         rc = 127                                   # same as git timing out here
     if rc != 0:
         return 0                                   # not a git repo: nothing to say
+    path = state_file(payload)
+    _registered = path is not None and register_start(path)
     try:
         return measure(payload, cwd, top)
     except OutOfTime:
