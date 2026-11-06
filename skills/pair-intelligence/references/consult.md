@@ -28,7 +28,8 @@ Neutral descriptions in no particular order. You may propose an option not liste
 2. The reasons, each tied to a file and line, a measurement, or a source.
 3. The strongest case against your pick, and what would change your mind.
 4. What you could not verify by reading.
-Plain prose, at most 15 lines.
+Plain prose: about 15 lines for two or three options, a few more for each option
+beyond that.
 </answer_format>
 ```
 
@@ -49,7 +50,13 @@ function on sample inputs, run the test.
 Point `--cwd` at the narrowest directory that holds what the question needs. To
 show it other repositories, or a ref other than the checked-out one, stage them:
 `bash scripts/pair_stage.sh /tmp/<name> <repo>[@<ref>][:<paths>] ...` writes a
-snapshot of each with a `SHAS.md` of the commits; cite that file in the prompt. When
+snapshot of each with a `SHAS.md` of the commits; cite that file in the prompt.
+List a repository twice for two refs; add `--exclude '*.mp4'` (before the folder)
+to leave out recordings and other bulk; stage loose files (a settings file, a
+script outside any repo) as `file:<path>`, which `SHAS.md` maps back to the
+original path. A copy staged by hand can shadow the real path the code reads, and
+the model then reasons about the copy (2026-11-06: one refuted claim came from
+exactly that). When
 the repository is a grab-bag of unrelated private files, or the file in question
 embeds a secret, copy the relevant files (redacted) into a temp directory and
 point `--cwd` there. Without `--cwd`, consult runs in the current directory.
