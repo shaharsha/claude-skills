@@ -65,11 +65,14 @@ Models, flags and traps per engine: `references/engines.md`.
 
 ## Run it
 
-1. **Write the prompt** to a file with an absolute path, shaped as the mode's file
-   says. In every mode, give facts, constraints and the question, and withhold your
+1. **Write the prompt** to a file with an absolute path, through a quoted
+   heredoc (`cat > /abs/prompt.md <<'EOF'`) so the shell changes nothing in it,
+   shaped as the mode's file says. In every mode, give facts, constraints and the question, and withhold your
    own answer, lean or confidence: a reviewer told "this is fine" finds less.
-2. **Run it**, in the background (a round takes 10 seconds to 5 minutes; a
-   Gemini review up to 30). The scripts are in this skill's folder,
+2. **Run it**, in the background: Codex usually answers in 1 to 10 minutes,
+   Gemini takes longer (defaults: 20 minutes for a Gemini consult, 30 for a
+   review); over a large file or a multi-repo stage, give Gemini
+   `--timeout 1500` or more. The scripts are in this skill's folder,
    `~/.claude/skills/pair-intelligence/scripts/`:
 
    ```bash

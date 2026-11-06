@@ -374,6 +374,8 @@ RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
 agy_prompt() { python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).readline())["message"]["content"])' "$1"; }
 check "agy review: told its 30 minutes (the Gemini review default) and the 21-minute tool cutoff; with web off, not its web budget (17)" 'agy_prompt "$LOG/agy-stdin-0.txt" | grep -qE "(^|[^0-9])30 minutes" && agy_prompt "$LOG/agy-stdin-0.txt" | grep -qE "(^|[^0-9])21 minutes" && ! agy_prompt "$LOG/agy-stdin-0.txt" | grep -qw 17'
 until_s="$(jq_py "$RUN/agy-policy.json" "d[\"tools_until\"]")"
+out_c="$(cd "$T/arepo" && FAKE_AGY=ok bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"
+check "agy consult: told its 20 minutes (the Gemini consult default) and the 14-minute tool cutoff" 'agy_prompt "$LOG/agy-stdin-$(( $(ls "$LOG"/agy-stdin-*.txt | wc -l) - 1 )).txt" | grep -qE "(^|[^0-9])20 minutes" && agy_prompt "$LOG/agy-stdin-$(( $(ls "$LOG"/agy-stdin-*.txt | wc -l) - 1 )).txt" | grep -qE "(^|[^0-9])14 minutes"'
 check "agy: policy stops tools at 70% of the 1800 s timeout" '[[ $until_s -ge $((t0 + 1260)) && $until_s -le $((t1 + 1260)) ]]'
 reset_log
 out="$(cd "$T/arepo" && FAKE_AGY=ok FAKE_AGY_TOOLS='[["search_web",{"query":"a"}],["search_web",{"query":"b"}],["search_web",{"query":"c"}]]' bash "$P" --engine gemini --backend agy --web-budget 2 --prompt-file "$T/prompt.md" 2>&1)"
@@ -883,6 +885,15 @@ check "pair_stage: a ref with paths and the checked-out commit, side by side, wi
 bash "$SCRIPTS/pair_stage.sh" "$T/staged" "$T/st1" >/dev/null 2>&1; r1=$?
 bash "$SCRIPTS/pair_stage.sh" "$T/staged2" "$T/st1@nope" >/dev/null 2>&1; r2=$?
 check "pair_stage: refuses a non-empty folder (64) and a missing ref (66)" '[[ $r1 -eq 64 && $r2 -eq 66 ]]'
+printf 'vid' > "$T/st1/talk.mp4" && git -C "$T/st1" add talk.mp4 && git -C "$T/st1" -c user.email=t@t -c user.name=t commit -qm vid
+mkdir -p "$T/loose" && printf 'cfg\n' > "$T/loose/settings.json"
+out="$(bash "$SCRIPTS/pair_stage.sh" --exclude '*.mp4' "$T/staged3" "$T/st1" "file:$T/loose/settings.json" 2>&1)"; rc=$?
+LOOSE="$(cd "$T/loose" && pwd -P)/settings.json"
+check "pair_stage: --exclude leaves files out; a loose file is copied under files/ and mapped to its original" '[[ $rc -eq 0 && ! -e "$T/staged3/st1/talk.mp4" && -e "$T/staged3/st1/top.txt" && -e "$T/staged3/files$LOOSE" ]] && grep -q "| \`$LOOSE\` |" "$T/staged3/SHAS.md"'
+git init -q --bare "$T/st-remote.git" && git -C "$T/st1" remote add origin "$T/st-remote.git" && git -C "$T/st1" push -q origin HEAD:main 2>/dev/null && git -C "$T/st1" fetch -q origin
+git clone -q -b main "$T/st-remote.git" "$T/st-other" 2>/dev/null && printf 'v3\n' > "$T/st-other/top.txt" && git -C "$T/st-other" -c user.email=t@t -c user.name=t commit -qam three && git -C "$T/st-other" push -q origin main 2>/dev/null
+out="$(bash "$SCRIPTS/pair_stage.sh" "$T/staged4" "$T/st1@origin/main" 2>&1)"; rc=$?
+check "pair_stage: a remote ref behind its remote is staged, with a warning and a note in SHAS.md" '[[ $rc -eq 0 && "$out" == *WARNING* ]] && grep -q "behind origin" "$T/staged4/SHAS.md"'
 
 # --- pair.sh: argument checks -----------------------------------------------------
 bash "$P" --help >/dev/null 2>&1;                                         check "--help exits 0" '[[ $? -eq 0 ]]'
@@ -929,6 +940,7 @@ mkdir -p "$T/fresh"
 bash "$SCRIPTS/codex_review.sh" --repo "$T/fresh" --list >/dev/null 2>&1
 check "codex_review --list creates nothing"       '[[ ! -e "$T/fresh/.codex-review" ]]'
 out="$(FAKE_CODEX=review bash "$SCRIPTS/codex_review.sh" --repo "$T/docs" --prompt-file "$T/prompt.md" --label t3 --out-dir "$T/evidence" 2>&1)"; rc=$?
+check "codex_review: names its log before the review runs" '[[ "$out" == *"codex_review: started; follow "*".log"* ]]'
 check "codex_review: verdict, findings, reads and seconds on stdout before REVIEW_MD" '[[ $rc -eq 0 && "$out" == *"VERDICT=sound"*"FINDINGS=0"*"READS=1"*"SECONDS="*"REVIEW_MD="* ]]'
 out="$(FAKE_CODEX=review FAKE_CODEX_NOREAD=1 bash "$SCRIPTS/codex_review.sh" --repo "$T/docs" --prompt-file "$T/prompt.md" --label t4 --out-dir "$T/evidence" 2>&1)"; rc=$?
 MD="$(sed -n 's/^REVIEW_MD=//p' <<<"$out")"

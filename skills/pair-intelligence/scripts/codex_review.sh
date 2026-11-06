@@ -280,6 +280,8 @@ review_cleanup() {
 }
 trap review_cleanup EXIT
 
+# The review is written only at the end; the log is the progress meanwhile.
+echo "codex_review: started; follow $BASE.log" >&2
 RAW="$BASE.json"
 MD="$BASE.md"
 LOG="$BASE.log"
