@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stamp WHICH TREE and HOW STALE onto every Bash call that runs in a git repo.
+"""Stamp WHICH TREE and HOW STALE onto Bash calls in a git repo, when the answer changes.
 
 WHY THIS EXISTS
 ---------------
@@ -52,10 +52,45 @@ a line or is a deliberate, documented no-op:
 
 ⚠️ And it must never block: it exits 0 on every path, including its own crash.
 A staleness hook that breaks a Bash call is worse than the staleness.
+
+WHY IT STAMPS ONLY WHEN THE ANSWER CHANGES (2026-11-06)
+-------------------------------------------------------
+Text a hook injects is re-sent with every later request until a compaction. Measured
+over 14 days on this machine: 155,763 stamps, on 83% of all Bash calls, each re-read by
+95-170 later requests -- $512 at API list prices, 94% of what all hooks cost. Nearly
+every stamp repeated the one before it.
+
+So the hook still MEASURES on every evidence command, but only SAYS something when the
+answer differs from the last stamp in the same conversation: another tree, HEAD, branch
+or base, a different BEHIND count, a fetch age in another bucket, or a check that now
+fails or recovers. The last stamp in context is always the current answer, give or take
+the fetch age inside its bucket. The same 14 days under this rule: $29-45.
+
+    state       one file per conversation, keyed on session_id + agent_id. A subagent
+                gets its own, so its first call stamps even if the parent's tree did
+                not change.
+    reset       `stale_tree.py --reset` on every SessionStart (startup, resume, clear,
+                compact, fork): after a compaction the old stamp is gone from context,
+                so the next call must stamp again. SessionStart carries no agent_id,
+                so the whole session's state goes, subagents included.
+    fail-open   no session_id, or state that cannot be read or written -> stamp, as
+                before. Suppression is the optimisation; a stamp is the safe default.
+
+WHICH BASE (2026-11-06)
+-----------------------
+BASES used to be a fixed list with origin/develop first. In torque, develop stopped
+moving on 2026-10-15 and fell 3,328 commits behind main, and 90% of stamps were measured
+against it: the main checkout read "BEHIND 0" while it was 40 commits behind
+origin/main. The original failure with a number attached, which is the shape this file
+keeps meeting.
+
+Now, first that resolves: `git config staletree.base`, then origin/HEAD (the remote's
+default branch, refreshed by the background fetch), then main, master, develop.
 """
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -66,8 +101,9 @@ TIMEOUT = 3.0
 # this whole class is about.
 TRIGGERS = ("git ", "grep", "rg ", "cat ", "sed ", "awk ", "head ", "tail ",
             "ls ", "find ", "pytest", "npm ", "python", "uv ", "wc ", "diff ")
-# Bases to measure against, in order. First one that resolves wins.
-BASES = ("origin/develop", "origin/main", "origin/master")
+# Fallback bases, in order, after `git config staletree.base` and origin/HEAD.
+# First one that resolves wins. develop last: see WHICH BASE above.
+BASES = ("origin/main", "origin/master", "origin/develop")
 
 
 # How old the cached ref may get before this hook asks for a refresh, and how long
@@ -75,6 +111,15 @@ BASES = ("origin/develop", "origin/main", "origin/master")
 REF_MAX_AGE = 900.0        # 15 min
 REFETCH_COOLDOWN = 600.0   # 10 min between attempts per repo, success or failure
 STAMPS = os.path.join(os.path.expanduser("~/.claude"), ".stale_tree_fetch")
+STATE_DIR = os.path.join(os.path.expanduser("~/.claude"), ".stale_tree_state")
+STATE_MAX_AGE = 7 * 86400  # --reset prunes other sessions' state older than this
+# The settings give this hook a 10 s timeout. A run killed after saving state but
+# before Claude Code read its stamp would suppress a stamp nobody saw, so a slow run
+# skips the save and the next call stamps again.
+SAVE_DEADLINE = 7.0
+# Fetch-age buckets, in seconds. A stamp is re-issued when the age moves into another
+# bucket; the background fetch keeps a working repo inside the first one.
+AGE_BUCKETS = (1800.0, 7200.0, 43200.0)   # 30 min, 2 h, 12 h
 
 
 def git(args, cwd):
@@ -86,7 +131,29 @@ def git(args, cwd):
         return (127, "", "git unavailable or timed out")
 
 
-def maybe_refresh(top, base, age):
+def _digest(s):
+    # 🔴 NOT hash(): Python salts str hashing per process (see maybe_refresh).
+    return hashlib.sha1(s.encode("utf-8", "replace")).hexdigest()[:16]
+
+
+def fetch_marker(repo, base):
+    """File the background fetch touches only after it fetched `base` successfully."""
+    return os.path.join(STAMPS, _digest(f"{repo}\0{base}") + ".ok")
+
+
+def candidate_bases(cwd):
+    """Bases to try, best first: the configured one, the remote's default, then BASES."""
+    out = []
+    rc, configured, _ = git(["config", "--get", "staletree.base"], cwd)
+    if rc == 0 and configured:
+        out.append(configured)
+    rc, default, _ = git(["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"], cwd)
+    if rc == 0 and default:
+        out.append(default)
+    return out + [b for b in BASES if b not in out]
+
+
+def maybe_refresh(top, repo, base, age):
     """
     Fire-and-forget `git fetch` when the cached ref has gone stale.
 
@@ -126,18 +193,30 @@ def maybe_refresh(top, base, age):
         # like a cooldown, it created files that looked like stamps, and it throttled
         # nothing -- a guard whose failure is invisible because its output is
         # indistinguishable from its success.
-        key = hashlib.sha1(top.encode("utf-8", "replace")).hexdigest()[:16]
-        stamp = os.path.join(STAMPS, key)
+        #
+        # Keyed on the repo's COMMON gitdir, not the worktree: every worktree of a
+        # repo shares its remote refs, so one fetch serves all ~226 of them.
+        cooldown = os.path.join(STAMPS, _digest(repo))
         try:
-            if time.time() - os.path.getmtime(stamp) < REFETCH_COOLDOWN:
+            if time.time() - os.path.getmtime(cooldown) < REFETCH_COOLDOWN:
                 return
         except OSError:
             pass
-        with open(stamp, "w") as fh:      # written BEFORE the spawn, so a fetch that
-            fh.write(top)                 # hangs still consumes its cooldown slot
+        with open(cooldown, "w") as fh:   # written BEFORE the spawn, so a fetch that
+            fh.write(repo)                # hangs still consumes its cooldown slot
         remote, _, ref = base.partition("/")
+        if not ref:
+            return                        # a configured local branch: nothing to fetch
+        # Two more jobs ride on the same detached fetch:
+        #   · the marker is touched only when THIS base was fetched successfully, so
+        #     ref_age() can tell "base checked" from "some other ref fetched";
+        #   · set-head refreshes origin/HEAD, so the next retired default branch is
+        #     noticed instead of measured against for three weeks.
         subprocess.Popen(
-            ["git", "fetch", "--quiet", remote, ref],
+            ["sh", "-c",
+             'git fetch --quiet "$1" "$2" && : > "$3"; '
+             'git remote set-head "$1" --auto >/dev/null 2>&1',
+             "sh", remote, ref, fetch_marker(repo, base)],
             cwd=top, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             stdin=subprocess.DEVNULL, start_new_session=True)
     except Exception:
@@ -171,6 +250,21 @@ def ref_age(gitdir, base):
     for** -- the second bug in this file with exactly that shape, after
     --absolute-git-dir reported "age unknown" for worktrees.
     """
+    # ⚠️ AND FETCH_HEAD IS NOT ABOUT `base` EITHER (2026-11-06). Any fetch rewrites it,
+    # including `git fetch origin some-feature`, which leaves origin/main untouched. So
+    # once this hook's own fetch of `base` has succeeded, its marker is the answer:
+    # the newer of the marker and the loose ref (a ref that MOVED was fetched then).
+    # FETCH_HEAD stays the fallback until that first successful fetch.
+    now = time.time()
+    try:
+        marked = now - os.path.getmtime(fetch_marker(gitdir, base))
+    except OSError:
+        marked = None
+    if marked is not None:
+        try:
+            return min(marked, now - os.path.getmtime(os.path.join(gitdir, "refs", "remotes", base)))
+        except OSError:
+            return marked
     for p in (os.path.join(gitdir, "FETCH_HEAD"),):
         try:
             return time.time() - os.path.getmtime(p)
@@ -190,12 +284,24 @@ def ref_age(gitdir, base):
 
 def human(sec):
     if sec is None:
-        return "age unknown"
+        return None
     if sec < 90:
-        return f"{int(sec)}s old"
+        return f"{int(sec)}s"
     if sec < 5400:
-        return f"{int(sec // 60)}m old"
-    return f"{int(sec // 3600)}h{int((sec % 3600) // 60):02d}m old"
+        return f"{int(sec // 60)}m"
+    return f"{int(sec // 3600)}h{int((sec % 3600) // 60):02d}m"
+
+
+def age_bucket(sec):
+    """0 for a fresh ref, higher for older; unknown is the worst bucket."""
+    if sec is None:
+        return len(AGE_BUCKETS) + 1
+    return sum(1 for limit in AGE_BUCKETS if sec >= limit)
+
+
+def tilde(p):
+    home = os.path.expanduser("~")
+    return "~" + p[len(home):] if p == home or p.startswith(home + os.sep) else p
 
 
 def emit(context):
@@ -205,12 +311,86 @@ def emit(context):
     sys.stdout.write("\n")
 
 
+def state_file(payload):
+    """This conversation's state file, or None when the payload names no session."""
+    sid = payload.get("session_id")
+    if not isinstance(sid, str) or not sid:
+        return None
+    agent = payload.get("agent_id") or "main"
+    return os.path.join(STATE_DIR, _digest(sid), _digest(str(agent)) + ".json")
+
+
+def last_stamp(path):
+    try:
+        with open(path) as fh:
+            return json.load(fh).get("key")
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def save_stamp(path, key):
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = f"{path}.{os.getpid()}.tmp"
+        with open(tmp, "w") as fh:
+            json.dump({"key": key, "at": time.time()}, fh)
+        os.replace(tmp, path)             # atomic: a parallel call reads old or new
+    except OSError:
+        pass                              # unsaved -> the next call stamps again
+
+
+def stamp(payload, key, context, started):
+    """
+    Emit `context` unless the last stamp in this conversation had the same key.
+
+    ⚠️ Every way this can fail ends in a stamp, never in silence: no session_id,
+    an unreadable state file, a save that failed or ran late -- each leaves no
+    matching key behind, so this call or the next one stamps. The only silent
+    outcome is a key read back intact and equal to this call's.
+    """
+    path = state_file(payload)
+    if path is not None and last_stamp(path) == key:
+        return
+    emit(context)
+    if path is not None and time.monotonic() - started < SAVE_DEADLINE:
+        save_stamp(path, key)
+
+
+def reset():
+    """
+    SessionStart (`--reset`): forget this session's stamps, prune old state.
+
+    After a compaction, /clear or a resume, the stamps this session's state
+    remembers may no longer be in context, so the next call must stamp again.
+    SessionStart carries no agent_id, and also fires when a subagent compacts,
+    so the whole session goes: over-stamping once is cheap, a missing stamp is
+    the failure this file exists for.
+    """
+    try:
+        payload = json.load(sys.stdin)
+    except (ValueError, OSError):
+        payload = None
+    sid = payload.get("session_id") if isinstance(payload, dict) else None
+    if isinstance(sid, str) and sid:
+        shutil.rmtree(os.path.join(STATE_DIR, _digest(sid)), ignore_errors=True)
+    try:
+        now = time.time()
+        for name in os.listdir(STATE_DIR):
+            d = os.path.join(STATE_DIR, name)
+            if now - os.path.getmtime(d) > STATE_MAX_AGE:
+                shutil.rmtree(d, ignore_errors=True)
+    except OSError:
+        pass
+    return 0
+
+
 def main():
+    started = time.monotonic()
     try:
         payload = json.load(sys.stdin)
     except (ValueError, OSError):
         return 0
-    if payload.get("tool_name") != "Bash":
+    if not isinstance(payload, dict) or payload.get("tool_name") != "Bash":
         return 0
     ti = payload.get("tool_input")
     if not isinstance(ti, dict):
@@ -232,11 +412,12 @@ def main():
     if rc != 0:
         return 0                                   # not a git repo: nothing to say
 
-    rc, head, _ = git(["rev-parse", "--short", "HEAD"], cwd)
+    rc, head, _ = git(["rev-parse", "HEAD"], cwd)
     rc2, branch, _ = git(["rev-parse", "--abbrev-ref", "HEAD"], cwd)
     if rc != 0:
-        emit(f"⚠️ STALENESS: CANNOT DETERMINE — `git rev-parse HEAD` failed in {top}. "
-             "Not a pass; treat any evidence from this tree as unattributed.")
+        stamp(payload, ["cannot", top, "head"],
+              f"⚠️ STALENESS: CANNOT DETERMINE — `git rev-parse HEAD` failed in {top}. "
+              "Not a pass; treat any evidence from this tree as unattributed.", started)
         return 0
     if branch == "HEAD":
         branch = "DETACHED"
@@ -252,42 +433,47 @@ def main():
         rcg, gitdir, _ = git(["rev-parse", "--git-common-dir"], cwd)
         if rcg == 0 and not os.path.isabs(gitdir):
             gitdir = os.path.join(cwd, gitdir)
-    for base in BASES:
+    bases = candidate_bases(cwd)
+    for base in bases:
         rcb, _, _ = git(["rev-parse", "--verify", "--quiet", base], cwd)
         if rcb == 0:
             rcc, count, _ = git(["rev-list", "--count", f"HEAD..{base}"], cwd)
             if rcc != 0 or not count.isdigit():
-                emit(f"⚠️ STALENESS: CANNOT DETERMINE against {base} in {top} — "
-                     "rev-list failed. Not a pass.")
+                stamp(payload, ["cannot", top, "rev-list", base],
+                      f"⚠️ STALENESS: CANNOT DETERMINE against {base} in {top}: "
+                      "rev-list failed. Not a pass.", started)
                 return 0
             raw_age = ref_age(gitdir, base) if rcg == 0 else None
             # Report the PRE-fetch age, then ask for a refresh for next time. Order
             # matters: computing the line first guarantees this call can never
             # report a freshness it did not have.
             age = human(raw_age)
-            maybe_refresh(top, base, raw_age)
+            maybe_refresh(top, gitdir if rcg == 0 else top, base, raw_age)
             n = int(count)
-            # The word BEHIND carries the number; the parenthetical carries the
-            # expiry. Both, always -- the count alone is the trap, not the fix.
-            lead = "⚠️ STALE TREE" if n > 0 else "TREE"
-            note = ""
+            # The word BEHIND carries the number; the fetch age carries the expiry.
+            # Both, always -- the count alone is the trap, not the fix. One line,
+            # because the stamp is now re-read only when it changes.
+            fetched = f"fetched {age} ago" if age else "fetch age unknown"
+            line = (f"{tilde(top)} {head[:10]} ({branch}) BEHIND {n} vs {base}, {fetched}; "
+                    "start cwd, cd not followed")
             if n > 0:
-                note = (f"  <- evidence from this tree describes a revision {n} "
-                        f"commit(s) older than {base}")
-            emit(f"{lead}: {top}  HEAD {head} ({branch})  BEHIND {n} vs {base}  "
-                 f"[last fetched {age}]{note}\n"
-                 f"cwd at command START; a `cd` inside the command is not followed.")
+                context = (f"⚠️ STALE TREE: {line}. Evidence from this tree describes a "
+                           f"revision {n} commit(s) older than {base}.")
+            else:
+                context = f"TREE: {line}"
+            stamp(payload, [top, head, branch, base, n, age_bucket(raw_age)], context, started)
             return 0
 
-    emit(f"⚠️ STALENESS: CANNOT DETERMINE — no {'/'.join(BASES)} ref in {top}. "
-         "The tree may be current or 1000 behind; this check did not run. "
-         "exit 0 here is NOT a clean result.")
+    stamp(payload, ["cannot", top, "no-base"],
+          f"⚠️ STALENESS: CANNOT DETERMINE — no {'/'.join(bases)} ref in {top}. "
+          "The tree may be current or 1000 behind; this check did not run. "
+          "exit 0 here is NOT a clean result.", started)
     return 0
 
 
 if __name__ == "__main__":
     try:
-        sys.exit(main())
+        sys.exit(reset() if sys.argv[1:] == ["--reset"] else main())
     except BaseException:
         # Never break a Bash call over provenance. A crash here is silent BY
         # DESIGN and it is the one silent path in the file -- justified because
