@@ -46,9 +46,9 @@ Each links to its own README — what it does, why it exists, install, and the g
 
 | Skill | What it does |
 |---|---|
-| [gdoc-sync](skills/gdoc-sync) | Push a local `.md` to an existing Google Doc, fixing the four things Google's converter breaks: `#anchor` links, cross-doc refs, 1500pt images, and missing RTL. |
-| [gslides-sync](skills/gslides-sync) | The same shape for `.pptx` → an existing Google Slides: native `pageObjectId` links, scaled images, RTL per text shape. |
-| [gsheets](skills/gsheets) | Full Sheets API v4 CLI — cells, tabs, freeze/resize/merge, header styling, filters, banding, conditional formatting, plus a raw `batchUpdate` escape hatch. |
+| [gdoc-sync](skills/gdoc-sync) | Push a local `.md` to an existing Google Doc, fixing what Google's converter breaks (`#anchor` links, cross-doc refs, 1500pt images, missing RTL), re-applying the styling each push resets, and refusing to overwrite edits made in the Doc since the last sync. |
+| [gslides-sync](skills/gslides-sync) | The same shape for `.pptx` → an existing Google Slides: native `pageObjectId` links, scaled images, RTL per text shape, warnings for what the import drops, and the command that restores narration videos a push deleted. |
+| [gsheets](skills/gsheets) | Sheets API v4 CLI: read as records, find rows, compare-and-set writes for shared Sheets, one-call table layout, validation, inspect and export, plus a raw `batchUpdate` with A1 ranges. Runs on a bare `python3`. |
 | [presentation-generator](skills/presentation-generator) | 16:9 PDF + PPTX decks where every slide is a custom AI-rendered image. Style locks globally; composition varies per slide. |
 | [elevenlabs-tts](skills/elevenlabs-tts) | Speech with ElevenLabs Eleven v4 in any language — v4 audio-tag direction, consistent 429-safe batches, a speech-to-text check that no tag was read aloud, and forced-alignment timings for subtitles. |
 | [narrating-pptx](skills/narrating-pptx) | Per-slide ElevenLabs narration embedded in a pptx, with autoplay authored by real PowerPoint — the one method that doesn't corrupt the file. |

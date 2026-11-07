@@ -2,12 +2,10 @@
 
 ## `sync-gdoc.py`
 
-Single-file Python script. Python 3.9+. Optional dep: `google-auth` (only for `--sa-key` path).
-
-### Usage
+One Python file (3.9+), stdlib only. It uses `google-auth` when importable and otherwise signs the service-account token with `cryptography` or the `openssl` CLI, so it runs on a bare `python3`. `uv run sync-gdoc.py …` works too.
 
 ```bash
-./sync-gdoc.py <markdown-file> --doc-id <ID> [flags]
+python3 sync-gdoc.py <markdown-file> --doc-id <ID> [flags]
 ```
 
 ### Flags
@@ -15,60 +13,66 @@ Single-file Python script. Python 3.9+. Optional dep: `google-auth` (only for `-
 | Flag | Default | Description |
 |---|---|---|
 | `--doc-id <id>` | *required* | Google Doc file ID |
-| `--sa-key <path>` | *none* | Service-account JSON. Recommended over gcloud ADC. |
-| `--rtl` | off | Apply RIGHT_TO_LEFT direction to every body paragraph |
-| `--no-links` | off | Skip anchor-link rewriting (step 2) |
-| `--max-image-width <pt>` | `300` | Resize inline images wider than this. `0` to skip. |
+| `--sa-key <path>` | `$GOOGLE_SA_KEY`, then `~/.config/gdoc-sync/sa-key.json`, then gcloud ADC | Service-account JSON key |
+| `--title <name>` | — | Also rename the Doc in Drive (the file name, not the H1) |
+| `--rtl` | off | RIGHT_TO_LEFT on every paragraph |
+| `--no-links` | off | Skip steps 2 and 3 |
+| `--max-image-width <pt>` | `300` | Shrink wider inline images; `0` skips |
+| `--cross-doc-map NAME=DOC_ID` | — | Repeatable. Rewrites links to `NAME…#anchor` into deep links |
+| `--line-spacing <pct>` | — | e.g. `100` (the import uses 115) |
+| `--space-above` / `--space-below <pt>` | — | Body paragraphs |
+| `--heading-space-above` / `--heading-space-below <pt>` | — | Headings |
+| `--font-size <pt>` | — | Body text |
+| `--drop-empty-paragraphs` | off | Delete the empty paragraphs the import leaves between blocks |
+| `--export-pdf <path>` | — | Save Google's PDF render after syncing |
+| `--force` | off | Push despite a hand edit since the last sync, or a multi-tab Doc |
 
 ### What runs, in order
 
-1. **Push markdown** → `PATCH /upload/drive/v3/files/{id}` with `Content-Type: text/markdown`. Google converts natively.
-2. **Fix anchor links** → `GET /v1/documents/{id}` to walk the structure, build a `section-number → headingId` map, then `POST /v1/documents/{id}:batchUpdate` with `updateTextStyle` requests rewriting `link.url` → `link.headingId`. Skipped with `--no-links`.
-3. **Resize images** → Find inline images wider than `--max-image-width`, `deleteContentRange` + `insertInlineImage` with explicit `objectSize`. Uses image URLs from the original markdown. Skipped with `--max-image-width 0`.
-4. **Apply RTL** → `updateParagraphStyle` with `direction: RIGHT_TO_LEFT` across the full body range (`startIndex=1` to `endIndex-1`). Skipped by default; enable with `--rtl`.
+0. **Guard.** Refuses with exit 3 if the Doc has several tabs. It also lists the Doc's Drive revisions since the time recorded at the last push (`~/.cache/gdoc-sync/state.json`), and refuses if any are by someone other than this run's identity.
+1. **Push.** `PATCH /upload/drive/v3/files/{id}?uploadType=media` with `Content-Type: text/markdown`, plus a Drive `PATCH {name}` when `--title` is given. The state is recorded right after this step.
+2. **In-doc anchors.** `updateTextStyle` rewrites `link.url = "#slug"` to `link.headingId`, matched by slug and then by section number.
+3. **Cross-doc links.** Rewrites them to `https://docs.google.com/document/d/ID/edit#heading=h.xxx`.
+4. **Images.** `deleteContentRange` + `insertInlineImage` with an explicit `objectSize`, re-fetching each image from its markdown URL.
+5. **RTL.** One `updateParagraphStyle` across the body.
+6. **Styling.** Empty-paragraph deletion, then per-paragraph `updateParagraphStyle` and `updateTextStyle`, in batches of 400.
+7. **Export.** `GET /drive/v3/files/{id}/export?mimeType=application/pdf`.
 
-### Error handling
-
-- **429/500/502/503/504** — retries with exponential backoff (`1.5s`, `3s`, `6s`, `12s`), up to 4 attempts.
-- **403 Forbidden** — usually means (a) the SA/user doesn't have Editor access to the Doc, or (b) Drive/Docs APIs aren't enabled in the SA's project. See [`../reference/auth-setup.md`](../reference/auth-setup.md).
-- **Other HTTP errors** — the server's error body is printed to stderr before the exception re-raises.
+Every index-based Docs `batchUpdate` carries `writeControl.targetRevisionId`: the revision its indexes were read from. A retried or concurrent write is transformed instead of hitting stale indexes.
 
 ### Exit codes
 
-- `0` — success
-- `1` — markdown file not found, auth failure, or unrecoverable HTTP error
+| Code | Meaning |
+|---|---|
+| 0 | Synced |
+| 1 | File not found, auth failure, or an API error (body and `hint:` on stderr) |
+| 2 | Usage error |
+| 3 | Refused by the guard: a hand edit since the last sync, or a multi-tab Doc. Re-run with `--force` to override |
 
-### Dependencies
+### Errors and retries
 
-- **Python 3.9+** (uses `|` type syntax sparingly; mostly stdlib).
-- **`google-auth`** — only if you use `--sa-key`. Install: `pip install google-auth`.
-- **`gcloud` CLI** — only if you use the fallback ADC path. Ensure `gcloud auth application-default login` has been run.
+- 429/500/502/503/504 are retried with backoff (1.5 s, 3 s, 6 s), up to 4 attempts.
+- 403/404 usually mean the Doc isn't shared with the service account, or the Drive/Docs API isn't enabled in its project. See [`../reference/auth-setup.md`](../reference/auth-setup.md).
 
 ### Quick test
 
-Against a new empty Google Doc you own, shared with your SA as Editor:
+Against an empty Google Doc you own, shared with the service account as Editor:
 
 ```bash
 cat > /tmp/test.md <<'EOF'
 # Test Doc
 
-## 1. Section one
-See [section 2](#2-section-two) for more.
+## Overview
+See [the details](#details) and [section 2](#2-section-two).
+
+## Details
+Hello.
 
 ## 2. Section two
-Hello, world.
+World.
 EOF
 
-./sync-gdoc.py /tmp/test.md --doc-id YOUR_DOC_ID --sa-key ~/sa.json
+python3 sync-gdoc.py /tmp/test.md --doc-id YOUR_DOC_ID --drop-empty-paragraphs --export-pdf /tmp/test.pdf
 ```
 
-Expected output:
-```
-[1/4] Pushed markdown: /tmp/test.md (N bytes)
-[2/4] Fixed 1 anchor links
-[3/4] Skipped image resize (no images)
-[4/4] Skipped RTL (use --rtl to enable)
-Done. https://docs.google.com/document/d/YOUR_DOC_ID/edit
-```
-
-Open the Doc and verify: the `[section 2]` link is clickable and scrolls to the correct heading (not broken `#2-section-two`).
+Expected: `[2/7] Fixed 2 in-doc anchor links`. In the Doc, both links scroll to their headings.
