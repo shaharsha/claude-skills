@@ -11,7 +11,8 @@ Same key and the same credit pool as TTS. Verified in 2026-10 on a full episode'
  "model_id": "music_v2_5",
  "force_instrumental": true}
 ```
-- **Always send `model_id: music_v2_5`.** The endpoint still defaults to `music_v1`, which sounds clearly older. v2.5 is the latest as of 2026-10.
+- **Always send `model_id: music_v2_5`.** The endpoint still defaults to `music_v1`, which sounds clearly older and is removed on 2027-01-31. v2.5 is the latest as of 2026-11.
+- **Name no artist, band or composer in the prompt.** A prompt that names one comes back HTTP 400 (seen as `copyrighted_material_detected`; others report `bad_prompt`). Describe the era, instruments and feel instead.
 - `force_instrumental: true` for anything under dialogue. "No vocals." in the prompt alone is not enough.
 - The response body is the mp3.
 
@@ -19,6 +20,8 @@ Same key and the same credit pool as TTS. Verified in 2026-10 on a full episode'
 ```json
 {"text": "quick swish for a scene transition", "duration_seconds": 1.0, "prompt_influence": 0.5}
 ```
+- `duration_seconds` is 0.5-30; `"loop": true` makes a seamless loop.
+- The endpoint defaults to `eleven_text_to_sound_v2`, which ElevenLabs removes on 2027-03-01; `eleven_text_to_sound_v3` is available (checked 2026-11-06). An entry's `"model"` is sent as `model_id`: switch a whole set at once and have it ear-checked, since the two sound different.
 
 Both go through one script, which skips files that already exist and never leaves a partial file:
 ```bash

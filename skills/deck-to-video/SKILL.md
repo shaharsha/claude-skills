@@ -16,7 +16,8 @@ python3 <this-skill-dir>/scripts/build_video.py SLIDES AUDIO_DIR out.mp4
 #          (numeric-aware ordering: s2 before s10; zero-padded names still recommended)
 # AUDIO_DIR = slide01.mp3, slide02.mp3, … — count MUST equal slide count
 # options: --size 1920x1080 · --pad 0.7 · --no-bar · --no-counter · --bar-color HEX · --crf 20
-#          --highlights hl.json · --anim-fps 30   (see "Highlighting elements" below)
+#          --highlights hl.json · --anim-fps 30   (see "Highlighting elements" below;
+#          scripts/make_highlights.py builds hl.json)
 ```
 On success it prints one line per slide — that per-slide length **already includes the pad** — and ends with `duration matches segment sum` (it exits non-zero otherwise).
 
@@ -59,17 +60,28 @@ Narration that says "on the left… in the middle… on the right" reads like an
 
 **The audio is the master; the animation follows it.** Never write narration to hit a mark, and never estimate when a phrase lands. Generate the clip normally, then use ElevenLabs **forced alignment** (`POST /v1/forced-alignment`, audio + transcript → per-character `start`/`end`; run it with elevenlabs-tts' `scripts/align_narration.py`) to read back when each thing was *actually* said, and derive the windows from that. Re-record a clip later and re-aligning self-corrects.
 
-- **Anchor on character offsets, not keywords.** Author the script as per-element segments, join them for TTS, and keep each segment's offset into the joined string. Searching for a distinctive word breaks the moment it appears twice — "tags" appears four times on one slide.
+- **Anchor on positions in the script, not on keywords.** A lone keyword breaks the moment it appears twice ("tags" appears four times on one slide). Mark where the narration *turns* to each element with a short phrase copied from the script, in spoken order, and search each one only after the previous match, which is what `make_highlights.py` does; a repeated word earlier in the script can't capture it. (Keeping per-element segment offsets into the joined script works too.)
 - **Strip audio tags before aligning — all of them.** `[confident]` is performed, not spoken; send it to the aligner and it hunts for the word in the audio and drags every later offset with it. Eleven v4 tags are free-form (`[Pause, dry amusement]`), so strip anything in brackets, not just letters-and-spaces (elevenlabs-tts' aligner does). Compute offsets against the same stripped string.
-- Check the returned character count equals the text length, and watch `loss` (0.04-0.10 across a healthy 17-clip deck; a clear outlier is the signal, not an absolute threshold). A mismatch means every window on that slide is wrong.
+- Check the returned character count equals the text length, and watch `loss` (0.04-0.10 across a healthy 17-clip English deck, 0.59-0.77 across a healthy 26-clip Hebrew one; a clear outlier within the deck is the signal, not an absolute threshold). A mismatch means every window on that slide is wrong.
 
-**The `--highlights` JSON**, keyed by zero-padded slide number, boxes in output pixels:
+**Build the `--highlights` JSON with `scripts/make_highlights.py`** from three inputs: markers (per slide, each region with the phrase where the narration turns to it), boxes (per slide, region → `[x, y, w, h]`) and the `alignment/` files:
+
+```bash
+python3 <this-skill-dir>/scripts/make_highlights.py markers.json boxes.json narration/alignment/ hl.json \
+  --size 1920x1080 [--inches 13.333]      # --inches: boxes are in slide inches, page this wide
+# markers.json: {"09": [["chart", "Last quarter"], ["callout", "The real problem"], ["_end", "Now, to"]],
+#                "12": {"marks": [["a", "First"], ["b", "Second"]], "dim": "black", "colour": "#E07A5F"}}
+```
+
+A region's window runs from its phrase to the next marker's (`_end` closes one without opening another; otherwise the last runs to the end of the speech), starting 0.12 s early. Windows under 1.4 s are skipped with a warning, since a 0.5 s fade in and out leaves nothing to see. It stops, writing nothing, when a phrase isn't in the script, a region has no box, a box leaves the frame or an alignment file doesn't match its script. It warns when a box sits within 19 px of the edge, where the glow is clipped.
+
+The resulting JSON, keyed by zero-padded slide number, boxes in output pixels:
 
 ```json
-{"09": [{"card": 0, "box": [87, 468, 549, 374], "colour": "#B45309",
+{"09": [{"card": "chart", "box": [87, 468, 549, 374], "colour": "#B45309",
          "dim": "white", "start": 13.6, "end": 22.9}]}
 ```
-Derive `box` from the deck's own layout code (inches → pixels), never by eyeballing the render — a card's geometry is already exact in the builder that drew it. `dim` is `white` on light slides, `black` on dark ones. Slides absent from the file bake at 1 fps as usual.
+Take `box` from the deck's own layout code (inches → pixels), never by eyeballing the render — a card's geometry is already exact in the builder that drew it. `dim` is `white` on light slides, `black` on dark ones; check the glow colour against a dark slide too (a dark-plum glow vanished on a near-black closing slide). A region may be highlighted more than once on a slide. Slides absent from the file bake at 1 fps as usual.
 
 **Subtitles come free once aligned.** The same word timings make an `.srt` with no second transcription pass:
 
@@ -140,8 +152,10 @@ if key in cache: os.link(cache[key], path); continue
 | Audio count ≠ slide count | desynced or missing slides | script hard-fails; fix inputs, don't skip slides |
 | Judging output by "it encoded fine" | static bar / wrong slide slips through | extract early/late frames and look |
 | Deck prints its own slide numbers | number appears twice (deck footer + counter) | render the video from a numberless deck variant, or pass `--no-counter` |
-| ffmpeg hangs at 0% CPU after writing a segment | build stalls forever; a killed attempt leaves an INVALID partial file | the script now times out each segment (300s) and retries once, deleting the partial first |
-| Estimating when a phrase lands instead of aligning | highlights drift off the words, worst on the longest slides | forced alignment on the finished clip |
+| ffmpeg hangs at 0% CPU after writing a segment | build stalls forever; a killed attempt leaves an INVALID partial file | inside an agent's shell ffmpeg can wait on stdin: the script passes `-nostdin` with stdin closed, and still times out each segment (300s) and retries once, deleting the partial first. Do the same in any ffmpeg you run by hand (`-nostdin` or `< /dev/null`) |
+| Estimating when a phrase lands instead of aligning | highlights drift off the words, worst on the longest slides | forced alignment on the finished clip; `make_highlights.py` |
+| A box at the edge of the slide | the glow, drawn 19 px outside the box, is cut off by the frame | inset the region, or accept it; `make_highlights.py` warns |
+| One glow colour for every slide | it disappears on a dark slide | set `colour` (and `dim: black`) per dark slide in the markers |
 | Reading card geometry off a rendered image | boxes are a few px out and the glow sits crooked | compute from the deck's own layout constants |
 | Piping the build through `\| tail` inside an `&&` chain | pipeline exit = tail's 0 — a failed build "succeeds" and stale artifacts get delivered | run the script unpiped (or `set -o pipefail`); keep delivery/sync in a separate step gated on verified output |
 | Leaving the sidecar `.srt` beside a burned-in mp4 | VLC auto-loads any `.srt` matching the video's basename — the viewer sees **two** sets of subtitles stacked | move the sidecar out of that folder; a burned video is self-contained |

@@ -78,8 +78,10 @@ usage: pair.sh --prompt-file <abs path> [options]
   --web-budget <n>        Gemini/agy only: searches plus page reads allowed in
                           the turn (default 40 for research, else 20)
   --schema <file>         Codex only: JSON Schema the answer must match
-  --timeout <secs>        Wall-clock limit (default by mode). On agy, tools are
-                          refused after 70% of it, so time is left to answer.
+  --timeout <secs>        Wall-clock limit. Defaults: review 1200 (Gemini 1800),
+                          consult 600 (Gemini 1200), research and browse 900,
+                          ideate 600. On agy, tools are refused after 70% of it,
+                          so time is left to answer.
   --domains <a.com,b.com> Open a live browser limited to these domains (required
                           for browse; optional for the other modes). A local host
                           needs its port: localhost:5173
@@ -371,9 +373,12 @@ else
   # but off turns on webfetch.
   case "$MODE" in review|browse) : "${WEB:=off}" ;; research) : "${WEB:=live}" ;; *) : "${WEB:=cached}" ;; esac
 fi
-# Gemini 4 Argon at high effort reviews slowly: 4 of 10 successful reviews on
-# 2026-11-02/04 ran past 1000 s, and one was cut at 1200 s while writing.
+# Gemini 4 Argon at high effort is slow on large inputs: 4 of 10 good reviews on
+# 2026-11-02/04 ran past 1000 s (one was cut at 1200 s while writing), and two
+# consults, over a 700-line script and a 584K three-repo stage, were cut at
+# 600 s (2026-11-05/06) where Codex answered in minutes.
 [[ "$ENGINE" == gemini && "$MODE" == review ]] && : "${TIMEOUT:=1800}"
+[[ "$ENGINE" == gemini && "$MODE" == consult ]] && : "${TIMEOUT:=1200}"
 case "$MODE" in
   review)  : "${TIMEOUT:=1200}" ;;
   research|browse) : "${TIMEOUT:=900}" ;;

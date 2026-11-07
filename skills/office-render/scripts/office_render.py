@@ -11,7 +11,11 @@ what the user sees.
 
 Usage:
   uv run --with docx2pdf python3 office_render.py INPUT [--out DIR] [--dpi 150]
-                                                  [--format jpeg|png] [--pdf-only]
+                                                  [--format jpeg|png] [--pdf-only] [--force-quit]
+
+The app is quit before rendering, for a clean state. If it has documents open -
+possibly the user's unsaved work - the script stops instead and says so, unless
+--force-quit is given.
 
 Output: writes PAGE images (INPUT-1.jpg, INPUT-2.jpg, ...) into --out (default:
 alongside the input), and the intermediate PDF. Prints the image paths.
@@ -39,7 +43,41 @@ def osa(script: str) -> subprocess.CompletedProcess:
     return subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
 
 
-def quit_app(app: str):
+DOCS = {"Microsoft Word": "documents", "Microsoft PowerPoint": "presentations",
+        "Microsoft Excel": "workbooks"}
+
+
+def open_documents(app: str) -> int | None:
+    """How many of the user's documents the app has open: 0 when it isn't running
+    (checked without launching it), None when it is running but won't say (no
+    Automation permission). Not counted: this script's own staged copies (left open
+    when an earlier export failed) and Excel's hidden PERSONAL macro workbook."""
+    # Count first: with nothing open, PowerPoint answers `name of every presentation`
+    # with `missing value`, which would read as one document.
+    r = osa(f'if application "{app}" is running then\n'
+            f'  tell application "{app}"\n'
+            f'    if (count of {DOCS[app]}) is 0 then return "ok"\n'
+            f'    set ns to name of every {DOCS[app][:-1]}\n'
+            f'  end tell\n'
+            f'  set AppleScript\'s text item delimiters to linefeed\n'
+            f'  return "ok" & linefeed & (ns as text)\n'
+            f'else\n  return "ok"\nend if')
+    lines = r.stdout.splitlines()
+    if r.returncode != 0 or not lines or lines[0].strip() != "ok":
+        return None
+    staged = {p.name for p in (Path.home() / "Downloads" / ".office-render").glob("*")}
+    names = [n.strip() for n in lines[1:] if n.strip() and n.strip() != "missing value"]
+    return sum(1 for n in names if n not in staged and not n.upper().startswith("PERSONAL."))
+
+
+def quit_app(app: str, force: bool = False):
+    """Quit for a clean state, but never discard documents someone has open."""
+    n = open_documents(app)
+    if not force and (n is None or n > 0):
+        what = f"{n} open document(s)" if n else "documents that could not be counted"
+        sys.exit(f"{app} has {what}. Quitting it to render would close them without saving.\n"
+                 f"Ask the user to save and close them, or rerun with --force-quit if losing unsaved "
+                 f"changes is acceptable. For a layout check only, LibreOffice can render without it.")
     osa(f'tell application "{app}" to quit saving no')
 
 
@@ -80,7 +118,7 @@ def convert_once(ext: str, inp: str, pdf: str):
             raise RuntimeError((r.stderr or "applescript failed").strip())
 
 
-def to_pdf(inp: Path, pdf: Path):
+def to_pdf(inp: Path, pdf: Path, force_quit: bool = False):
     ext = inp.suffix.lower()
     if ext not in APP:
         sys.exit(f"unsupported file type: {ext}")
@@ -96,8 +134,8 @@ def to_pdf(inp: Path, pdf: Path):
     stage.mkdir(parents=True, exist_ok=True)
     sin = stage / inp.name
     spdf = stage / (inp.stem + ".pdf")
+    quit_app(APP[ext], force_quit)  # clean app state (avoid a stale window); refuses if documents are open
     shutil.copy2(inp, sin)
-    quit_app(APP[ext])  # start from a clean app state (avoid a stale window)
     try:
         convert_once(ext, str(sin), str(spdf))
         pdf.parent.mkdir(parents=True, exist_ok=True)
@@ -130,6 +168,8 @@ def main():
     ap.add_argument("--dpi", type=int, default=150)
     ap.add_argument("--format", choices=["jpeg", "png"], default="jpeg")
     ap.add_argument("--pdf-only", action="store_true")
+    ap.add_argument("--force-quit", action="store_true",
+                    help="quit the Office app even if it has documents open (their unsaved changes are lost)")
     a = ap.parse_args()
 
     inp = Path(a.input).expanduser().resolve()
@@ -139,7 +179,7 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     pdf = out / (inp.stem + ".pdf")
 
-    to_pdf(inp, pdf)
+    to_pdf(inp, pdf, a.force_quit)
     print(f"PDF: {pdf}")
     if a.pdf_only:
         return

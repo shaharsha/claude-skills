@@ -5,7 +5,7 @@ One-word and very short lines on eleven_v4 often carry extra audio: the word sai
 from a tag, or a long lead-in. This keeps the span from the first aligned word to the last, plus a small lead
 and tail, with short fades so the cut never clicks. Originals are never modified.
 
-  ELEVENLABS_API_KEY=... python3 trim_to_words.py scripts.json audio/ trimmed/ [--prefix ""] [--only a b]
+  python3 trim_to_words.py scripts.json audio/ trimmed/ [--prefix ""] [--only a b]
   (every run re-aligns every clip it is given: after a partial failure, rerun with --only <the failed ids>)
       [--text ID="the words actually kept"] [--lead 0.04] [--tail 0.14]
 
@@ -14,6 +14,9 @@ longer matches its script (a take cut from another take). When the model repeate
 holds it once, so the window usually covers one occurrence; listen to the result anyway.
 """
 import argparse, json, os, subprocess, sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from el_common import api_key  # noqa: E402
 from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -47,7 +50,7 @@ def cut(src, dst, start, end):
           f"afade=t=in:d=0.02,afade=t=out:st={max(0.0, n - 0.06):.3f}:d=0.06")
     tmp = dst + ".part.mp3"
     try:
-        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", src, "-af", af,
+        subprocess.run(["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", src, "-af", af,
                         "-ar", "44100", "-b:a", "160k", tmp], check=True)
     except subprocess.CalledProcessError:
         if os.path.exists(tmp):
@@ -68,7 +71,7 @@ def main():
     a = ap.parse_args()
     if os.path.abspath(a.audio_dir) == os.path.abspath(a.out_dir):
         sys.exit("out_dir must differ from audio_dir: originals are kept")
-    key = os.environ.get("ELEVENLABS_API_KEY") or sys.exit("ELEVENLABS_API_KEY not set")
+    key = api_key()
     scripts = json.load(open(a.scripts, encoding="utf-8"))
     bad_text = [t for t in a.text if "=" not in t]
     if bad_text:

@@ -81,6 +81,8 @@ Traps, each seen in testing:
   (often `danger-full-access` on this machine) unless the sandbox is passed again
   with `-c sandbox_mode=...`.
 - **`codex exec --search` is rejected.** Use `-c web_search="live"`.
+- **`ERROR codex_models_manager ... failed to refresh available models`** can
+  appear in a log when the model list cannot be fetched; the run is unaffected.
 - **Nested sandboxes fail.** Started inside another tool's sandbox it reports
   `sandbox_apply: Operation not permitted` or that "the shell host failed during
   handshake", and may still exit 0 with an apology for an answer, or answer
@@ -209,6 +211,11 @@ Tested on the Antigravity CLI (`agy`) 1.4.12 with a Gemini API key, 2026-11-02.
   refusals, which is how you see what Gemini read and searched.
 
 Traps, each seen in testing:
+
+- **Length limits are not followed.** Asked for "at most 12 items" and "30
+  lines", Argon wrote 16 items and about 40 KB (2026-11-05), as Google says it
+  does. Read the answer file rather than printing it whole, and shape what you
+  need with the prompt's structure, not a count.
 
 - **A project as workspace runs its code.** agy loads `.agents/` hooks, MCP
   servers, rules and agents from its workspace and each parent up to the repo

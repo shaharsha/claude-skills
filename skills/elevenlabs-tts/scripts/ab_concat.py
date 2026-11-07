@@ -33,7 +33,7 @@ def main():
         chains.append(f"[{i}:a]aresample=44100,aformat=channel_layouts=mono,apad=pad_dur={a.gap}[a{i}]")
     fc = ";".join(chains) + ";" + "".join(f"[a{i}]" for i in range(len(a.clips))) + \
         f"concat=n={len(a.clips)}:v=0:a=1[o]"
-    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *args, "-filter_complex", fc,
+    subprocess.run(["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", *args, "-filter_complex", fc,
                     "-map", "[o]", "-b:a", "160k", a.out], check=True)
     for label, t, c in zip("ABCDEFGHIJKLMNOPQRSTUVWXYZ", starts(durs, a.gap), a.clips):
         print(f"  {label}  {mmss(t)}  {c}")

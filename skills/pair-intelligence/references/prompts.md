@@ -150,6 +150,9 @@ Severity is about the consequence if the scenario occurs, confidence is about
 whether the scenario is real. Keep them independent — a certain cosmetic issue
 is low severity at high confidence, and a suspected data-loss bug is critical at
 low confidence. Report both honestly rather than hedging one into the other.
+Say in failure_scenario whether some input reaches the defect today. One that
+waits on data, a caller or a setting that does not exist yet is latent: say so,
+and rate it no higher than medium.
 
 Where the code is genuinely correct, say so and move on. An empty findings list
 is a valid outcome and a better answer than a padded one.
@@ -159,6 +162,17 @@ Return your result as JSON conforming to the supplied schema.
 ```
 
 ---
+
+**A plan or document outside the repository.** Codex's read-only sandbox reads
+the whole disk, so name the plan by absolute path in `{{SCOPE}}` and point
+`--repo` at the repository it will land in. Gemini reads only under `--cwd`:
+stage the repository with `pair_stage.sh` and copy the plan into that folder.
+**A revised plan**, reviewed for what changed since the last round: make a folder
+a git repository (`git init`), commit the revision already reviewed, copy the new
+one over it and leave it uncommitted, then scope `git diff HEAD` plus the plan as
+a whole. The review's DIRTY banner is expected there. The prompt file may sit
+inside `--repo`: the reviewer can read it, which matters only if it holds
+something the reviewer should work out alone.
 
 **No diff** (a module or a staged folder reviewed as it stands): put the files in
 `{{SCOPE}}` and replace "Read the diff yourself with git, then read enough of the
@@ -178,8 +192,14 @@ Review this small change for defects. This is a pre-merge review of the author's
 own repository, requested by the author.
 
 <scope>
-{{SCOPE}}   (for example: git diff main...HEAD -- infra/dns/)
+{{SCOPE}}   (for example: git diff main...<sha> -- infra/dns/)
 </scope>
+
+<read_also>
+Files to read beyond the diff, each with why: the test that pins a value this
+change edits, the caller that depends on it. Leave the block out if there are
+none.
+</read_also>
 
 <intent>
 What the change is for, in two sentences. Any value the reviewer cannot fetch
@@ -199,6 +219,40 @@ digest of code) is one: title it "Brittle test: ...", with that edit as the
 failure scenario. A pin that predates the change and that it only re-stamps goes
 in scan_notes. Return JSON conforming to the supplied
 schema.
+```
+
+---
+
+## Mode: fix delta (the last round)
+
+For the round that checks only the fixes after an earlier round's findings were
+fixed: a fresh reviewer, `--effort medium`, usually two or three minutes. Commit
+the fixes first, so the scope names two shas. The stopping rule in
+`references/review.md` gives the final fix this round however small it is.
+
+```
+Review only the fixes in this change. This is a pre-merge review of the author's
+own repository, requested by the author.
+
+<scope>
+git diff {{BEFORE_FIX_SHA}}..{{AFTER_FIX_SHA}}. Read the whole of each function
+or section the diff touches, not only the hunks.
+</scope>
+
+<fixed>
+What the earlier round found, one line each, and what changed for it:
+{{FINDING_AND_FIX_LINES}}
+</fixed>
+
+<check>
+Whether each fix removes its defect for every input the finding named, and
+whether a fix broke something next to it: a caller, an error path, a test that
+pins the old behaviour.
+</check>
+
+Report only defects with a concrete wrong outcome, saying for each whether some
+input reaches it today. An empty findings list is a valid answer. Return JSON
+conforming to the supplied schema.
 ```
 
 ---
@@ -355,7 +409,8 @@ Fill `{{NEW_EVIDENCE}}` with what the source says, not with your conclusion:
 ## Mode: re-review after fixes (start a FRESH reviewer)
 
 Counterintuitive, and worth getting right: after fixing findings, do **not**
-resume. Start a new session with `--name <label>-r2`.
+resume. Start a new session with `--name <label>-r2`. This reviews the whole
+change again; a last round that checks only the fixes uses `Mode: fix delta`.
 
 Reviewing twice in the same context was the *worst* of the four conditions
 measured in arXiv:2603.12123 — F1 21.7, below even plain same-session
@@ -417,7 +472,9 @@ instead or the existing test to extend. A pin that predates the change and that
 the change only re-stamps goes in scan_notes, not findings.
 
 Severity is about the consequence if the scenario occurs, confidence is about
-whether the scenario is real. Keep them independent.
+whether the scenario is real. Keep them independent. Say in failure_scenario
+whether some input reaches the defect today; one that waits on data, a caller
+or a setting that does not exist yet is latent, and no higher than medium.
 </what_counts>
 
 Return your result as JSON conforming to the supplied schema.
