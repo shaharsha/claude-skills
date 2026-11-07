@@ -1,132 +1,74 @@
 # Gotchas
 
-Things that will bite you if you don't know. Read before using on a deck you care about.
+Things that will bite you if you don't know them. Read this before the first sync of a deck you care about.
 
-## The pptx import is destructive
+## The push is destructive
 
-Step 1 — resumable upload to Drive — **completely rewrites the Slides body**. Drive's converter reparses the pptx from scratch. Consequences:
+Step 1, the resumable upload onto the deck ID, **replaces the whole presentation**. Drive's converter re-parses the pptx from scratch:
 
-- **Pending suggested edits are wiped.** If a reviewer had uncommitted suggestions, they're gone.
-- **Comments anchored to changed shapes are orphaned.** They stay on the file but detached from any element. You'll see them pile up in the comments sidebar without a corresponding highlighted shape.
-- **Manual formatting inside the Slides is lost.** If someone tweaked a slide in the Slides UI between your syncs, the next sync reverts it.
+- **Pending suggestions are wiped**, and comments anchored to changed shapes are orphaned.
+- **Edits made in the Slides UI are lost.**
+- **Every element added through the API after the last import is deleted,** including narration videos, inserted images and shapes. Anything you attach after a push must be attached again after the next one. When the deck had narration videos (`narr_*`), the push prints the `gslides_narration.py insert` command that restores them.
+- **The page size comes from the pptx.** A deck that was 720x405pt becomes 960x540pt if the pptx says so, and positions computed for the old size end up in the wrong place. The step-1 line prints the size, and says so when it changed.
 
-**Mitigation:** make a copy of the Slides before the first sync.
+### The guard (step 0)
 
-Via the Drive UI: **File → Make a copy**.
+Right after each push, the script records the deck's Drive `modifiedTime` in `~/.cache/gdoc-sync/state.json` (written atomically, under a lock). Before the next push it lists the deck's Drive **revisions** since then. If any were made by someone other than this run's identity (the service account, or your own account under gcloud ADC), it refuses with exit 3 and prints who edited and when. That includes edits made while the previous sync was still running. Fold the person's change into the pptx, or pass `--force` to discard it.
 
-Via the API:
-```bash
-curl -X POST \
-  -H "Authorization: Bearer $TOKEN" \
-  "https://www.googleapis.com/drive/v3/files/${PRES_ID}/copy" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Backup — '"$(date +%F)"'"}'
-```
+The state is per machine, and Drive can merge an edit made within moments of the script's own into one revision.
 
-## Font substitution
+### Getting back
 
-Drive's converter substitutes any font not in Google's web-fonts catalog. Common casualties:
+Every push is a new entry in **File → Version history**. A copy through the Drive API made as the service account fails, because a service account has no Drive storage (`storageQuotaExceeded`). Make backup copies as a person.
 
-- **Custom corporate fonts** → fall back to a generic sans-serif
-- **System fonts** (San Francisco, Segoe UI) → fall back to Arial-equivalents
-- **Hebrew Noto Sans** → usually OK if the pptx specifies it explicitly; falls back to default Hebrew otherwise
+## What the converter drops or changes
 
-This often shifts text metrics — a string that fit on one line in PowerPoint may wrap in Slides. **Use Google Fonts (`Roboto`, `Open Sans`, `Noto Sans`, `Noto Sans Hebrew`) in your pptx source if fidelity matters.**
-
-## Custom slide masters and layouts
-
-If your pptx has custom slide masters / layouts, Drive's converter typically **flattens them into per-slide formatting**. The visual result is usually fine, but:
-
-- The "layouts" sidebar in Slides won't reflect your pptx's layout structure.
-- Future template-driven editing in Slides loses the original abstraction.
-- Master-level placeholders may render as floating shapes on each slide instead of inheriting from a master.
-
-No fix in code. If you need the master structure preserved, author directly in Google Slides instead of pptx.
-
-## Animations, transitions, embedded media
-
-Drive's converter has limited animation/transition fidelity:
-- Simple entrance/exit animations: usually preserved
-- Complex animation timelines, motion paths, triggers: lost or simplified
-- Slide transitions: most basic ones survive
-- **Embedded video / OLE objects: lost.** Video shapes become static placeholders.
-- **Embedded audio: lost.**
-
-If your pptx uses these, expect drift. No fix in code.
-
-## 100 MB conversion ceiling
-
-Drive's pptx-to-Slides converter caps at ~100 MB input. Decks over this fail conversion **silently** — you may get a successful upload that produces an empty or partial Slides. Compress images in the pptx before syncing, or split into multiple decks.
-
-## Slide-anchor link rewriting
-
-Step 2 walks each text run, looks at its `link.url`, and tries to detect broken in-deck slide refs:
-
-| Pattern | Action |
+| pptx content | In Google Slides |
 |---|---|
-| URL matches `slide[-_]?N(\.xml)?$` | Rewrite to `link.pageObjectId` for the Nth slide |
-| URL is `#slideN` or `#anchor-slug` | Rewrite by index or by slide-title slug match |
-| URL ends in `.xml` | Try numeric extraction; rewrite to slide N if it matches |
-| Already a `pageObjectId` / `slideIndex` / `relativeLink` link | **Left alone** — these survived conversion correctly |
-| Working external URL (https://...) that doesn't match a sibling pres | **Left alone** |
+| Embedded audio (narration) | **Dropped, every time.** The audio icon stays as a silent ~27pt picture. The script warns when the pptx has audio. Narrate with the narrating-pptx skill's Google Slides section instead |
+| Embedded video | Converted to a static image |
+| Native charts | Converted to images. Category or axis labels can disappear, so render charts as pictures in the pptx you push to Google |
+| Fonts outside Google Fonts | Fall back to Arial-like fonts, even when embedded, so lines wrap differently. Use Google Fonts (Roboto, Open Sans, Noto Sans, Noto Sans Hebrew) |
+| Custom masters and layouts | Flattened into per-slide formatting. The layout sidebar doesn't reflect the pptx's structure |
+| Animations and transitions | Simple ones usually survive; motion paths, triggers and timelines are lost or simplified |
+| Speaker notes | Usually kept |
+| Decks over 100 MB | Conversion fails |
 
-If your pptx has slide-to-slide links that come through as plain `relativeLink: NEXT_SLIDE` etc., those work fine without rewriting. The rewriter only fires on broken URL-string patterns.
+## Slide-link rewriting (step 2)
 
-## Cross-pres links require explicit mapping
+| Link URL | Action |
+|---|---|
+| Matches `slide[-_]?N(\.xml)?$` or `#slideN` | Rewritten to `pageObjectId` of slide N |
+| `#anchor` matching a slide title's slug | Rewritten to that slide |
+| Ends in `.xml` with a number in the link text | Rewritten to that slide number |
+| Already a `pageObjectId`, `slideIndex` or `relativeLink` link | Left alone |
+| A working external `https://` URL | Left alone |
 
-`--cross-pres-map "name.pptx=PRES_ID"` is **opt-in per sibling**. The script doesn't crawl your pptx to discover sibling references — you must declare each one. The match is by substring on the URL-decoded link URL, so any link whose `url` contains the `name` key matches.
+## Cross-deck links (step 3)
 
-If a cross-pres link points at an anchor that doesn't match the target's slide titles, it falls back to linking to the top of the target Slides (no slide deep-link).
+`--cross-pres-map "name.pptx=PRES_ID"` is opt-in per sibling, and a link matches when its URL contains `name`. The anchor resolves by slide-title slug, then `slideN`, then a number in the link text. Otherwise the link points at the top of the target deck.
 
-## Image resize uses the converted dimensions
+## Image resize (step 4)
 
-Step 4 reads each image page-element's `size.width × transform.scaleX` to compute its **effective** width on the slide. This is what's actually visible — the converted dimensions, not the source pixel size.
+The step uses each image's effective width (`size.width × transform.scaleX`), with a default maximum of the deck's page width, so full-bleed images aren't touched. Resized images keep their center. On image-only decks this step does nothing.
 
-**Default `--max-image-width` is auto-detected from the presentation's `pageSize.width`** — the actual page width. For Slides' standard 16:9 widescreen, that's **960pt** (12191675 EMU); for the older 4:3, it's 720pt. Detecting at runtime means full-bleed images are not touched regardless of the page size you chose.
+## RTL (step 5)
 
-The resize preserves aspect ratio uniformly and **keeps the image's center fixed** — important for centered or full-bleed images, since pptx-converted images often have non-zero translate offsets baked in. (The first version of this script kept the original translate, which shifted resized images into the top-left quadrant of the slide. Fixed.)
+`--rtl` walks every shape and table cell with text and sets `RIGHT_TO_LEFT` on all of it. It skips empty shapes, speaker notes and master/layout placeholders.
 
-For **image-only decks** (full-bleed slides, each one a single image), the per-slide image is exactly the page width — the resize step is a no-op.
+## Auth and 403s
 
-## RTL applies per text shape
+1. **Deck not shared with the service account.** Share with the key's `client_email`, as Editor.
+2. **APIs not enabled.** Enable the [Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com) and the [Slides API](https://console.cloud.google.com/apis/library/slides.googleapis.com) in the service account's project, then wait 1-3 minutes.
+3. **`storageQuotaExceeded`.** The service account tried to create a file; it has no Drive storage. See [auth-setup.md](auth-setup.md#what-a-service-account-cant-do).
+4. **gcloud ADC without the scopes.** `print-access-token --scopes` only works for scopes granted at login. See [auth-setup.md](auth-setup.md#path-b-gcloud-adc-fallback).
 
-`--rtl` walks every shape and table cell with non-empty text and applies `direction: RIGHT_TO_LEFT` to its full text range. It does **not** touch:
+The script prints a `hint:` line under the API's error for the common cases.
 
-- Empty shapes (no text → nothing to direct)
-- Speaker notes (separate text element, not walked)
-- Master / layout placeholders (not walked, since they appear on the actual slide as inherited content)
+## Rate limits and retries
 
-For mixed-direction decks (mostly Hebrew with one English chapter), this still usually works — Slides' bidi algorithm handles LTR runs inside RTL paragraphs reasonably.
-
-## Cached tokens and 1-hour TTL
-
-- **Service account tokens** last ~1 hour. `google-auth` refreshes them automatically on every `refresh()` call (script does this once per run).
-- **gcloud ADC tokens** last ~1 hour but refresh automatically while the refresh token is valid. If you sleep your laptop for hours, the refresh may fail — re-run `gcloud auth application-default login`.
-
-## 403 Forbidden — diagnostic checklist
-
-In order of likelihood:
-
-1. **Slides not shared with SA?** Open the Slides, Share, confirm the SA email has Editor access.
-2. **APIs not enabled?** Visit [Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com) and [Slides API](https://console.cloud.google.com/apis/library/slides.googleapis.com) in the SA's project. If just enabled, wait 1-3 minutes for propagation.
-3. **Wrong SA key?** The key's `client_email` must match the email shared on the Slides. `cat sa-key.json | jq -r .client_email` to check.
-4. **Using gcloud ADC without Slides scope?** The default `cloud-platform` scope doesn't include Slides write. See [auth-setup.md Path B](auth-setup.md#path-b-gcloud-adc-fallback).
-5. **Org policy blocking external sharing?** Some Google Workspace orgs disable external-user sharing. Check with your Workspace admin.
-
-## Resumable upload Location header
-
-The script uses the resumable upload protocol: `PATCH` to initiate, then `PUT` the bytes to the `Location` URL returned in the response headers. If the initiate response doesn't include a `Location` header (rare — usually means the request was malformed), the script raises with the full headers dict for debugging.
-
-## Rate limits
-
-Google Slides API has per-user and per-project quotas. For a single sync of a reasonably-sized deck, you'll use ~5-10 API calls — nowhere near any limit. If you're syncing dozens of decks in a loop, add `time.sleep(0.5)` between runs or you may hit 429s.
-
-The script retries 429/5xx automatically up to 4 times with exponential backoff, so transient hits are absorbed.
+A sync makes about 8-12 calls, plus one per slide for `--thumbnails` (thumbnail requests are expensive against the Slides quota). 429 and 5xx responses are retried up to 4 times with backoff.
 
 ## Shared drives
 
-The script uses `supportsAllDrives=true` on the Drive upload, so Shared Drives should work. If you hit issues:
-- Ensure the SA is added to the Shared Drive as **Content Manager** (not just shared on the file)
-- Some org-level policies still block SA access to Shared Drives — check with your Workspace admin
-
-File an issue if this fails for you.
+Uploads pass `supportsAllDrives=true`. On a shared drive, add the service account as a **Content Manager**.

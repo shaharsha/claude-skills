@@ -13,7 +13,7 @@ Turn any deck into a self-presenting one: write presenter-style narration script
 
 **The iron rule (paid for in blood): NEVER hand-write `<p:timing>` autoplay XML.** Hand-rolled timing XML corrupts the file — PowerPoint shows "found a problem… Repair". The only reliable method is letting **real PowerPoint author the XML itself** via AppleScript play-settings (`scripts/set_autoplay.sh`). If you're tempted to inject timing XML "just this once" — that's the exact failure this skill exists to prevent.
 
-**Requirements:** an ElevenLabs key and a voice ID (elevenlabs-tts covers both). For a pptx: macOS + Microsoft PowerPoint (the autoplay step) and `python-pptx`. For Google Slides: ffmpeg, `google-auth`, and the service account the gslides-sync skill uses.
+**Requirements:** an ElevenLabs key and a voice ID (elevenlabs-tts covers both). For a pptx: macOS + Microsoft PowerPoint (the autoplay step) and `python-pptx`. For Google Slides: ffmpeg and the service account the gslides-sync skill uses. Its key is found automatically (`$GOOGLE_SA_KEY`, then `~/.config/gdoc-sync/sa-key.json`; or pass `--sa-key`), and no Python packages are needed.
 
 ## Pipeline (5 steps, in order)
 
@@ -78,18 +78,20 @@ Google's pptx import **drops embedded audio every time**: each slide keeps the s
 
 ```bash
 S=<this-skill-dir>/scripts/gslides_narration.py
+F=$(python3 $S folder --pres PRES_ID)        # 0. the deck's own folder on the shared drive
 python3 $S videos audio/ videos/                                       # 1. one mp4 per clip, cut to the audio's exact length
-python3 $S upload videos/ --folder FOLDER_ID --sa-key SA.json          # 2. into a Drive folder
-python3 $S wait   videos/ --folder FOLDER_ID --sa-key SA.json          # 3. until Drive has processed them
-python3 $S insert --pres PRES_ID --folder FOLDER_ID --sa-key SA.json   # 4. on the slides, autoplaying [--skip 12 13]
-python3 $S check  --pres PRES_ID --folder FOLDER_ID --sa-key SA.json --videos videos/   # 5. read-only proof
+python3 $S upload videos/ --folder $F          # 2. into a Drive folder
+python3 $S wait   videos/ --folder $F          # 3. until Drive has processed them
+python3 $S insert --pres PRES_ID --folder $F   # 4. on the slides, autoplaying [--skip 12 13]
+python3 $S check  --pres PRES_ID --folder $F --videos videos/   # 5. read-only proof
 ```
 
 - **Push the clean pptx to Slides, not the narrated one** (gslides-sync). The narrated one leaves a dead speaker icon on every slide.
-- **The service account cannot create Drive files** in a My Drive folder: 403 "Service Accounts do not have storage quota". `upload` lists the files for the user to drag into the folder once, and every later run overwrites them in place, which works. A shared-drive folder the account belongs to avoids the manual step.
-- **Wait before inserting.** Until Drive has processed a file, the slide shows a broken or old-length video; `wait` polls for the thumbnail and the new length.
+- **Keep narration on a shared drive.** A service account has no Drive storage, so it cannot create files in a My Drive folder (403 "Service Accounts do not have storage quota"). On a shared drive where it is a **Manager**, it can. Name each shared drive for its organisation, e.g. "Deck narration (example.com)": `folder --pres PRES_ID` picks the drive named for the deck owner's domain (or pass `--drive NAME`) and keeps one folder per deck there: it creates the folder on first use, finds it again by the deck's id, and renames it when the deck is renamed. Without a shared drive, `upload` lists the files for a person to drag into the folder once, and every later run overwrites them in place.
+- **Only the deck's audience can see its narration, if the drive itself stays narrow.** Shared-drive members see every file on the drive, and no per-folder grant can hide anything from them. So the drive's members are only the owner and the service account, and nobody else is ever added to the drive. `folder` and `insert` give each person, group, domain or anyone-with-the-link grant on the deck view-only access to that deck's folder, without notification emails, and nothing broader. They only ever add; `insert` grants access before it places the videos, and exits non-zero naming any grant that failed (for example, a drive that blocks sharing outside the org). `insert --dry-run` prints the grants without making them. Run `share --pres … --folder … --prune` to also remove people the deck no longer includes. For this to work, the drive's setting "Allow people who aren't shared drive members to access files" must be on, and for outside viewers, "Allow people outside <org> to access files" too.
+- **Wait before inserting.** Until Drive has processed a file, the slide shows a broken or old-length video; `wait` polls for the thumbnail and the new length. Brand-new files can take several minutes (about 7 for three short clips on a shared drive), so leave the default 10-minute `--timeout` alone and run it in the background in an agent shell.
 - **Re-run `insert` after every gslides-sync.** A re-push wipes the videos, and can change the page size (720×405 to 960×540 pt), so the badge is placed as a fraction of the page. `insert` replaces its own earlier videos (object IDs `narr_…`) and nothing else, so re-running is safe; `--dry-run` shows the plan first.
-- **Share the folder with the deck's audience.** A viewer without access to the videos sees a deck that won't play.
+- **A viewer without access to the videos sees a deck that won't play.** `insert` re-grants access on every run. If the deck's sharing changes between syncs, run `share` again.
 - **Slides cannot advance when a clip ends.** The viewer clicks to the next slide. For hands-free playback, ship the video too (deck-to-video).
 
 ## Updating a narrated deck
@@ -141,6 +143,9 @@ Avoid AppleScript for geometry (its `top`/`left position` properties fight the c
 | `ffmpeg -loop 1 … -shortest` for a still + audio video | The video runs 30–50% past its audio | `-t <audio seconds>` (the `videos` step) |
 | Inserting videos before Drive has processed them | Broken or old-length video on the slide | `wait`, then `insert` |
 | Not re-running `insert` after a gslides-sync | The re-push wiped every narration video | `insert` after every sync; `check` proves it |
+| Videos in a My Drive folder | The service account can't create them, so someone drags files in by hand | A shared drive per org with the account as Manager; `folder --pres PRES_ID` |
+| Viewers not given access to the narration folder | The deck plays for you, but viewers see a video they can't open | `insert` grants access before placing videos; re-run `share` when the deck's sharing changes |
+| Adding people to the narration shared drive itself | They can see every deck's narration | Keep the drive's members to the owner and the service account; access is granted per deck folder |
 | Copying an approved sample into the batch by hand | The manifest has no record of that slide | Generate the sample into `audio/`, batch the rest with `--only` |
 
 ## Caveats

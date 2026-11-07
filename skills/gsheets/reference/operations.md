@@ -1,271 +1,176 @@
 # Operations: details + gotchas
 
-Per-subcommand nuances and the edge cases that bite. SKILL.md has the happy-path summaries; this file is for the "wait, why isn't this working" moments.
+Per-command nuances and the edge cases that bite. SKILL.md has the happy path; this file is for "wait, why isn't this working".
 
-## Data: `read` / `write` / `append` / `clear`
+## Data
 
 ### `read`
 
-Uses `spreadsheets.values.get`. Returns a 2D array printed as JSON.
+`spreadsheets.values.get` for one range, `values:batchGet` for several (one API call).
 
 | Flag | Default | Notes |
 |---|---|---|
-| `--value-render` | `FORMATTED_VALUE` | What you see in the UI. Use `UNFORMATTED_VALUE` for raw numbers (e.g., 0.5 instead of "50%") or `FORMULA` to read the formula text instead of the computed value. |
-| `--major-dimension` | `ROWS` | Set to `COLUMNS` to transpose the response — rare. |
+| `RANGE…` / `--range` (repeatable) | — | One range prints a bare 2D array; several print an object keyed by the range strings you passed |
+| `--all-tabs` | off | Every tab in one call, keyed by tab title |
+| `--render` | `formatted` | `formatted` = what the UI shows (`"$1,000.00"`, `"50%"`), `unformatted` = raw numbers (`1000`, `0.5`), `formula` = formula text for formula cells |
+| `--pad` | off | Pads every row to the range's width (when the range names its columns) or the longest row; pads rows out to a bounded range's height |
+| `--fill-merged` | off | Copies a merge's value into every cell it covers (the API returns it only in the top-left cell) |
+| `--header-rows N` | 0 | Records keyed by the header path (`"AWS / prod 4719…"`), with merged header cells filled, `"\n"` in headers flattened, duplicate names suffixed with the column letter, `_row` = sheet row number, empty rows dropped |
+| `--numbered` | off | `[{"_row": 7, "values": [...]}]` |
 
-The response **trims trailing empty cells**. `read --range "Sheet1!A1:E1"` returns `[["a","b","c"]]` if D and E are empty, NOT `[["a","b","c","",""]]`. Pad in caller code if you need rectangular shape.
+The response **trims trailing empty cells and rows**: `A1:E1` with D and E empty returns `[["a","b","c"]]`, and an empty row in the middle is `[]`. An empty range returns `[]`, which you can't tell apart from a range that missed its target. Check the tab name, or use `--pad` on a bounded range.
+
+### `find` and `headers`
+
+`find` reads the tab (or the `--within` range) once and returns every row with a matching cell:
+- **How it matches:** `--value` (exact, trimmed), `--contains` (case-insensitive) or `--regex`.
+- **Where it searches:** `--col A,C` by letter, `--col-header "AWS / prod"` by header text (needs `--header-rows N`), or both. By default it searches every column.
+- **What it returns per hit:** `row`, then the `a1`, `value` and `header` of the first matching cell, plus `also` for other matching cells in the row. Add `--show TEXT` to list every cell in that row whose header contains TEXT, with A1 addresses and values. That is the "find the cell to edit by person and tool" lookup. Add `--record` for the whole row: keyed by header with `--header-rows`, as `values` without. `--record` is the default unless `--show` is given.
+
+No match prints `[]` with exit 0, and "no matching rows" on stderr. When `--value` matches several rows, stderr notes it: tell them apart by another column before writing.
+
+`headers --tab T --header-rows 2` prints `[{"col": "N", "header": "AWS / prod 4719…"}, …]`, with merged header cells filled. Use it to turn a header into a column letter.
 
 ### `write`
 
-Uses `spreadsheets.values.update` (PUT).
+`spreadsheets.values.update` (PUT).
 
 | Flag | Default | Notes |
 |---|---|---|
-| `--value-input-option` | `USER_ENTERED` | The Sheet parses formulas, dates, currencies — what a human typing would get. `RAW` inserts literal strings (preserves leading zeros, `=1+2` stays as the string "=1+2"). |
+| `--value-input-option` | `USER_ENTERED` | Parses like typing: formulas, dates, numbers, currencies. `RAW` stores strings literally: leading zeros and long IDs survive, and `"=1+2"` stays text |
+| `--expect JSON\|@file` | — | Compare-and-set: refused (exit 3, diff on stderr) unless the range's current values equal this. Takes the output of `read` |
+| `--expect-render` | `formatted` | Must match how the snapshot was read |
+| `--skip-empty` | off | `""` becomes `null`, so those cells are left alone |
+| `--verify` | off | Reads back and flags dropped leading zeros, 12-15-digit IDs turned into numbers, and formula errors (exit 4) |
 
-**Destructive within the range.** If you write `[["a"], ["b"]]` to `A1`, A1 becomes "a" and A2 becomes "b" — A3 is untouched, but anything that was in A1/A2 is gone.
+- **Pass the top-left cell, not a bounded range.** Values that don't fit a bounded range are rejected with `400 … tried writing to row N`. `"Tab!A1"` grows to fit the payload.
+- **Destructive only where values land.** Writing `[["a"], ["b"]]` at `A1` replaces A1 and A2. A3 is untouched, and so is formatting everywhere.
+- **`null` skips a cell; `""` clears it.** Writing `""` into a column filled by an `ARRAYFORMULA` breaks the array (`#REF!`). Use `null` or `--skip-empty`.
+- **`--expect` covers every cell the write touches,** from the anchor to the larger of the payload and the snapshot. Cells beyond the snapshot must be empty now, or the write is refused.
+- **The status line's cell count** is the API's `updatedCells`, which counts only non-empty values. A 19-row payload with blank cells reports fewer.
 
-**The range tells Sheets where to start, not where to stop.** If you write 100 rows but pass `--range "Sheet1!A1:A10"`, only the first 10 rows of your values land. To force all 100, write to `A1` (no end bound) or `A1:A`.
+### `batch-write`
 
-**Empty cells in the values array stay empty (write `""` to clear) or get skipped.** Use `null` in your JSON to skip a cell entirely; use `""` to clear it.
+`values:batchUpdate`: many ranges, one call, one `--value-input-option`. `--data` is `{"Tab!A1": [[…]], …}` or `[{"range": …, "values": […]}]`. `--expect` takes the same shape, so a multi-range `read` saved earlier is a valid snapshot.
 
 ### `append`
 
-Uses `spreadsheets.values.append` (POST). Looks for the "table" in the range and adds rows after the last non-empty row.
+`spreadsheets.values.append` (POST). Sheets looks for "the table" around the range you give, and adds rows after the last row of the table it finds.
 
 | Flag | Default | Notes |
 |---|---|---|
-| `--insert-data-option` | `INSERT_ROWS` | Adds new rows. Use `OVERWRITE` to write into existing rows below the table (rarely what you want — destructive). |
+| `--insert-data-option` | `INSERT_ROWS` | Inserts new rows, which shifts what's below. `OVERWRITE` writes into the cells under the table instead and can clobber data |
 
-The range should encompass the table's columns: `"Sheet1!A:Z"` (whole sheet by column) or `"Sheet1!A1:Z"` (start row 1, all rows below).
+Table detection can surprise. `"Sheet1"` may pick the last block on the tab. Point the range at the block's columns (`"Log!A:H"`) and check the printed `table detected at …` (the API's `tableRange`). When you need the exact row number, `read` the column, compute the next row, and `write` that explicit range.
 
 ### `clear`
 
-Uses `spreadsheets.values.clear`. **Clears values only — keeps cell formatting, number formats, conditional rules.** To remove the rows themselves use `delete-rows`.
+`values:clear`: **values only**. Formatting, number formats, notes, validation and conditional rules stay. `--formats` also clears formatting, and `--all` clears values, formatting, notes and validation (via `updateCells`). To remove the rows themselves, use `delete-rows`. To reset a whole tab, including banding, conditional formats and the filter, use `table --replace`.
 
 ## Tabs
 
-### `add-tab`
-
-`--rows` / `--cols` set the *initial* dimensions; the sheet grows automatically as data is written past them. Default is 1000 × 26 (the same defaults the UI uses for new tabs).
-
-`--color "#hex"` sets the tab strip color (the colored bar under the tab name).
-
-### `delete-tab`
-
-Resolves `--title` → numeric sheetId by listing tabs first (one extra GET, cached for the process). If you pass an unknown title, the script lists available titles in the error.
-
-You can't delete the last tab. Sheets requires at least one. Add a new one first, then delete.
-
-### `rename-tab` / `duplicate-tab`
-
-`duplicate-tab` copies the source tab's content + formatting into a new tab. `--index` controls where the copy lands (0 = first). Useful for templated dashboards: keep a hidden `_template` tab and `duplicate-tab` each month.
+- `add-tab`: `--rows`/`--cols` set the starting size (default 1000 × 26), and the sheet grows as you write past it. `--sheet-id N` fixes the numeric id so later GridRanges can use it. `--rtl` makes a right-to-left tab.
+- `delete-tab`: you can't delete the last tab.
+- `duplicate-tab`: copies content and formatting. Keep a hidden `_template` tab and duplicate it each month.
+- `move-tab --title X --index 0`: 0 is the first position.
+- `set-title`: renames the spreadsheet file, which is what Drive and the browser tab show. A new file made in the UI is called "Untitled spreadsheet" until you do this.
 
 ## Structure
 
-### `freeze`
+- `freeze --rows 0` unfreezes.
+- `resize-cols` takes `--width N` for every column, `--widths 40,180,90` for one width per column starting at the first, or `--auto`. `--auto` fits the widest cell in each column, *including long note or prose rows*, which can make a column huge.
+- `merge`: the merged cell keeps the top-left value and discards the rest. Unmerging doesn't bring them back.
+- `insert-rows --rows 5:7` inserts 3 rows before row 5. New rows copy the formatting of the row above (`--inherit before`, the default unless you insert at row 1) or of the row below (`--inherit after`).
 
-Sets `gridProperties.frozenRowCount` and/or `frozenColumnCount`. `--rows 0` unfreezes. **Frozen rows stay visible when you scroll** — the classic use is `--rows 1` to pin the header.
+### Inserting at the edge of a range
 
-### `resize-cols` / `resize-rows`
+Formula ranges (`SUM(B2:B20)`, `SUMIF`), chart sources, conditional-format and validation ranges grow only when you insert **strictly inside** them:
 
-Two modes:
+| Insert at | Extends `B2:B20`? |
+|---|---|
+| Row 21 (just below the last row) | **No**: the new row is outside every range |
+| Row 2 (above the first data row) | **No** |
+| Rows 3-20 | Yes |
 
-- `--width N` / `--height N` — explicit pixel size. Sheets' default column width is 100px. Comfortable text columns: 140-180px. Number columns: 80-100px.
-- `--auto` — autoresize to content. Most useful right after writing data. The API is `autoResizeDimensions`; it computes the width needed to display the widest cell in each column at the current font.
-
-Auto-resize is per-column-independently — autosizing `A:E` may set each column to a different width.
-
-### `merge` / `unmerge`
-
-`--merge-type MERGE_ALL` (default) collapses the range into one big cell. `MERGE_COLUMNS` merges each column independently (gives you horizontal bands of merged cells, one per column). `MERGE_ROWS` is the row-wise version.
-
-**The merged cell takes its value from the top-left of the original range.** Other values in the merged range are discarded. Unmerging restores the cells but NOT their original values.
-
-### `insert-rows` / `delete-rows` / `insert-cols` / `delete-cols`
-
-Half-open ranges in row/col numbers (1-indexed). `--rows 5:7` inserts/deletes rows 5 through 7 (inclusive); 3 rows total. `--rows 5` is a single row.
-
-Insert is *before* the start index. `--rows 5:7` shifts existing rows 5+ downward by 3.
+To add rows at the end, insert before the last data row (row 20), then move the last row's values down. Or define ranges as open-ended (`B2:B`) from the start.
 
 ## Styling
 
 ### `format`
 
-Generic cell formatting. Pass any combination of `--bg`, `--fg`, `--bold`, `--italic`, `--font-size`, `--font`, `--align`, `--valign`, `--wrap`, `--number-format`.
+Pass any combination of `--bg`, `--fg`, `--bold/--no-bold`, `--italic`, `--font-size`, `--font`, `--align`, `--valign`, `--wrap/--no-wrap`, `--number-format`. The field mask covers only what you pass, so `--bg` alone keeps the cell's bold, font and number format. Several ranges in one call share the same format: `format ID "T!D2:D" "T!F2:F" --number-format "#,##0"`.
 
-The `--fields` mask is built dynamically — only the properties you set are sent to the API. This means `format` is **non-destructive to other formatting**. If you only pass `--bg`, the existing text formatting (bold, size, etc.) stays.
-
-`--number-format` patterns:
+`--number-format` infers the type from the pattern: `%` → PERCENT, `y`/`d`/`mmm` → DATE, `h`/`:ss` → TIME, `"$"`/`€`/`₪` → CURRENCY, otherwise NUMBER. `TEXT` makes the cells plain text.
 
 | Pattern | Renders | Use for |
 |---|---|---|
-| `0.00` | 1234.5 → `1234.50` | Plain decimals |
-| `#,##0.00` | 1234.5 → `1,234.50` | Thousands separator |
-| `0.00%` | 0.5 → `50.00%` | Percentages (input must be the fraction, not 50) |
-| `$#,##0.00` | 1234.5 → `$1,234.50` | USD |
-| `[$€-2] #,##0.00` | 1234.5 → `€ 1,234.50` | EUR (locale-aware) |
-| `yyyy-mm-dd` | date → `2026-05-26` | ISO dates |
-| `mmm d, yyyy` | date → `May 26, 2026` | Human dates |
-
-In Bash, escape the percent if you used `--number-format "0.00%"`: it's not Bash-special, just a heads-up that argparse needs `%%` in its own help string (not in CLI input).
+| `#,##0.00` | `1,234.50` | Thousands separator |
+| `0.00%` | 0.5 → `50.00%` | Percentages. The input is the fraction, and it takes **one** `%` on the command line |
+| `"$"#,##0.00` | `$1,234.50` | USD. Quote the `$` inside the pattern and single-quote the whole pattern in the shell: `'"$"#,##0.00'` |
+| `[$₪-40D] #,##0` | `₪ 1,234` | Shekels (locale-tagged) |
+| `yyyy-mm-dd` | `2026-05-26` | ISO dates |
+| `TEXT` | as typed | IDs you will also type into the UI |
 
 ### `format-header`
 
-Convenience wrapper that bundles:
-
-1. Bold + colored row 1 (via `repeatCell`)
-2. Freeze row 1 (via `updateSheetProperties.gridProperties.frozenRowCount = 1`)
-3. (Optional) `--filter` adds a basic filter on row 1 (dropdown arrows)
-
-All three in one atomic `batchUpdate` call (1 API call against quota, not 3).
-
-Defaults: blue `#1a73e8` background + white text. Pass `--bg` / `--fg` to override.
-
-**Re-running is idempotent.** Re-formatting an already-styled header is a no-op; you can call this in a script without checking state.
-
-### `borders`
-
-`--all` shorthand sets every side + inner. Otherwise pick individual sides: `--top --bottom --left --right --inner`.
-
-`--style`:
-- `SOLID` (default) — 1px
-- `SOLID_MEDIUM` — 2px
-- `SOLID_THICK` — 3px
-- `DOTTED` / `DASHED` / `DOUBLE` — visual variants
-- `NONE` — removes borders
-
-Color defaults to black; override with `--color "#hex"`. For subtle table grids, use a light gray like `#dadce0` (Google Material's outline color).
+Bundles bold + colors on header row `--row N` (default 1), a freeze through that row (`--no-freeze` to skip) and an optional `--filter`, all in one atomic call. Re-running it is idempotent.
 
 ### `banding`
 
-Adds zebra-striped alternating rows via `addBanding`. Defaults are tasteful: blue header (`#1a73e8`), white first band, light-gray second band (`#f1f3f4`).
-
-**The range should start at row 1 (the header)** if you want a styled header band — otherwise the first row of your range becomes the "first band" instead of the header.
-
-**Banding and `format-header` aren't a great combination.** Banding's header color overrides whatever `format-header` set. If you want both, use ONLY banding (it includes a header band) OR ONLY `format-header` (no zebra).
+Zebra stripes via `addBanding`. Start the range at the header row to get a styled header band. Cell fills override band colors. Banding fails on a range that overlaps existing banding: list it with `inspect`, then remove it with `deleteBanding` or `table --replace`.
 
 ### `conditional-format`
 
-Two ways to use it:
+Convenience flags for boolean rules: `--condition TYPE [--value V]… --bg/--fg/--bold`. Repeat `--value` for two-value conditions such as `NUMBER_BETWEEN`. Common types are `NUMBER_GREATER`, `NUMBER_LESS`, `NUMBER_BETWEEN`, `TEXT_EQ`, `TEXT_CONTAINS`, `TEXT_STARTS_WITH`, `DATE_BEFORE`, `BLANK`, `NOT_BLANK` and `CUSTOM_FORMULA` (`--value '=$C2="Offboarded"'`). `--rule @rule.json` takes any raw `ConditionalFormatRule`, including gradients.
 
-**Convenience flags** for boolean rules:
+Each call **adds** a rule. Nightly scripts that re-add rules pile up duplicates, so list existing rules with `inspect` and delete them with `deleteConditionalFormatRule` (by index) via `batch-update`, or rebuild with `table --replace`.
 
-```bash
-gsheets conditional-format $ID --range "Sales!E2:E" \
-  --condition NUMBER_GREATER --value 10000 \
-  --bg "#fff8e1" --fg "#5f6368" --bold
-```
+### `validation`
 
-Supported condition types (a subset — see [the Sheets API ConditionType enum](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/other#ConditionType) for the full list):
+`--one-of "a,b,c"` (dropdown), `--one-of-range "=Roles!$A$2:$A$30"`, `--checkbox`, `--formula '=LEN(A2)<=40'`, or `--clear`. `--no-strict` warns instead of rejecting. Use open-ended ranges (`E2:E`) so new rows are covered.
 
-| Condition | Takes `--value`? | Matches when |
-|---|---|---|
-| `NUMBER_GREATER` | Yes | Cell > value |
-| `NUMBER_GREATER_THAN_EQ` | Yes | Cell ≥ value |
-| `NUMBER_LESS` | Yes | Cell < value |
-| `NUMBER_LESS_THAN_EQ` | Yes | Cell ≤ value |
-| `NUMBER_EQ` | Yes | Cell = value |
-| `NUMBER_NOT_EQ` | Yes | Cell ≠ value |
-| `NUMBER_BETWEEN` | (pair via raw rule) | Cell in [min, max] — use `--rule` |
-| `TEXT_CONTAINS` | Yes | Substring match |
-| `TEXT_NOT_CONTAINS` | Yes | No substring match |
-| `TEXT_STARTS_WITH` | Yes | Prefix |
-| `TEXT_ENDS_WITH` | Yes | Suffix |
-| `TEXT_EQ` | Yes | Exact text |
-| `DATE_BEFORE` | Yes (`"2026-01-01"`) | Date older |
-| `DATE_AFTER` | Yes | Date newer |
-| `BLANK` | No | Empty cell |
-| `NOT_BLANK` | No | Any non-empty cell |
-| `CUSTOM_FORMULA` | Yes (`"=A2>B2"`) | Formula evaluates truthy |
+**Except checkboxes:** every empty checkbox cell reads back as `FALSE`. A checkbox column over `H2:H` makes all ~1000 grid rows non-empty, so `read` returns them all, and `append` and table detection land after the grid's last row. Bound checkbox ranges to the data rows, and extend them as the table grows.
 
-**Raw rule JSON** for anything else (color scales / gradients, multiple ranges, complex compound formats):
+### `note`, `copy-format`
 
-```bash
-gsheets conditional-format $ID --range "..." --rule @rule.json
-```
+`note RANGE --text …` / `--clear` sets the same note on every cell in the range. `copy-format --from SRC --to DST` runs a `copyPaste`, and the source repeats to fill a larger destination. `--what` is `format` (default), `validation`, `conditional`, `values`, `formulas`, `all` or `no-borders`. Copying over a destination where only some cells are merged can fail or mis-merge: copy the merged top-left cell on its own, then `merge`.
 
-Where `rule.json` is a complete [ConditionalFormatRule](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/conditional#ConditionalFormatRule). The `--range` flag is still required (used to derive sheetId) but the rule's own `ranges` take precedence if present.
+### `table`
 
-## Filter / sort
+One atomic `batchUpdate`: `updateCells` (typed values) + header style + freeze + `--col-format` per column + `--widths`/`--auto-width` + `--wrap` + `--filter` + `--banding`. With `--replace` it first unmerges, clears values, formats, notes and validation, removes the filter, and deletes banding and conditional-format rules. `--create` adds the tab, and the grid grows to fit the table, both in the same batch. `--input user-entered` (the default for `--csv`) needs a separate `values.update`, so it runs in steps: grow the grid and reset formatting, write the values, lay out, then clear the old values outside the new table. Old values are never cleared before the new ones are in. Column letters in `--col-format` are sheet columns, not table-relative ones.
 
-### `add-filter`
+## Inspect / export
 
-Adds a basic filter on a range — dropdown arrows on the header row.
-
-**A sheet can have only ONE basic filter at a time.** `add-filter` replaces any existing filter without warning. Use `clear-filter` first if you need to know that it existed.
-
-For filter views (multiple saved filter configs that don't affect other viewers), drop to the escape hatch: `addFilterView` request.
-
-### `clear-filter`
-
-Removes the basic filter from a tab. No-op if no filter exists (Sheets returns success).
-
-### `sort`
-
-Sorts a range in-place. `--by` is a comma-separated list:
-
-```bash
---by "B:desc"           # one column, desc
---by "B:desc,C:asc"     # two columns, primary then secondary
---by "B"                # default order: ascending
-```
-
-**The range must not include your header row** if the header has different formatting — sorting reorders the header, which is rarely what you want. Use `Sheet1!A2:Z` (skip row 1) for header-less sort.
+- `inspect --tab T` lists the frozen panes, column widths (and hidden columns), merges, conditional-format rules with their A1 ranges, banding, the basic filter, filter views, protected ranges, row and column groups, and charts with their source ranges. `--cells A1:H40` adds per-cell number formats, notes and validation, grouped into vertical runs. Colors print as hex; pass `--raw` for API objects you can paste into `batch-update`.
+- `export --tab T --format png --out x.png` renders page 1 through the PDF export, then converts it with `pdftoppm` or macOS `sips`. `--format pdf|xlsx|csv` downloads the file. `--cells A1:H40` limits it to a range. Use it to look at the result: a share link needs a Google sign-in, which a headless browser doesn't have.
+- `revisions` lists recent Drive revisions (time and user). Drive can't show what changed in a Sheet revision.
 
 ## Escape hatch: `batch-update`
 
-When the wrappers don't cover something, drop to raw [Request](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request) objects. See [batch-update.md](batch-update.md) for a cookbook.
-
-```bash
-gsheets batch-update $ID --requests @file.json
-gsheets batch-update $ID --requests '[{"unmergeCells":{"range":{"sheetId":0}}}]'
-```
-
-Both `[{...}]` and `{"requests":[{...}]}` are accepted on input.
+Raw [Request](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request) objects, with A1 strings allowed (`"range": "Tab!A1:C3"`, `"sheetId": "Tab"`, `"backgroundColor": "#1a73e8"`). Both `[{…}]` and `{"requests":[{…}]}` work. It prints a summary; `--full` prints the whole reply. See [batch-update.md](batch-update.md).
 
 ## Cross-cutting
 
 ### Atomicity
 
-Every wrapper that uses `batchUpdate` (everything except the four `values.*` data operations) is **atomic**: all requests in a single CLI call commit together or none commit. Use this for related multi-step changes — bundle into one `batch-update` call instead of N separate CLI invocations.
+Every command built on `batchUpdate` commits all of its requests or none: that is everything except `read`, `write`, `batch-write`, `append` and `clear` without flags. Bundle related changes into one call (`table`, or `--dry-run` outputs concatenated into one `batch-update`) to avoid half-applied states.
 
 ### Quota
 
-Sheets API limits: **60 writes/user/minute, 300 writes/project/minute**. Each `batchUpdate` call counts as 1, regardless of how many requests it contains. The script auto-retries 429s with truncated exponential backoff + jitter (up to ~32s, 5 attempts).
-
-If you're sustaining bulk writes, batch them: 100 small updates → 1 `values.batchUpdate` call instead of 100 `values.update` calls.
+60 read requests and 60 write requests per minute per user, and 300 of each per minute per project, with no daily cap. A service account is **one user**: several agents sharing a key share 60/min, and a burst of parallel reads can stall for a minute or more. The script retries 429s with backoff and jitter (5 attempts, up to ~32 s apart). It also retries 5xx and timeouts, but only for calls that are safe to repeat: reads, `values.update`, `batch-write`, `clear`, and `batchUpdate`s with no inserts, deletes or added rules. A retry of `append` or `insert-rows` after a timeout could add the rows twice, so those fail instead. Re-read and decide. Make fewer calls with `read RANGE RANGE…`, `--all-tabs`, `batch-write` and `table`.
 
 ### Idempotency
 
-Most operations are idempotent on the second call:
-
-| Operation | Idempotent? |
+| Operation | Re-run safe? |
 |---|---|
-| `format`, `format-header`, `borders` | Yes — re-applies the same formatting |
-| `freeze`, `resize-cols`, `resize-rows` | Yes |
-| `add-tab` with existing title | No — API rejects with "duplicate name" |
-| `delete-tab` with already-deleted title | No — script errors with "tab not found" |
-| `add-filter` | Yes (last call wins, but state ends up the same) |
-| `merge` on already-merged range | Yes |
-| `conditional-format` | NO — each call adds a NEW rule. Track manually or delete old rules first via raw `deleteConditionalFormatRule`. |
-| `banding` on a range with existing banding | NO — rejects with "overlapping band ranges". Delete old bandings first or pick a non-overlapping range. |
+| `format`, `format-header`, `borders`, `freeze`, `resize-*`, `validation`, `note`, `copy-format`, `set-title`, `move-tab` | Yes |
+| `add-filter`, `merge` | Yes (last call wins) |
+| `table --replace` | Yes (resets then rebuilds) |
+| `table` without `--replace` | Mostly: it fails if `--banding` overlaps the previous run's banding |
+| `add-tab` with an existing title | No (duplicate name) |
+| `conditional-format` | **No**: each call adds a rule |
+| `banding` over existing banding | **No**: overlapping band ranges |
 
-The non-idempotent cases are the main footguns. For dashboard automation that runs nightly, prefer destructive-and-recreate (delete-tab + add-tab) over additive-and-hope (which leaves stale rules accumulating).
+### Not wrapped (use `batch-update`)
 
-### Things this CLI does NOT do
-
-These exist in the API but aren't first-class subcommands. Use `batch-update`:
-
-- Charts (`addChart` / `updateChartSpec`)
-- Data validation rules / dropdowns (`setDataValidation`)
-- Protected ranges (`addProtectedRange`)
-- Named ranges (`addNamedRange`)
-- Pivot tables (live inside `updateCells` requests)
-- Filter views (`addFilterView`)
-- Developer metadata
-- Per-cell hyperlink / note assignment (use values.update with `userEnteredValue.formulaValue = "=HYPERLINK(...)"`)
-- Conditional format DELETION (use `deleteConditionalFormatRule` with the rule's index)
-- Color schemes / themes
-
-See [batch-update.md](batch-update.md) for templates of the common ones.
+Charts (`addChart`), protected ranges, named ranges, pivot tables, filter views, the Sheets Tables feature (`addTable`), developer metadata, hyperlinks in cells (write `=HYPERLINK("url","label")`), deleting a conditional-format rule, themes. Templates for the common ones are in [batch-update.md](batch-update.md).

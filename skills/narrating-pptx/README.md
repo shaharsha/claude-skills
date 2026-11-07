@@ -56,7 +56,7 @@ ln -s "$PWD/claude-skills/skills/narrating-pptx" ~/.claude/skills/narrating-pptx
 - **macOS + Microsoft PowerPoint** installed — required for the autoplay step, which has no substitute.
 - `python-pptx`
 - [elevenlabs-tts](../elevenlabs-tts) installed beside it — it generates the audio, and covers the key and the voice
-- For Google Slides: ffmpeg, `pip install google-auth`, and a service account with Editor on the deck and its Drive folder (the one [gslides-sync](../gslides-sync) uses)
+- For Google Slides: ffmpeg, and a service account with Editor on the deck and its Drive folder (the one [gslides-sync](../gslides-sync) uses). The key is found at `$GOOGLE_SA_KEY` or `~/.config/gdoc-sync/sa-key.json` (or pass `--sa-key`); no Python packages are needed
 
 ## Quick start
 
@@ -83,10 +83,11 @@ scripts/set_autoplay.sh "$HOME/Downloads/narrated.pptx" SLIDE_COUNT
 
 ```bash
 python3 scripts/gslides_narration.py videos audio/ videos/                                  # mp4 per clip, exact length
-python3 scripts/gslides_narration.py upload videos/ --folder FOLDER_ID --sa-key SA.json     # in-place after the first time
-python3 scripts/gslides_narration.py wait   videos/ --folder FOLDER_ID --sa-key SA.json
-python3 scripts/gslides_narration.py insert --pres PRES_ID --folder FOLDER_ID --sa-key SA.json   # re-run after every sync
-python3 scripts/gslides_narration.py check  --pres PRES_ID --folder FOLDER_ID --sa-key SA.json --videos videos/
+F=$(python3 scripts/gslides_narration.py folder --pres PRES_ID)   # the deck's folder on a shared drive, shared like the deck
+python3 scripts/gslides_narration.py upload videos/ --folder $F
+python3 scripts/gslides_narration.py wait   videos/ --folder $F
+python3 scripts/gslides_narration.py insert --pres PRES_ID --folder $F   # re-run after every sync
+python3 scripts/gslides_narration.py check  --pres PRES_ID --folder $F --videos videos/
 ```
 
 **Slides inserted or deleted after narration:** `python3 scripts/renumber_slides.py scripts.json audio/ --insert 5` (a new slide 5, added after slide 4) shifts every later clip, script and manifest entry, so no audio lands on the wrong slide.

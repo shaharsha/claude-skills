@@ -1,6 +1,6 @@
 # gdoc-sync
 
-Sync a local Markdown file to an existing Google Doc — with working internal anchor links, auto-resized images, and optional RTL paragraph direction for Hebrew/Arabic docs. Works as a standalone CLI and as an agent skill.
+Sync a local Markdown file to an existing Google Doc. Internal anchor links work, cross-doc links work, images are sized to the page, and the tight paragraph styling survives every re-sync. Optional RTL for Hebrew and Arabic. A guard stops it from overwriting edits someone made in the Doc in the meantime. Works as a standalone CLI and as an agent skill.
 
 Part of [shaharsha/claude-skills](../..). MIT.
 
@@ -8,27 +8,24 @@ Part of [shaharsha/claude-skills](../..). MIT.
 
 ## Why
 
-Google Docs has a native "import from markdown" endpoint — great for the first 80% of the conversion — but it falls over on four things:
+Google Docs imports markdown natively, which handles most of the conversion. It falls over on these:
 
-1. **Internal anchor links like `[see §5](#section-5)`** get imported as *URL links* pointing at the literal string `#section-5` (broken). They should be native heading links.
-2. **Cross-doc links like `[see §5 in plan](other.md#anchor)`** import as URL links pointing at a literal markdown filename (broken). They should deep-link into the sibling Doc.
-3. **Inline images** get imported at their source resolution (often 1500+ pt wide), which destroys page layout.
-4. **Paragraph direction** is never set. Hebrew / Arabic markdown content renders LTR — every paragraph needs `direction: RIGHT_TO_LEFT` applied after import.
+1. **`[see §5](#section-5)`** imports as a URL link to the literal string `#section-5`, which goes nowhere. It should be a native heading link.
+2. **`[see the plan](other.md#anchor)`** links to a local filename. It should deep-link into the sibling Doc.
+3. **Inline images** arrive at their source resolution, often 1500+ pt wide, which breaks the layout.
+4. **Styling resets on every push.** Line spacing returns to 115, empty paragraphs appear between blocks, and any tightening you did by hand is gone.
+5. **Paragraph direction** is never set, so Hebrew and Arabic render LTR.
+6. **The push replaces the whole body.** A colleague's edit made in the Doc since your last push is silently lost.
 
-`gdoc-sync` is a single Python script that does the import **plus** all three post-processing passes, so the resulting Doc actually looks like your markdown intended.
+`gdoc-sync` is one Python script that pushes the markdown and fixes all six.
 
 ## What it does
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  local .md  ──push──▶  Google Doc  ──fix anchors──▶  resize imgs│
-│                                                         │        │
-│                                                         ▼        │
-│                                                  apply RTL (opt) │
-└─────────────────────────────────────────────────────────────────┘
+ guard ──▶ push .md (+ rename) ──▶ fix #anchors ──▶ fix cross-doc links ──▶ resize images
+                                                                             │
+                     export PDF (opt) ◀── restyle (opt) ◀── RTL (opt) ◀───────┘
 ```
-
-One command, three API calls, a doc that works.
 
 ## Install
 
@@ -46,109 +43,63 @@ git clone https://github.com/shaharsha/claude-skills.git
 ln -s "$PWD/claude-skills/skills/gdoc-sync" ~/.claude/skills/gdoc-sync
 ```
 
+No Python packages needed: the script uses `google-auth` if it is installed, and otherwise signs the service-account token with `cryptography` or the `openssl` CLI.
+
 ## Quick start
 
 ```bash
-# The one optional dependency (only needed for service-account auth)
-pip install google-auth
-
-cd skills/gdoc-sync
-
-# Run
-scripts/sync-gdoc.py path/to/your.md \
-  --doc-id <GOOGLE_DOC_ID> \
-  --sa-key path/to/service-account.json \
-  [--rtl] [--no-links] [--max-image-width 300] \
-  [--cross-doc-map "other.md=OTHER_DOC_ID" ...]
+python3 scripts/sync-gdoc.py path/to/your.md --doc-id <GOOGLE_DOC_ID> \
+  [--title "Name in Drive"] [--rtl] [--cross-doc-map "other.md=OTHER_DOC_ID"] \
+  [--line-spacing 100 --space-below 3 --heading-space-above 8 --drop-empty-paragraphs] \
+  [--export-pdf out.pdf]
 ```
 
-The doc ID is the long string in the URL: `https://docs.google.com/document/d/` **`1lSsp...FDU-BEE`** `/edit`.
+The Doc ID is the long string in `https://docs.google.com/document/d/` **`1lSsp...FDU-BEE`** `/edit`.
 
 ## Setup (one-time)
 
-You need a way to authenticate against Google's Drive + Docs APIs. The recommended path is a service account — it's stable, scriptable, and doesn't hit Google's OAuth "this app is blocked" friction.
+Use a service account. It is stable, it works headless, and it never hits the "This app is blocked" consent screen. Step by step: [`reference/auth-setup.md`](reference/auth-setup.md). In short:
 
-See [`reference/auth-setup.md`](reference/auth-setup.md) for the step-by-step. Summary:
+1. In a Google Cloud project, enable the **Google Drive API** and the **Google Docs API**.
+2. Create a service account, download its JSON key, and save it as `~/.config/gdoc-sync/sa-key.json`. Alternatively, set `$GOOGLE_SA_KEY`, or pass `--sa-key`.
+3. **Share each target Doc with the service account's email as Editor.** A service account can't create files, so create the Doc in the UI first.
 
-1. Create (or reuse) a Google Cloud project.
-2. Enable **Google Drive API** and **Google Docs API** in that project.
-3. Create a service account, download its JSON key.
-4. **Share the target Google Doc with the service account's email as Editor.**
-5. Pass `--sa-key path/to/key.json` when you run the script.
-
-Alternative: gcloud user ADC via `gcloud auth application-default login`. Works sometimes, gets blocked by Google for sensitive scopes on the default gcloud client. See [auth-setup.md](reference/auth-setup.md) for the workaround.
+The same key and setup serve the sister skills [gsheets](../gsheets) and [gslides-sync](../gslides-sync).
 
 ## Flags
 
 | Flag | Default | Description |
 |---|---|---|
-| `--doc-id <id>` | *required* | Google Doc file ID (the long string in the URL) |
-| `--sa-key <path>` | *none* | Path to a service-account JSON. If omitted, falls back to gcloud ADC. |
-| `--rtl` | off | Apply `direction: RIGHT_TO_LEFT` across every body paragraph (for Hebrew/Arabic) |
-| `--no-links` | off | Skip the anchor-link rewrite pass (step 2) |
-| `--max-image-width <pt>` | `300` | Max inline image width in points; images wider than this are resized preserving aspect ratio. Set `0` to skip image resizing. |
-
-Typical invocations:
-
-```bash
-# English doc with cross-references
-scripts/sync-gdoc.py plan.md --doc-id $DOC --sa-key $SA
-
-# Hebrew doc
-scripts/sync-gdoc.py plan.md --doc-id $DOC --sa-key $SA --rtl
-
-# No internal cross-references, just a one-shot push
-scripts/sync-gdoc.py plan.md --doc-id $DOC --sa-key $SA --no-links
-
-# Let images stay at their natural size
-scripts/sync-gdoc.py plan.md --doc-id $DOC --sa-key $SA --max-image-width 0
-```
-
-## How it works
-
-Four HTTP operations against `docs.googleapis.com` and `www.googleapis.com`:
-
-1. **`PATCH /upload/drive/v3/files/{id}?uploadType=media`** with `Content-Type: text/markdown`. Google converts the markdown natively — headings, tables, inline images, code blocks all land.
-2. **`GET /v1/documents/{id}`** to walk the resulting Doc structure. The script builds a `section-number → headingId` map from heading paragraphs, then rewrites every text run whose `link.url` starts with `#` to use `link.headingId` instead.
-3. **Find oversized inline images** (width > `--max-image-width`), `deleteContentRange` + `insertInlineImage` with explicit `objectSize` — preserves aspect ratio.
-4. *(Optional)* **`batchUpdate` with `updateParagraphStyle`** setting `direction: RIGHT_TO_LEFT` across the whole body range.
-
-Table cells get walked recursively — `body.content` doesn't descend into `table.tableRows[].tableCells[].content` automatically.
+| `--doc-id <id>` | *required* | Google Doc file ID |
+| `--sa-key <path>` | `$GOOGLE_SA_KEY`, then `~/.config/gdoc-sync/sa-key.json`, then gcloud ADC | Service-account JSON key |
+| `--title <name>` | — | Also rename the file in Drive |
+| `--rtl` | off | `direction: RIGHT_TO_LEFT` on every paragraph |
+| `--no-links` | off | Skip anchor and cross-doc rewriting |
+| `--max-image-width <pt>` | `300` | Shrink wider images; `0` skips |
+| `--cross-doc-map NAME=DOC_ID` | — | Repeatable; deep-links `NAME#anchor` into the sibling Doc |
+| `--line-spacing`, `--space-above`, `--space-below`, `--heading-space-above`, `--heading-space-below`, `--font-size` | — | Styling re-applied after every push |
+| `--drop-empty-paragraphs` | off | Remove the empty paragraphs the import inserts |
+| `--export-pdf <path>` | — | Google's render, for a visual check |
+| `--force` | off | Push even if a person edited the Doc since the last sync, or it has several tabs |
 
 ## Gotchas
 
-- **The markdown import is destructive.** It wipes pending suggested edits and orphans comments whose anchored text no longer matches. **Make a copy of your Doc before the first sync on a doc you care about** — via Drive's "Make a copy" or `POST /drive/v3/files/{id}/copy`.
-- **Anchor resolution is regex-based on leading section numbers** (e.g. `5.3.1`, `11.4`). If the matching heading number isn't present, the rewrite falls back to progressively shorter prefixes (`5.3.1` → `5.3` → `5`). If you have heading styles without numeric prefixes, add `--no-links` or adjust the regex in the script.
-- **RTL applies to every body paragraph.** If you need mixed direction, apply RTL on the whole doc and let Google's bidi algorithm handle individual LTR runs inside paragraphs — it usually does the right thing.
-- **Cached tokens for gcloud ADC expire.** If you see `403: Forbidden` unexpectedly after switching machines or waking from sleep, re-run `gcloud auth application-default login`.
+- **The push replaces the body.** Pending suggestions are wiped and comments on changed text are orphaned. The guard refuses when someone edited the Doc since the last sync. Every push is in File → Version history.
+- **One tab only.** A markdown push writes a single tab, so the script refuses a Doc that has several.
+- **Images need public URLs.** Relative paths and `data:` URIs are dropped by the import.
+- **Keep the sync command in a script** next to the markdown. The styling flags must run on every sync, because the push resets them.
 
 Full list: [`reference/gotchas.md`](reference/gotchas.md).
 
 ## Non-goals
 
-- Does not create new Google Docs (operate on existing ones by ID).
-- Does not read back from the Doc — one-way only (`md → Doc`).
-- Does not preserve comments or suggestions across syncs.
-- Does not manage permissions or sharing.
+- Creating Docs (it operates on an existing Doc ID).
+- Reading back from the Doc (it is one-way, `md → Doc`). For the reverse, use Drive's `text/markdown` export.
+- Preserving comments or suggestions across syncs.
+- Managing sharing.
 
 ## Dependencies
 
-- Python 3.9+
-- **Service account path:** `google-auth` (install via `pip install google-auth`).
-- **gcloud ADC path:** `gcloud` CLI on `$PATH`.
-
-No other dependencies — uses Python's `urllib` stdlib for all HTTP.
-
-## Related skills
-
-- [gslides-sync](../gslides-sync) — the same pattern for `.pptx` → Google Slides.
-- [gsheets](../gsheets) — the Sheets-shaped sibling. One service account works for all three.
-- [tech-design-doc](../tech-design-doc) — authors docs that get pushed here for stakeholder review.
-
-## Contributing
-
-Issues and PRs welcome. The script is intentionally single-file and stdlib-leaning — please keep it that way.
-
-## License
-
-MIT — see [LICENSE](../../LICENSE).
+- Python 3.9+, stdlib only.
+- For signing, whichever is present: `google-auth` (+ `requests`), `cryptography`, or the `openssl` CLI.
+- The `gcloud` CLI, only for the ADC fallback.

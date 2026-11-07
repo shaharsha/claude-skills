@@ -1,108 +1,101 @@
 # Gotchas
 
-Things that will bite you if you don't know. Read before using on a doc you care about.
+Things that will bite you if you don't know them. Read this before the first sync of a Doc you care about.
 
-## The markdown import is destructive
+## The push is destructive
 
-Step 1 — `PATCH` with `Content-Type: text/markdown` — **completely rewrites the Doc body**. Google's server reparses the markdown from scratch. Consequences:
+Step 1, the `PATCH` with `Content-Type: text/markdown`, **replaces the whole Doc body**. Google re-parses the markdown from scratch:
 
-- **Pending suggested edits are wiped.** If a reviewer had uncommitted suggestions, they're gone.
-- **Comments anchored to changed text are orphaned.** They stay on the Doc but detached from any paragraph. You'll see them pile up in the comments sidebar without a corresponding highlighted span.
-- **Manual formatting inside the Doc is lost.** If someone bolded a word in the Doc UI between your syncs, the next sync reverts it.
+- **Pending suggested edits are wiped.**
+- **Comments anchored to changed text are orphaned.** They stay in the sidebar without a highlighted span.
+- **Formatting done in the UI or through the API is lost.** That includes bold added by a person, and the styling pass from the previous sync (which is why step 6 exists and runs on every sync).
+- **Elements added later through the API are gone.** Page breaks, borders and inserted images all go.
 
-**Mitigation:** make a copy of the Doc before the first sync.
+### The guard (step 0)
 
-Via the Drive UI: **File → Make a copy**.
+Right after each push, the script records the Doc's Drive `modifiedTime` in `~/.cache/gdoc-sync/state.json`. It writes atomically, under a lock, so parallel syncs of sibling Docs are safe. Before the next push it lists the Doc's Drive **revisions** since that time:
 
-Via the API:
-```bash
-curl -X POST \
-  -H "Authorization: Bearer $TOKEN" \
-  "https://www.googleapis.com/drive/v3/files/${DOC_ID}/copy" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Backup — $(date +%F)"}'
-```
-
-## Anchor-link rewriting is regex-based on leading section numbers
-
-Step 2 builds its `heading → headingId` map by extracting the leading numeric prefix from each heading (e.g., `5.3.1` from `## 5.3.1 Onboarding flow`). It then rewrites `[text](#anchor)` links whose visible text contains a matching number.
-
-This works well for numbered docs (product specs, legal, technical RFCs) but fails in specific cases:
-
-| Case | Behavior |
+| Revisions since the last push | Result |
 |---|---|
-| Heading has no number prefix | Not included in the map; anchor links to it can't be rewired |
-| Link text doesn't contain the section number | Not rewritten (e.g., `[see the onboarding section](#onboarding)` when heading is `## 3. Onboarding`) |
-| Section number exists but link points to a nested depth that doesn't | Falls back to progressively shorter prefixes (`5.3.1` → `5.3` → `5`) |
-| Heading has duplicate numbers (e.g., two `## 5. Foo` headings) | Later overrides earlier — last-writer-wins |
+| None, or only ones made by this run's identity (the service account, or your own account under gcloud ADC) | Push |
+| Any by someone else, including an edit made *while* the previous sync was still styling the Doc | **Refuse** (exit 3). It prints who edited and when |
+| No record yet (first sync on this machine) | Push, with a note |
 
-If your doc has non-numeric headings, either:
-- Add numeric prefixes to your markdown headings, OR
-- Use `--no-links` to skip the rewrite pass entirely.
+If you're refused, open File → Version history, fold the person's edit into the markdown, and sync again. Pass `--force` only when you mean to discard the edit.
 
-## RTL applies to every body paragraph
+Limits:
+- The state is per machine. The first sync on a new machine has no baseline, so it pushes.
+- Drive merges rapid edits into one revision. A person's edit made within moments of the script's own edits can be credited to the service account and missed.
 
-`--rtl` runs one `updateParagraphStyle` across `[startIndex=1, endIndex=lastIndex-1]` — the entire body. Every paragraph becomes `direction: RIGHT_TO_LEFT`.
+### Getting back
 
-This is correct for Hebrew / Arabic docs. For **mixed** docs (e.g., a primarily Hebrew doc with one chapter in English), it's still usually fine — Google's bidi algorithm handles LTR runs inside RTL paragraphs reasonably well. But expect slight layout differences from what you'd get with paragraph-by-paragraph direction assignments.
+Every push creates an entry in **File → Version history**, so any earlier state can be restored from the UI. A copy through the Drive API (`files/{id}/copy`) is not a reliable backup when run as the service account: the copy would be owned by the service account, which has no Drive storage, so it fails with `storageQuotaExceeded`. Make copies as a person (**File → Make a copy**).
 
-There's no per-paragraph direction control in this script. If you need it, sync with `--no-links` (or equivalent) and set direction manually in the Doc UI after.
+## Multi-tab Docs
 
-## Image resize uses the markdown source URL
+Docs can have tabs. The Docs API without `includeTabsContent` returns only the first tab, and a markdown push writes **one** tab of content: the other tabs are lost. The script refuses a Doc with more than one tab unless you pass `--force`. Keep each synced document in its own single-tab Doc and link between them with `--cross-doc-map`.
 
-Step 3 (image resize) finds oversized inline images in the Doc, then deletes and re-inserts them. The re-insert uses the image URL **from the original markdown** — not a Google-hosted copy of the pixels.
+## What the markdown import does
 
-Implication: **the image source must still be reachable** for the resize step to succeed. If your markdown points at a transient URL (e.g., a local dev server, an expired CDN link), the resize will fail.
+| Markdown | In the Doc |
+|---|---|
+| `#`…`######` | Heading 1-6, each with a `headingId` |
+| Lists, bold, italic, `~strike~`, inline code | Converted |
+| Tables | Converted. A table that splits across pages **repeats its header row** on each page |
+| Fenced code | A code block |
+| `[text](https://…)` | A link |
+| `[text](#slug)` | A URL link to the literal `#slug`, which step 2 fixes |
+| `[text](other.md#slug)` | A URL link to the literal filename, which step 3 fixes |
+| `![](https://public/url.png)` | An inline image at its native size, which step 4 shrinks |
+| `![](relative/path.png)` or `data:` URIs | **Dropped**: Google can't fetch them |
+| Blank lines between blocks | Often an extra **empty paragraph** between blocks. Remove them with `--drop-empty-paragraphs` |
+| Raw HTML, footnotes, front matter | Unreliable. Don't depend on them |
 
-**Best practice:** host images on stable public URLs — R2, Cloudflare Images, S3, GitHub raw, etc. Not `localhost:3000/img.png`.
+The import's default paragraph style uses line spacing 115 plus the empty paragraphs above, which reads loose next to a hand-tightened Doc. Step 6's flags restore a tighter style on every sync.
 
-## Image count must match
+Limits: Docs hold about 1.02 million characters, and Drive converts text files up to 50 MB.
 
-Step 3 pairs each inline image in the Doc with its URL in the markdown **by position** (first image in markdown → first image in Doc, etc.). If the counts don't match — because the markdown has an image reference that failed to embed, or the Doc has an image that wasn't sourced from the markdown — the resize step prints a warning and skips.
+## Anchor-link rewriting (step 2)
 
-Common cause: mid-sync, the image URL was temporarily unreachable and Google's import silently omitted that image. Re-run the sync when the URL is reachable again.
+Each `#slug` link is matched in this order:
 
-## Cached tokens and 5-min TTL
+1. **The heading's slug.** It is computed from the heading text the same way a markdown renderer does: lowercase, punctuation dropped, spaces to `-`, Hebrew and Arabic kept. `[see onboarding](#onboarding-flow)` finds `## Onboarding flow`.
+2. **The section number in the link text,** falling back through shorter prefixes: `5.3.1`, then `5.3`, then `5`. `[§5.3.1](#531-x)` finds `## 5.3 …` when 5.3.1 doesn't exist.
 
-Anthropic prompt caching is unrelated to this script. **Google's own token caching**:
+Links that resolve neither way are left alone. The step-2 line lists the first few unresolved anchors. Common causes are a typo in the anchor, or a heading whose text changed after the link was written. When two headings share a slug, the first one wins.
 
-- **Service account tokens** last ~1 hour. `google-auth` refreshes them automatically on every `refresh()` call (script does this once per run).
-- **gcloud ADC tokens** last ~1 hour but refresh automatically while the refresh token is valid. If you sleep your laptop for hours, the refresh may fail — re-run `gcloud auth application-default login`.
+## Cross-doc links (step 3)
 
-## 403 Forbidden — diagnostic checklist
+`--cross-doc-map "spec.md=DOC_ID"` is opt-in per sibling. A link matches when its URL-decoded URL *contains* the key, so `../specs/spec.md#x` matches `spec.md`. The anchor resolves by slug, then by a section number taken from the anchor (the slug drops dots, so `162` may mean `16.2` or `1.6.2`), then by a number in the link text. If none of those works, the link points at the top of the target Doc.
 
-In order of likelihood:
+## RTL (step 5)
 
-1. **Doc not shared with SA?** Open the Doc, Share, confirm the SA email has Editor access.
-2. **APIs not enabled?** Visit [Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com) and [Docs API](https://console.cloud.google.com/apis/library/docs.googleapis.com) in the SA's project. If just enabled, wait 1-3 minutes for propagation.
-3. **Wrong SA key?** The key's `client_email` must match the email shared on the Doc. `cat sa-key.json | jq -r .client_email` to check.
-4. **Using gcloud ADC without Drive scope?** The default `cloud-platform` scope doesn't include Drive write. See [auth-setup.md Path B](auth-setup.md#path-b-gcloud-adc-fallback).
-5. **Org policy blocking external Docs?** Some Google Workspace orgs disable external-user sharing. Check with your Workspace admin.
+`--rtl` sets `RIGHT_TO_LEFT` across the whole body in one request, table cells included. Mixed docs, for example Hebrew with one English chapter, usually look fine, because Docs' bidi handling copes with LTR runs. There is no per-paragraph control. On an empty Doc (body `endIndex` 2) the range is empty, so the call succeeds and does nothing.
 
-## "This app is blocked" on gcloud login
+## Styling (step 6)
 
-Google's sensitive-scopes policy blocks Drive/Docs scopes on the default gcloud OAuth client. Workaround: use your own OAuth client via `--client-id-file` — see [auth-setup.md](auth-setup.md#attempt-3--your-own-oauth-client).
+- The flags are applied paragraph by paragraph, table cells included. Headings (`HEADING_*`, `TITLE`, `SUBTITLE`) take `--heading-space-*`; everything else takes the body values. `--line-spacing` applies to both. `--font-size` applies to body text only.
+- `--drop-empty-paragraphs` keeps three kinds of empty paragraph: the last one in the body, the one right before a table (the API refuses to delete it), and those inside table cells. A paragraph holding only a horizontal rule, an image, a page break or a chip counts as content and stays.
+- For anything the flags don't cover, such as table borders, cell padding or page breaks before headings, write a small Docs `batchUpdate` script and run it after every sync. Note that the paragraph indexes change on each push, so find elements by text, not by index.
 
-## Empty body edge case
+## Images (step 4)
 
-If the Doc is completely empty (just `endIndex: 2`), the RTL step's range `[1, endIndex-1=1]` is empty — the API returns success with no changes. Not an error, just a no-op. Put a single character in the Doc first if you need RTL applied before content exists.
+Step 4 pairs the Doc's inline images with the markdown's image URLs **by position**. If the counts differ (an image failed to import, or the Doc has an image that isn't in the markdown), it prints the counts and skips. The resize deletes each oversized image and re-inserts it from the **markdown's URL**, so the URL must still be reachable.
 
-## Rate limits
+## Auth and 403s
 
-Google Drive API has per-user and per-project quotas (default ~10K queries/100s). For a single sync of a reasonably-sized Doc (~80KB markdown), you'll use ~5-10 API calls — nowhere near the limit. If you're syncing dozens of Docs in a loop, add a `time.sleep(0.5)` between runs or you may hit 429s.
+1. **Doc not shared with the service account.** Share it with the `client_email` from the key, as Editor.
+2. **APIs not enabled.** Enable the [Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com) and the [Docs API](https://console.cloud.google.com/apis/library/docs.googleapis.com) in the service account's project, then wait 1-3 minutes.
+3. **Wrong key.** Check it with `jq -r .client_email sa-key.json`.
+4. **gcloud ADC without Drive scopes.** `print-access-token --scopes` only works for scopes granted at login. See [auth-setup.md](auth-setup.md#path-b-gcloud-adc-fallback).
+5. **Workspace policy blocking external sharing.** Ask your Workspace admin.
 
-The script retries 429/5xx automatically up to 4 times with exponential backoff, so transient rate-limit hits are absorbed.
+The script prints a `hint:` line under the API's error for the common cases.
 
-## Large image dimensions break Docs
+## Rate limits and retries
 
-If your markdown has an image referencing a huge source image (say 4000×3000 pixels), Google's import sets the inline image at that native size. Step 3 resizes to `--max-image-width` (default 300pt — roughly a 4" column width).
-
-If step 3 fails (e.g., image URL unreachable), the Doc ends up with an oversized image blowing past the margins. Either re-run the sync after fixing the image URL, or manually resize in the Doc UI.
+A sync makes roughly 6-10 API calls, plus one per batch of 400 style updates. The script retries 429 and 5xx responses up to 4 times with exponential backoff. If you sync dozens of Docs in a loop, add a short sleep between them.
 
 ## Shared drives
 
-The script has been tested on personal-drive-owned Docs and domain-owned Docs in Google Workspace. It *should* work on Shared Drives but isn't specifically tested. If you hit issues, try:
-- Ensuring the SA is explicitly added to the Shared Drive as Content Manager (not just granted access to a specific file)
-- Using `supportsAllDrives=true` query param on the Drive upload URL (would require a script edit)
-
-File an issue if this fails for you.
+Uploads and metadata calls pass `supportsAllDrives=true`. On a shared drive, add the service account as a **Content Manager** of the drive. Org policies can still block service-account access, so check with your Workspace admin if you get 403s.

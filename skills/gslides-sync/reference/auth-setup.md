@@ -38,17 +38,26 @@ Open the Google Slides, click **Share**, paste the SA email as **Editor**. Unche
 
 **You must repeat this step for every Slides you want to sync** — the SA gets per-file permissions, not org-wide access.
 
-### 6. Install the Python dep
+### 6. Put the key where the scripts look for it
 
 ```bash
-pip install google-auth
+mkdir -p ~/.config/gdoc-sync && mv ~/Downloads/my-project-abc123.json ~/.config/gdoc-sync/sa-key.json
+chmod 600 ~/.config/gdoc-sync/sa-key.json
 ```
+
+Key lookup, first match wins: `--sa-key PATH`, then `$GOOGLE_SA_KEY`, then `~/.config/gdoc-sync/sa-key.json`, then gcloud ADC (Path B). The same key serves gdoc-sync, gslides-sync and gsheets.
+
+Nothing needs installing. The script uses `google-auth` when it is importable, and otherwise signs the token with `cryptography` or the `openssl` CLI, so a bare `python3` works. `uv run scripts/sync-gslides.py …` also works.
 
 ### 7. Run
 
 ```bash
-./sync-gslides.py deck.pptx --pres-id PRES_ID --sa-key /path/to/my-project-abc123.json
+python3 scripts/sync-gslides.py deck.pptx --pres-id PRES_ID
 ```
+
+### What a service account can't do
+
+A service account has **no Drive storage**, so it can't create files: new Docs, decks, uploads and copies all fail with `403 storageQuotaExceeded`. It *can* overwrite files it has been given access to, and it can create folders. Create the target deck in the UI and share it. When a workflow has to create files, such as narrating-pptx's narration videos, keep them in a shared drive where the service account is a Content Manager. Or drag them in once by hand, and let later runs overwrite them in place.
 
 ## Path B: gcloud ADC (fallback)
 
@@ -91,10 +100,10 @@ Consent screen now shows *your* app name and won't be blocked.
 ### Once authenticated
 
 ```bash
-./sync-gslides.py deck.pptx --pres-id PRES_ID
+python3 scripts/sync-gslides.py deck.pptx --pres-id PRES_ID     # no key file found, so ADC is used
 ```
 
-(no `--sa-key` — script falls back to `gcloud auth application-default print-access-token`.)
+The script runs `gcloud auth application-default print-access-token --scopes=…`. With user credentials, `--scopes` only works for scopes granted at `login`, so log in with them (attempt 2 or 3). Another option is to impersonate a service account: `gcloud auth application-default login --impersonate-service-account=SA_EMAIL --scopes=…`.
 
 ### Token expiration
 

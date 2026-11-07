@@ -6,29 +6,38 @@ silent), and the Slides API cannot insert audio, only Drive or YouTube videos.
 So each slide's mp3 becomes a small mp4 (a still badge plus the audio) that sits
 in a corner of its slide and plays when the slide opens.
 
+  # 0. (shared drive) the deck's own narration folder, shared exactly like the deck; prints its id
+  F=$(python3 gslides_narration.py folder --pres PRES_ID)   # drive "Deck narration (<owner's domain>)"; or --drive NAME
   # 1. one mp4 per clip, cut to the audio's exact length
   python3 gslides_narration.py videos audio/ videos/ [--still badge.png]
   # 2. put them in a Drive folder (updates in place when the files already exist)
-  python3 gslides_narration.py upload videos/ --folder FOLDER_ID --sa-key sa.json
+  python3 gslides_narration.py upload videos/ --folder FOLDER_ID
   # 3. wait until Drive has processed every file at its new length
-  python3 gslides_narration.py wait videos/ --folder FOLDER_ID --sa-key sa.json
-  # 4. place them on the slides, autoplaying (safe to re-run; run after every re-sync)
-  python3 gslides_narration.py insert --pres PRES_ID --folder FOLDER_ID --sa-key sa.json [--skip 12 13] [--dry-run]
+  python3 gslides_narration.py wait videos/ --folder FOLDER_ID
+  # 4. place them on the slides, autoplaying, and give the deck's audience view access to the
+  #    folder (safe to re-run; run after every re-sync)
+  python3 gslides_narration.py insert --pres PRES_ID --folder FOLDER_ID [--skip 12 13] [--dry-run]
+  # re-mirror the deck's sharing onto the folder; --prune also removes people the deck dropped
+  python3 gslides_narration.py share --pres PRES_ID --folder FOLDER_ID [--prune] [--dry-run]
   # 5. read-only check: every narrated slide has its video, autoplaying, at the right length
-  python3 gslides_narration.py check --pres PRES_ID --folder FOLDER_ID --sa-key sa.json [--videos videos/]
+  python3 gslides_narration.py check --pres PRES_ID --folder FOLDER_ID [--videos videos/]
 
 Videos are named narration-slideNN.mp4 and matched to slide NN by that number (older
 names like "Narration - slide NN.mp4" or narration-slideNN-v3.mp4 match too; the
 newest file for a slide wins).
-Auth: --sa-key (a service account with Editor on the deck and the folder; needs
-`pip install google-auth`), else gcloud application-default credentials.
+Auth, first match wins: --sa-key, $GOOGLE_SA_KEY, ~/.config/gdoc-sync/sa-key.json (the key
+gsheets, gdoc-sync and gslides-sync use), then gcloud application-default credentials. The
+service account needs Editor on the deck and the folder. No packages needed: google-auth is
+used when installed, else the JWT is signed with `cryptography` or the openssl CLI.
 A service account has no Drive storage of its own, so it cannot CREATE files in a
 My Drive folder (403 "Service Accounts do not have storage quota"): `upload` then
 lists the files for a person to drag into the folder once, and every later run
-overwrites them in place, which works. A folder on a shared drive the account
-belongs to avoids the manual step.
+overwrites them in place, which works. A shared drive avoids the manual step: make the
+account a Manager of it and use `folder --drive NAME`, which keeps one folder per deck,
+created on demand, shared with the deck's audience only.
 """
-import argparse, hashlib, json, os, re, subprocess, sys, time, urllib.error, urllib.parse, urllib.request
+import argparse, base64, hashlib, json, os, re, shutil, subprocess, sys, tempfile, time
+import urllib.error, urllib.parse, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_STILL = os.path.join(HERE, "..", "assets", "speaker-badge.png")
@@ -39,26 +48,87 @@ SLIDES = "https://slides.googleapis.com/v1/presentations"
 # narration-slide05.mp4, and the hand-made names already in use: narration-slide05-v3.mp4, "Narration - slide 05.mp4"
 NAME = re.compile(r"narration\W*slide\W*(\d+)(?:-v\d+)?\.mp4$", re.IGNORECASE)
 PREFIX = "narr_"  # objectId prefix of the videos this script owns
+DEFAULT_SA_KEY = os.path.expanduser("~/.config/gdoc-sync/sa-key.json")  # shared with the gsheets/gdoc/gslides skills
+
+
+SA_HELP = "service-account key (default: $GOOGLE_SA_KEY, then ~/.config/gdoc-sync/sa-key.json, then gcloud ADC)"
 
 
 # --- auth and HTTP -------------------------------------------------------------------------------
 
+def resolve_sa_key(sa_key=None):
+    """--sa-key, then $GOOGLE_SA_KEY, then the shared default path; None means gcloud ADC."""
+    for cand, label in ((sa_key, "--sa-key"), (os.environ.get("GOOGLE_SA_KEY"), "$GOOGLE_SA_KEY")):
+        if cand:
+            path = os.path.expanduser(cand)
+            if not os.path.isfile(path):
+                sys.exit(f"{label} points at a missing file: {path}")
+            return path
+    return DEFAULT_SA_KEY if os.path.isfile(DEFAULT_SA_KEY) else None
+
+
 def get_token(sa_key=None):
-    if sa_key:
-        try:
-            from google.oauth2 import service_account
-            import google.auth.transport.requests as gar
-        except ImportError:
-            sys.exit("--sa-key needs `pip install google-auth` (or omit it to use gcloud ADC)")
-        creds = service_account.Credentials.from_service_account_file(os.path.expanduser(sa_key), scopes=SCOPES)
-        creds.refresh(gar.Request())
-        return creds.token
+    key = resolve_sa_key(sa_key)
+    if key:
+        return sa_token(key)
     env = {k: v for k, v in os.environ.items() if k != "GOOGLE_APPLICATION_CREDENTIALS"}
-    try:
-        return subprocess.run(["gcloud", "auth", "application-default", "print-access-token"], env=env,
-                              capture_output=True, text=True, check=True, stdin=subprocess.DEVNULL).stdout.strip()
+    try:  # the default cloud-platform scope can't reach Drive or Slides, so ask for the scopes
+        return subprocess.run(["gcloud", "auth", "application-default", "print-access-token", "--scopes=" + ",".join(SCOPES)],
+                              env=env, capture_output=True, text=True, check=True, stdin=subprocess.DEVNULL).stdout.strip()
     except (FileNotFoundError, subprocess.CalledProcessError) as e:
-        sys.exit(f"no Google credentials: pass --sa-key, or run `gcloud auth application-default login` ({e})")
+        sys.exit(f"no Google credentials: pass --sa-key, set $GOOGLE_SA_KEY, put the key at {DEFAULT_SA_KEY}, or run "
+                 f"`gcloud auth application-default login --scopes={','.join(SCOPES)}` ({e})")
+
+
+def sa_token(key_path):
+    """Service-account token: google-auth when importable (it also needs `requests`), else a JWT we sign."""
+    with open(key_path) as f:
+        sa = json.load(f)
+    try:
+        from google.oauth2 import service_account
+        from google.auth.transport.requests import Request
+    except ImportError:
+        pass
+    else:
+        creds = service_account.Credentials.from_service_account_info(sa, scopes=SCOPES)
+        creds.refresh(Request())
+        return creds.token
+    b64 = lambda d: base64.urlsafe_b64encode(json.dumps(d, separators=(",", ":")).encode()).rstrip(b"=")  # noqa: E731
+    now = int(time.time())
+    signing = b64({"alg": "RS256", "typ": "JWT", "kid": sa.get("private_key_id")}) + b"." + b64(
+        {"iss": sa["client_email"], "scope": " ".join(SCOPES), "aud": "https://oauth2.googleapis.com/token",
+         "iat": now, "exp": now + 3600})
+    assertion = signing + b"." + base64.urlsafe_b64encode(rs256_sign(sa["private_key"], signing)).rstrip(b"=")
+    body = urllib.parse.urlencode({"grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+                                   "assertion": assertion.decode()}).encode()
+    req = urllib.request.Request("https://oauth2.googleapis.com/token", data=body,
+                                 headers={"Content-Type": "application/x-www-form-urlencoded"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return json.loads(r.read())["access_token"]
+    except urllib.error.HTTPError as e:
+        sys.exit(f"token exchange failed (HTTP {e.code}): {e.read().decode('utf-8', 'replace')[:400]}")
+
+
+def rs256_sign(pem, data):
+    """RS256 with `cryptography` if installed, else the openssl CLI (present on macOS and most Linux)."""
+    try:
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import padding
+    except ImportError:
+        pass
+    else:
+        return serialization.load_pem_private_key(pem.encode(), password=None).sign(data, padding.PKCS1v15(), hashes.SHA256())
+    openssl = shutil.which("openssl")
+    if not openssl:
+        sys.exit("service-account auth needs google-auth, cryptography or the openssl CLI: `pip install google-auth requests`")
+    fd, path = tempfile.mkstemp(suffix=".pem")  # 0600, removed right after signing
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(pem)
+        return subprocess.run([openssl, "dgst", "-sha256", "-sign", path], input=data, capture_output=True, check=True).stdout
+    finally:
+        os.unlink(path)
 
 
 class Api:
@@ -95,7 +165,7 @@ class Api:
         """{slide_number: file} for narration-slideNN.mp4 in the folder; newest wins on duplicates."""
         # Drive's `name contains` matches word prefixes, so ask broadly and let NAME decide locally.
         q = urllib.parse.quote(f"'{folder}' in parents and trashed=false and name contains 'narration'")
-        st, b = self.call("GET", f"{DRIVE}?q={q}&pageSize=200&supportsAllDrives=true&includeItemsFromAllDrives=true"
+        st, b = self.call("GET", f"{DRIVE}?q={q}&pageSize=200&corpora=allDrives&supportsAllDrives=true&includeItemsFromAllDrives=true"
                                  "&fields=files(id,name,modifiedTime,md5Checksum,hasThumbnail,"
                                  "videoMediaMetadata(durationMillis))")
         if st != 200:
@@ -106,6 +176,171 @@ class Api:
             if m:
                 out[int(m.group(1))] = f
         return out
+
+
+# --- 0. the deck's narration folder, and who may see it ------------------------------------------
+
+FOLDER_MIME = "application/vnd.google-apps.folder"
+PERM_FIELDS = "permissions(id,type,role,emailAddress,domain,allowFileDiscovery,deleted,permissionDetails(inherited))"
+
+
+def whoami(api):
+    st, b = api.call("GET", "https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)")
+    return (b.get("user") or {}).get("emailAddress", "") if st == 200 else ""
+
+
+def find_shared_drive(api, name_or_id, pres=None):
+    """A shared drive by name or id. "auto" picks the drive whose name contains the deck owner's
+    domain, e.g. "Deck narration (example.com)", so each deck's narration stays in the deck's own org."""
+    st, b = api.call("GET", "https://www.googleapis.com/drive/v3/drives?pageSize=100")
+    if st != 200:
+        sys.exit(f"listing shared drives: HTTP {st} {b.get('error', {}).get('message', b)}")
+    drives = b.get("drives", [])
+    seen = [d["name"] for d in drives]
+    if name_or_id == "auto":
+        st, f = api.call("GET", f"{DRIVE}/{pres}?fields=owners(emailAddress),driveId&supportsAllDrives=true")
+        owners = [o["emailAddress"] for o in f.get("owners", [])] if st == 200 else []
+        if not owners:
+            sys.exit("--drive auto needs the deck's owner (a deck on a shared drive has none): pass --drive NAME")
+        domain = owners[0].split("@")[-1].lower()
+        match = [d for d in drives if domain in d["name"].lower()]
+        if len(match) == 1:
+            return match[0]["id"]
+        sys.exit(f"--drive auto: {'several' if match else 'no'} shared drive(s) named for {domain} "
+                 f"(this account sees {seen}); name one 'Deck narration ({domain})' or pass --drive NAME")
+    for d in drives:
+        if name_or_id in (d["id"], d["name"]):
+            return d["id"]
+    sys.exit(f"no shared drive {name_or_id!r} visible to this account (it sees {seen}): "
+             "add the service account to the drive as a Manager")
+
+
+def deck_folder(api, pres, drive_id):
+    """(folder id, name, created?) of the deck's narration folder on the shared drive. It is found by
+    an appProperty holding the deck id, so renaming the deck renames the folder instead of forking it."""
+    st, deck = api.call("GET", f"{DRIVE}/{pres}?fields=name&supportsAllDrives=true")
+    if st != 200:
+        sys.exit(f"reading the deck: HTTP {st} {deck.get('error', {}).get('message', deck)}")
+    name = f"{deck['name']} - narration"
+    q = urllib.parse.quote(f"appProperties has {{ key='narrationFor' and value='{pres}' }} "
+                           f"and mimeType='{FOLDER_MIME}' and trashed=false")
+    st, b = api.call("GET", f"{DRIVE}?q={q}&corpora=drive&driveId={drive_id}&includeItemsFromAllDrives=true"
+                            "&supportsAllDrives=true&fields=files(id,name)")
+    if st != 200:
+        sys.exit(f"looking for the deck's folder: HTTP {st} {b.get('error', {}).get('message', b)}")
+    if b.get("files"):
+        f = b["files"][0]
+        if f["name"] != name:
+            api.call("PATCH", f"{DRIVE}/{f['id']}?supportsAllDrives=true", {"name": name})
+        return f["id"], name, False
+    st, f = api.call("POST", f"{DRIVE}?supportsAllDrives=true&fields=id",
+                     {"name": name, "mimeType": FOLDER_MIME, "parents": [drive_id], "appProperties": {"narrationFor": pres}})
+    if st != 200:
+        sys.exit(f"creating the folder: HTTP {st} {f.get('error', {}).get('message', f)}")
+    return f["id"], name, True
+
+
+def perm_key(p):
+    """Who a permission is for: ('user', 'a@x.com'), ('domain', 'x.com'), ('anyone', ''), or None."""
+    t = p.get("type")
+    if t in ("user", "group") and p.get("emailAddress"):
+        return t, p["emailAddress"].lower()
+    if t == "domain" and p.get("domain"):
+        return t, p["domain"].lower()
+    if t == "anyone":
+        return t, ""
+    return None
+
+
+def share_plan(deck_perms, folder_perms, me, prune=False):
+    """(grants to add, permissions to remove) so the folder's viewers are exactly the deck's audience.
+    Grants are view-only. Access the folder already has, inherited from shared-drive membership
+    included, counts as covered; only direct folder permissions are ever removed."""
+    me = (me or "").lower()
+    want = {}
+    for p in deck_perms:
+        k = perm_key(p)
+        if not k or p.get("deleted") or k[1] == me:
+            continue
+        grant = {"type": k[0], "role": "reader"}
+        if k[0] in ("user", "group"):
+            grant["emailAddress"] = p["emailAddress"]
+        elif k[0] == "domain":
+            grant["domain"] = p["domain"]
+        if k[0] in ("domain", "anyone"):
+            grant["allowFileDiscovery"] = bool(p.get("allowFileDiscovery"))
+        want[k] = grant
+    covered = {perm_key(p) for p in folder_perms}
+    add = [g for k, g in want.items() if k not in covered]
+    remove = []
+    if prune:
+        for p in folder_perms:
+            k, details = perm_key(p), p.get("permissionDetails") or [{}]
+            direct = any(not d.get("inherited") for d in details)
+            if k and direct and k not in want and k[1] != me and p.get("role") not in ("owner", "organizer"):
+                remove.append(p)
+    return add, remove
+
+
+def mirror_sharing(api, pres, folder, prune=False, dry_run=False):
+    """Give the deck's audience view access to its narration folder. Returns the number of problems."""
+    st, d = api.call("GET", f"{DRIVE}/{pres}/permissions?supportsAllDrives=true&fields={PERM_FIELDS}")
+    if st != 200:
+        sys.exit(f"reading the deck's sharing: HTTP {st} {d.get('error', {}).get('message', d)}")
+    st, f = api.call("GET", f"{DRIVE}/{folder}/permissions?supportsAllDrives=true&fields={PERM_FIELDS}")
+    if st != 200:
+        sys.exit(f"reading the folder's sharing: HTTP {st} {f.get('error', {}).get('message', f)}")
+    add, remove = share_plan(d.get("permissions", []), f.get("permissions", []), whoami(api), prune)
+    who = lambda g: g.get("emailAddress") or g.get("domain") or "anyone with the link"  # noqa: E731
+    if not add and not remove:
+        print("sharing: the folder already reaches exactly the deck's audience")
+        return 0
+    if dry_run:
+        print(f"dry run: would let {[who(g) for g in add]} view the folder"
+              + (f" and remove {[who(p) for p in remove]}" if remove else ""))
+        return 0
+    problems = 0
+    for g in add:
+        notify = "&sendNotificationEmail=false" if g["type"] in ("user", "group") else ""
+        st, b = api.call("POST", f"{DRIVE}/{folder}/permissions?supportsAllDrives=true{notify}", g)
+        if st == 200:
+            print(f"sharing: {who(g)} can now view the narration")
+        else:
+            problems += 1
+            print(f"sharing: could not add {who(g)}: HTTP {st} {b.get('error', {}).get('message', b)} "
+                  "(a shared drive may block people outside the org or non-members: check its settings)")
+    for p in remove:
+        st, b = api.call("DELETE", f"{DRIVE}/{folder}/permissions/{p['id']}?supportsAllDrives=true")
+        if st in (200, 204):
+            print(f"sharing: removed {who(p)} (no longer on the deck)")
+        else:
+            problems += 1
+            print(f"sharing: could not remove {who(p)}: HTTP {st} {b.get('error', {}).get('message', b)}")
+    return problems
+
+
+def cmd_folder(a, api=None):
+    api = api or Api(get_token(a.sa_key))
+    fid, name, created = deck_folder(api, a.pres, find_shared_drive(api, a.drive, a.pres))
+    print(f"{'created' if created else 'using'} folder {name!r}", file=sys.stderr)
+    if not a.no_share:
+        with redirect_to_stderr():
+            mirror_sharing(api, a.pres, fid)
+    print(fid)  # the only stdout line, so F=$(... folder ...) captures it
+
+
+def cmd_share(a, api=None):
+    api = api or Api(get_token(a.sa_key))
+    if mirror_sharing(api, a.pres, a.folder, a.prune, a.dry_run):
+        sys.exit(1)
+
+
+class redirect_to_stderr:
+    def __enter__(self):
+        self.old, sys.stdout = sys.stdout, sys.stderr
+
+    def __exit__(self, *exc):
+        sys.stdout = self.old
 
 
 # --- 1. videos -----------------------------------------------------------------------------------
@@ -205,7 +440,8 @@ def cmd_upload(a, api=None):
         print(f"\nThe service account cannot create files in this folder (no Drive storage of its own).\n"
               f"Ask the user to drag these {len(need_manual)} file(s) from {os.path.abspath(a.videos_dir)} into the "
               f"folder once:\n  " + "\n  ".join(need_manual) +
-              "\nEvery later run updates them in place. A shared-drive folder avoids this step.")
+              "\nEvery later run updates them in place. To skip this step, keep the videos on a shared drive "
+              "(the account as Manager) and get the folder from `folder --pres PRES_ID --drive NAME`.")
         sys.exit(2)
 
 
@@ -320,9 +556,13 @@ def cmd_insert(a, api=None):
         print(f"no video for slides {missing} (left without narration)")
     if a.dry_run:
         print(f"dry run: would send {len(reqs)} requests, placing videos on slides {placed}")
+        if not a.no_share:
+            mirror_sharing(api, a.pres, a.folder, dry_run=True)
         return
     if not reqs:
         sys.exit("nothing to do")
+    # Grant the deck's audience access first: a video placed for viewers who can't open it won't play.
+    share_problems = 0 if a.no_share else mirror_sharing(api, a.pres, a.folder)
     st, b = api.call("POST", f"{SLIDES}/{a.pres}:batchUpdate", {"requests": reqs})
     if st != 200:
         sys.exit(f"batchUpdate: HTTP {st} {b.get('error', {}).get('message', b)}")
@@ -334,6 +574,9 @@ def cmd_insert(a, api=None):
     print(f"autoplaying narration on {len(playing)} of {len(placed)} intended slides")
     if playing != sorted(placed):
         sys.exit(f"expected {sorted(placed)}, found {playing}")
+    if share_problems:
+        sys.exit(f"the videos are placed, but {share_problems} sharing grant(s) above failed: those viewers "
+                 "will see narration that won't play")
 
 
 # --- 5. check ------------------------------------------------------------------------------------
@@ -375,27 +618,37 @@ def cmd_check(a, api=None):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
+    f = sub.add_parser("folder", help="the deck's narration folder on a shared drive (created if missing); prints its id")
+    f.add_argument("--pres", required=True)
+    f.add_argument("--drive", default="auto", help="shared drive name or id; default auto = the drive named for the deck owner's domain")
+    f.add_argument("--sa-key", help=SA_HELP); f.add_argument("--no-share", action="store_true")
+    sh = sub.add_parser("share", help="give the deck's audience view access to the folder")
+    sh.add_argument("--pres", required=True); sh.add_argument("--folder", required=True); sh.add_argument("--sa-key", help=SA_HELP)
+    sh.add_argument("--prune", action="store_true", help="also remove direct access the deck no longer grants")
+    sh.add_argument("--dry-run", action="store_true")
     v = sub.add_parser("videos"); v.add_argument("audio_dir"); v.add_argument("out_dir")
     v.add_argument("--still", help="square image shown while the clip plays (default: a speaker badge)")
     v.add_argument("--only", nargs="*", type=int, help="just these slide numbers")
     for name in ("upload", "wait"):
         p = sub.add_parser(name); p.add_argument("videos_dir")
-        p.add_argument("--folder", required=True); p.add_argument("--sa-key")
+        p.add_argument("--folder", required=True); p.add_argument("--sa-key", help=SA_HELP)
         if name == "wait":
             p.add_argument("--timeout", type=int, default=600)
     for name in ("insert", "check"):
         p = sub.add_parser(name)
         p.add_argument("--pres", required=True); p.add_argument("--folder", required=True)
-        p.add_argument("--sa-key"); p.add_argument("--skip", nargs="*", type=int, help="slides left unnarrated")
+        p.add_argument("--sa-key", help=SA_HELP); p.add_argument("--skip", nargs="*", type=int, help="slides left unnarrated")
         if name == "insert":
             p.add_argument("--corner", default="bottom-right",
                            choices=["bottom-right", "top-right", "bottom-left", "top-left"])
             p.add_argument("--size", type=float, default=0.05, help="badge width as a fraction of the page width")
             p.add_argument("--dry-run", action="store_true")
+            p.add_argument("--no-share", action="store_true", help="don't give the deck's audience access to the folder")
         else:
             p.add_argument("--videos", dest="videos_dir", help="local videos dir, to compare lengths with Drive's")
     a = ap.parse_args(argv)
-    {"videos": cmd_videos, "upload": cmd_upload, "wait": cmd_wait, "insert": cmd_insert, "check": cmd_check}[a.cmd](a)
+    {"folder": cmd_folder, "share": cmd_share, "videos": cmd_videos, "upload": cmd_upload, "wait": cmd_wait,
+     "insert": cmd_insert, "check": cmd_check}[a.cmd](a)
 
 
 if __name__ == "__main__":

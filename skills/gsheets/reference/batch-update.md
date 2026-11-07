@@ -9,16 +9,22 @@ gsheets batch-update <SPREADSHEET_ID> --requests @template.json
 Or inline (small ones):
 
 ```bash
-gsheets batch-update <ID> --requests '[{"unmergeAllCells": {"sheetId": 0}}]'
+gsheets batch-update <ID> --requests '[{"unmergeCells": {"range": "Sheet1"}}]'
 ```
 
-**Always look up the numeric `sheetId` first** — most requests need it, not the title:
+**A1 shortcuts.** The CLI translates these before sending, so you rarely need numeric ids:
 
-```bash
-gsheets list-tabs <ID>
-```
+| You write | Sent as |
+|---|---|
+| `"range": "Tab!B2:D10"` (also `source`, `destination`) | GridRange `{sheetId, startRowIndex: 1, endRowIndex: 10, startColumnIndex: 1, endColumnIndex: 4}` |
+| `"range": "Tab!B2:B"` | open-ended GridRange (no `endRowIndex`): keeps covering new rows |
+| `"range": "Tab"` | the whole tab `{sheetId}` |
+| `"range": "Tab!3:5"` / `"Tab!A:C"` inside `insertDimension`, `deleteDimension`, `updateDimensionProperties`, `moveDimension`, `addDimensionGroup`, `autoResizeDimensions` (`dimensions`) | DimensionRange (ROWS / COLUMNS) |
+| `"ranges": ["Tab!A2:A", "Tab!C2:C"]` | list of GridRanges |
+| `"sheetId": "Tab"` | the tab's numeric id |
+| `"backgroundColor": "#1a73e8"` (any `…Color`), `"…ColorStyle": "#hex"` | `{red, green, blue}` / `{rgbColor: …}` |
 
-In the examples below, `SHEET_ID` is a placeholder for the integer from that output.
+Numeric GridRanges still work. The translator resolves tab titles against the tabs that exist *before* the batch runs, so a tab created by an `addSheet` in the same batch must be referenced by a numeric `sheetId` you choose (see section 12). To look up ids, run `gsheets list-tabs <ID>`; in the examples below `SHEET_ID` is that integer, or just the tab title in quotes.
 
 ## Index
 
@@ -34,6 +40,8 @@ In the examples below, `SHEET_ID` is a placeholder for the integer from that out
 10. [Hyperlink in a cell](#10-hyperlink-in-a-cell)
 11. [Add a note (comment) to a cell](#11-add-a-note-comment-to-a-cell)
 12. [Multiple requests in one atomic batch](#12-multiple-requests-in-one-atomic-batch)
+13. [Total row (bold, grey, top border)](#13-total-row-bold-grey-top-border)
+14. [Sheets Tables (typed columns)](#14-sheets-tables-typed-columns)
 
 ---
 
@@ -379,6 +387,45 @@ The `batchUpdate` endpoint is atomic. Bundle related ops:
 ```
 
 This is the canonical trick for "create + configure in one shot."
+
+
+---
+
+## 13. Total row (bold, grey, top border)
+
+```json
+[
+  {"repeatCell": {
+    "range": "Summary!A12:E12",
+    "cell": {"userEnteredFormat": {"backgroundColor": "#f1f3f4", "textFormat": {"bold": true}}},
+    "fields": "userEnteredFormat(backgroundColor,textFormat.bold)"
+  }},
+  {"updateBorders": {"range": "Summary!A12:E12",
+                     "top": {"style": "SOLID_MEDIUM", "colorStyle": "#5f6368"}}}
+]
+```
+
+Write the totals as formulas (`=SUM(B2:B11)`) over full-precision values, and round only with a number format, so the total matches the source to the cent.
+
+## 14. Sheets Tables (typed columns)
+
+The Tables feature (API since April 2025) gives a range named, typed columns, a header and a footer. It is different from `gsheets table`, which only formats cells.
+
+```json
+[{"addTable": {"table": {
+  "name": "Payments",
+  "range": {"sheetId": SHEET_ID, "startRowIndex": 0, "endRowIndex": 50, "startColumnIndex": 0, "endColumnIndex": 4},
+  "columnProperties": [
+    {"columnIndex": 0, "columnName": "Date", "columnType": "DATE"},
+    {"columnIndex": 1, "columnName": "Payer", "columnType": "TEXT"},
+    {"columnIndex": 2, "columnName": "Amount", "columnType": "CURRENCY"},
+    {"columnIndex": 3, "columnName": "Status", "columnType": "DROPDOWN",
+     "dataValidationRule": {"condition": {"type": "ONE_OF_LIST", "values": [{"userEnteredValue": "Paid"}, {"userEnteredValue": "Open"}]}}}
+  ]
+}}}]
+```
+
+Rows appended through `appendCells` with `tableId` land inside the table; see the [Tables guide](https://developers.google.com/workspace/sheets/api/guides/tables).
 
 ---
 

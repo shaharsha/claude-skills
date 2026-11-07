@@ -1,144 +1,107 @@
-# `gsheets.py` — CLI reference
+# `gsheets.py`: CLI reference
 
-A single Python file. No package, no install (beyond `pip install google-auth` for service-account auth — optional, see fallbacks below). All subcommands accept `<SPREADSHEET_ID>` as the first positional, and `--sa-key <path>` for auth.
+One Python file with no install step. It uses `google-auth` when that is importable, and otherwise signs the service-account token with `cryptography` or the `openssl` CLI, so a bare `python3` works. `uv run gsheets.py …` also works; the dependencies are declared inline.
 
 ```
-gsheets.py <command> <SPREADSHEET_ID> [flags…]
+gsheets.py [--sa-key PATH] [--dry-run] <command> <SPREADSHEET_ID> [RANGE…] [flags…]
 ```
 
-For full per-subcommand flags, run:
+`--sa-key` and `--dry-run` go before or after the command. Run `gsheets.py <command> --help` for every flag.
+
+In zsh, wrap it in a function rather than a variable: zsh doesn't word-split `$G`.
 
 ```bash
-./gsheets.py <command> --help
+gsheets() { python3 ~/.claude/skills/gsheets/scripts/gsheets.py "$@"; }
 ```
 
 ## Commands at a glance
 
 ```
-Data            read           --range
-                write          --range --values-json|--csv|--values-stdin [--value-input-option]
-                append         --range --values-json|--csv [--insert-data-option]
-                clear          --range
+Data       read          RANGE… [--all-tabs] [--render formatted|unformatted|formula]
+                         [--pad] [--fill-merged] [--header-rows N] [--numbered]
+           find          --tab T (--value V | --contains V | --regex R) [--col A,C]
+                         [--header-rows N [--col-header TEXT] [--show TEXT]] [--record]
+                         [--within A1:Z500]
+           headers       --tab T [--header-rows N]           (column letter ↔ header path)
+           write         RANGE (--values-json|--csv|--values-stdin) [--value-input-option RAW]
+                         [--expect @snap.json] [--skip-empty] [--verify]
+           batch-write   --data '{"T!A1": [[..]], ...}' [--expect @snap.json] [--verify]
+           append        RANGE (--values-json|--csv) [--insert-data-option INSERT_ROWS|OVERWRITE]
+           clear         RANGE [--formats | --all]
 
-Tabs            list-tabs
-                add-tab        --title [--rows --cols --index --color]
-                delete-tab     --title
-                rename-tab     --from --to
-                duplicate-tab  --from --to [--index]
+Tabs       list-tabs | add-tab --title [--index --color --sheet-id --rtl --rows --cols]
+           delete-tab --title | rename-tab --from --to | duplicate-tab --from --to [--index]
+           move-tab --title --index | set-title --title          (renames the file)
 
-Structure       freeze         --tab [--rows N --cols N]
-                resize-cols    --tab --cols A:C  (--width N | --auto)
-                resize-rows    --tab --rows 1:3  (--height N | --auto)
-                merge          --range [--merge-type MERGE_ALL|MERGE_COLUMNS|MERGE_ROWS]
-                unmerge        --range
-                insert-rows    --tab --rows 5:7
-                delete-rows    --tab --rows 5:7
-                insert-cols    --tab --cols B:D
-                delete-cols    --tab --cols B:D
+Structure  freeze --tab [--rows N] [--cols N]
+           resize-cols --tab --cols A:F (--width N | --widths 40,180,90 | --auto)
+           resize-rows --tab --rows 1:3 (--height N | --auto)
+           merge RANGE [--merge-type] | unmerge RANGE
+           insert-rows|insert-cols --tab --rows 5:7|--cols B:D [--inherit before|after]
+           delete-rows|delete-cols --tab --rows 5:7|--cols B:D
 
-Styling         format         --range [--bg --fg --bold --italic --font-size --font
-                                        --align --valign --wrap --number-format]
-                format-header  --tab [--bg --fg --filter]
-                borders        --range [--all | --top --bottom --left --right --inner]
-                               [--style SOLID|DOTTED|DASHED|... --color #hex]
-                banding        --range [--header-bg --first-bg --second-bg --footer-bg]
-                conditional-format --range
-                                   [--condition <TYPE> [--value V] [--bg --fg --bold]]
-                                   | [--rule @rule.json]
-                                   [--index 0]
+Styling    format RANGE… [--bg --fg --bold --italic --font-size --font --align --valign
+                          --wrap/--no-wrap --number-format]
+           format-header --tab [--row N] [--bg --fg] [--no-freeze] [--filter]
+           borders RANGE (--all | --top --bottom --left --right --inner) [--style --color]
+           banding RANGE [--header-bg --first-bg --second-bg --footer-bg]
+           conditional-format RANGE (--condition TYPE [--value V]… [--bg --fg --bold] | --rule @r.json)
+           validation RANGE (--one-of a,b | --one-of-range =T!$A$2:$A$30 | --checkbox
+                             | --formula F | --clear) [--no-strict] [--help-text]
+           note RANGE (--text T | --clear)
+           copy-format --from RANGE --to RANGE [--what format|validation|conditional|...]
+           table --tab T (--values-json|--csv) [--at A1] [--create] [--replace]
+                 [--header-rows 1] [--col-format COLS=PATTERN]… [--widths ..|--auto-width]
+                 [--wrap] [--filter] [--banding] [--freeze-cols N] [--input typed|user-entered]
 
-Filter/sort     add-filter     --range
-                clear-filter   --tab
-                sort           --range --by "B:desc,C:asc"
+Filter     add-filter RANGE | clear-filter --tab | sort RANGE --by "B:desc,C:asc"
 
-Escape          batch-update   --requests @requests.json (or inline JSON)
+Inspect    info | revisions [--limit N]
+           inspect --tab T [--cells A1:H40] [--raw]
+           export [--tab T] [--cells A1:H40] --format pdf|png|csv|xlsx --out FILE
 
-Meta            info           (lists tabs + edit access + owner — safe dry-run)
+Escape     batch-update --requests @file.json [--full]     (A1 strings and #hex colors allowed)
 ```
 
-## Auth flags
+## Exit codes
 
-| Flag | When to use |
+| Code | Meaning |
 |---|---|
-| `--sa-key /path/to/sa.json` | Service-account JSON. Recommended. |
-| *(no flag)* | Falls back to `gcloud auth application-default print-access-token --scopes=...spreadsheets,...drive`. Needs a prior `gcloud auth application-default login` with those scopes. |
+| 0 | Success. Data is on stdout |
+| 1 | API error. The HTTP status, Google's message and a `hint:` are on stderr |
+| 2 | Usage error (argparse) |
+| 3 | `--expect` refused the write. The cell diff is on stderr |
+| 4 | `--verify` found a bad conversion (leading zeros, ID turned into a number, formula error) |
 
-The script always passes explicit scopes to gcloud — the default cloud-platform-only token is silently insufficient for Sheets/Drive write.
+On any non-zero exit, stdout is empty, so a pipe into `json.load` won't half-parse.
 
-## Common flag patterns
-
-### Value input (`write`, `append`)
+## Value input
 
 | Source | Flag |
 |---|---|
 | Inline JSON | `--values-json '[["a","b"],["c","d"]]'` |
 | JSON file | `--values-json @data.json` |
 | CSV file | `--csv data.csv` |
-| CSV via stdin | `pipe \| ./gsheets.py write ... --values-stdin` |
+| CSV on stdin | `… \| gsheets.py write ID "T!A1" --values-stdin` |
 
-### Range notation
+In JSON, `null` leaves a cell untouched and `""` clears it. For text containing quotes, `→` or other awkward characters, build the JSON file in Python rather than quoting it in the shell.
 
-`"<TabTitle>!A1:C10"` — most commands. Single cell (`A1`) or whole-column ranges (`A:Z`) also work.
-
-For tabs with spaces in the title, quote them in the A1 string: `"'Q3 Review'!A1:Z"`. (Bash will swallow one layer of quotes, so this becomes `--range "'Q3 Review'!A1:Z"` in practice.)
-
-### Color flags
-
-Always hex: `--bg "#1a73e8"`. The leading `#` is optional. 3-char shorthand (`#f00`) works.
-
-## Idempotency
-
-| Re-running with same args | Safe? |
-|---|---|
-| `format`, `format-header`, `borders`, `freeze`, `resize-*` | Yes |
-| `merge`, `add-filter` | Yes (last-write-wins) |
-| `add-tab` with existing title | No (API: duplicate name) |
-| `delete-tab` with deleted title | No (script: tab not found) |
-| `banding` overlapping existing | No (API: overlapping ranges) |
-| `conditional-format` | No — each call adds another rule. |
-
-## Dependencies
-
-- **Python ≥ 3.9**
-- **stdlib only** for HTTP (uses `urllib.request`)
-- For `--sa-key` auth: `pip install google-auth` (preferred) OR `pip install cryptography` (fallback, JWT minted manually)
-- For no-`--sa-key` auth: `gcloud` CLI on PATH
-
-## Examples by use case
-
-### Push a CSV with header styling
+## Examples
 
 ```bash
-gsheets.py write           $ID --range "Review!A1" --csv data.csv          --sa-key sa.json
-gsheets.py format-header   $ID --tab Review --bg "#0b8043" --fg "#fff" --filter  --sa-key sa.json
-gsheets.py resize-cols     $ID --tab Review --cols A:Z --auto             --sa-key sa.json
+# a stakeholder tab from a CSV, in one call
+gsheets table $ID --tab Review --create --csv results.csv --filter --banding \
+  --col-format "D=0.0%" --widths 180,90,90,80
+
+# safe edit of a co-edited sheet
+gsheets find  $ID --tab Access --col A --value "Dana Levi"                        # → row 14
+gsheets read  $ID "Access!F14" > /tmp/f14.json
+gsheets write $ID "Access!F14" --values-json '[["Admin"]]' --expect @/tmp/f14.json
+
+# log row at an exact position
+gsheets read  $ID "'Access log'!A:A" | python3 -c 'import json,sys; print(len(json.load(sys.stdin))+1)'   # → 90
+gsheets write $ID "'Access log'!A90" --values-json @row.json --value-input-option RAW
+
+# look at the result
+gsheets export $ID --tab Review --format png --out /tmp/review.png
 ```
-
-### Build a multi-tab dashboard
-
-```bash
-gsheets.py add-tab     $ID --title Summary --index 0 --color "#1a73e8" --sa-key sa.json
-gsheets.py add-tab     $ID --title Raw     --index 1                   --sa-key sa.json
-gsheets.py write       $ID --range "Raw!A1"     --csv raw.csv          --sa-key sa.json
-gsheets.py write       $ID --range "Summary!A1" --values-json '[["KPI","Value"],["MRR","=SUM(Raw!C:C)"]]' --sa-key sa.json
-gsheets.py format-header $ID --tab Summary --sa-key sa.json
-gsheets.py format-header $ID --tab Raw     --filter --sa-key sa.json
-```
-
-### Highlight failing rows
-
-```bash
-gsheets.py conditional-format $ID \
-  --range "Tests!E2:E" \
-  --condition TEXT_EQ --value fail \
-  --bg "#fce8e6" --fg "#b71c1c" --bold \
-  --sa-key sa.json
-```
-
-### Escape hatch — gradient color scale
-
-```bash
-gsheets.py batch-update $ID --requests @./gradient.json --sa-key sa.json
-```
-
-(See `../reference/batch-update.md` for the rule JSON.)

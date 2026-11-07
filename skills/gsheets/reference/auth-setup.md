@@ -40,21 +40,34 @@ Open the Sheet in your browser → **Share** → paste the SA email → set perm
 
 **Repeat for every Sheet you want the SA to touch.** The SA gets per-file access, not org-wide access.
 
-### 6. Install the Python dep
+### 6. Put the key where the scripts look for it
 
 ```bash
-pip install google-auth
+mkdir -p ~/.config/gdoc-sync && mv ~/Downloads/my-project-abc123.json ~/.config/gdoc-sync/sa-key.json
+chmod 600 ~/.config/gdoc-sync/sa-key.json
 ```
 
-(Optional alternative: `pip install cryptography` — the script will mint JWTs itself without `google-auth`.)
+All three Google skills (gsheets, gdoc-sync, gslides-sync) resolve the key the same way, first match wins:
+
+1. `--sa-key PATH` on the command line
+2. `$GOOGLE_SA_KEY`
+3. `~/.config/gdoc-sync/sa-key.json`
+4. gcloud ADC (Path B)
+
+Nothing needs installing. The scripts use `google-auth` when it is importable, and otherwise sign the token themselves with `cryptography` or the `openssl` CLI, so a bare `python3` works. `uv run scripts/gsheets.py …` also works: the scripts declare their optional dependencies inline.
 
 ### 7. Run
 
 ```bash
-scripts/gsheets.py info <SPREADSHEET_ID> --sa-key /path/to/sa-key.json
+python3 scripts/gsheets.py info <SPREADSHEET_ID>
 ```
 
 If you see the spreadsheet's name and tabs, you're set.
+
+### What a service account can't do
+
+- **Create files.** A service account has no Drive storage quota. Creating a spreadsheet, uploading a file or copying one fails with `403 storageQuotaExceeded` (or `PERMISSION_DENIED` from `spreadsheets.create`). It *can* edit and overwrite files it has been given access to, and it can create folders. To get a new Sheet, create it in the UI and share it with the service account. For files it must create, use a shared drive where it is a Content Manager.
+- **Act on files it isn't shared on.** Sharing is per file or per folder, so a new Sheet needs a new share.
 
 ## Path B: gcloud ADC (fallback)
 
@@ -109,10 +122,10 @@ This was the path the `ginger-agent-demo` project ended up on when SA key downlo
 ### Once authenticated
 
 ```bash
-scripts/gsheets.py info <SPREADSHEET_ID>     # no --sa-key
+python3 scripts/gsheets.py info <SPREADSHEET_ID>     # no key file found, so ADC is used
 ```
 
-The script calls `gcloud auth application-default print-access-token --scopes=...` internally. The explicit `--scopes` flag is critical — without it, the printed token defaults to cloud-platform-only and Sheets calls 403 even though ADC was configured with the right scopes. Already encoded in the script; mentioning here in case you debug.
+The script calls `gcloud auth application-default print-access-token --scopes=...spreadsheets,...drive`. With user credentials, `--scopes` only works for scopes granted at `login` time, so log in with them (attempt 2, 3 or 4 above). Otherwise you get `403 insufficient authentication scopes`, or an error from gcloud itself.
 
 ### Token expiration
 
@@ -148,8 +161,9 @@ In order of likelihood:
 1. **Sheet not shared with SA.** Open the Sheet, click Share, confirm the SA email shows as Editor. `cat sa-key.json | jq -r .client_email` to double-check which SA you're sharing with.
 2. **API not enabled.** Visit the [Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com) and [Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com) pages in the SA's project. If just enabled, wait 1-3 minutes.
 3. **Using gcloud ADC without explicit scopes.** Re-login with `--scopes=...spreadsheets,...drive`.
-4. **Sharing with a different SA.** The SA in your key JSON's `client_email` must exactly match the email you shared the Sheet with — typos go unnoticed because Drive accepts arbitrary email shares.
-5. **Org policy blocking external sharing.** Some Google Workspace orgs disable external-user sharing — the SA might count as external. Check with your Workspace admin.
+4. **Creating a file as the service account.** `storageQuotaExceeded`, or `PERMISSION_DENIED` on `spreadsheets.create`: a service account can't own files. See "What a service account can't do" above.
+5. **Sharing with a different SA.** The SA in your key JSON's `client_email` must exactly match the email you shared the Sheet with — typos go unnoticed because Drive accepts arbitrary email shares.
+6. **Org policy blocking external sharing.** Some Google Workspace orgs disable external-user sharing — the SA might count as external. Check with your Workspace admin.
 
 ## Diagnosing 404s
 
