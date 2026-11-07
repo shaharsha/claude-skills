@@ -156,6 +156,15 @@ Tested on the Antigravity CLI (`agy`) 1.4.12 with a Gemini API key, 2026-11-02.
 - **Models:** the id carries the effort: `gemini-4-argon-high` (the script adds
   `-<effort>` to `--model gemini-4-argon`), `gemini-3.8-flash-low`,
   `gemini-3.1-pro-high`. `agy models` lists them.
+- **Cost:** a Gemini run prints `TOKENS=in:N,out:N,cached:N`, and `out` includes
+  thinking (the sums matched the billing export to the token on 2026-11-04 and
+  11-05). Argon's list price per 1M tokens is $4 input, $20 output and $0.20
+  cached input; a launch promotion halves it through Nov 30 2026. Over 69 runs
+  on 2026-11-02 to 11-07, at list price, a review cost a median $3.32 (90th
+  percentile $5.66, highest $10.53; the median read 3.3M input and cached
+  tokens) and a consult $1.08 ($3.08). Several engines or rounds per document
+  multiply it: a five-page reference panel across sessions came to about
+  $90-104.
 - **What the script sets up:**
   - a private HOME (`~/.local/share/pair-intelligence/agy-home`, `PAIR_AGY_HOME`)
     so your agy settings, login, hooks and MCP servers stay out;
@@ -216,6 +225,10 @@ Traps, each seen in testing:
   lines", Argon wrote 16 items and about 40 KB (2026-11-05), as Google says it
   does. Read the answer file rather than printing it whole, and shape what you
   need with the prompt's structure, not a count.
+- **A stream timeout or the output limit can end a turn early.** On 2026-11-07
+  one review ended on an API stream timeout and its rerun completed, and a batch
+  that asked for many labels in one answer ran into the output limit. Rerun
+  once after a stream timeout; split a batch that hits the limit.
 
 - **A project as workspace runs its code.** agy loads `.agents/` hooks, MCP
   servers, rules and agents from its workspace and each parent up to the repo

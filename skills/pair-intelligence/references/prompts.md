@@ -167,12 +167,15 @@ Return your result as JSON conforming to the supplied schema.
 the whole disk, so name the plan by absolute path in `{{SCOPE}}` and point
 `--repo` at the repository it will land in. Gemini reads only under `--cwd`:
 stage the repository with `pair_stage.sh` and copy the plan into that folder.
-**A revised plan**, reviewed for what changed since the last round: make a folder
-a git repository (`git init`), commit the revision already reviewed, copy the new
-one over it and leave it uncommitted, then scope `git diff HEAD` plus the plan as
-a whole. The review's DIRTY banner is expected there. The prompt file may sit
-inside `--repo`: the reviewer can read it, which matters only if it holds
-something the reviewer should work out alone.
+**A revised plan**, reviewed for what changed since the last round: stage it with
+`bash scripts/pair_stage.sh /tmp/<plan>-r<N> delta:<old>,<new>`, which copies the
+plan beside `<copy>.diff`, its unified diff from `<old>`, the revision the last
+round read. Stage round 1 with `file:<plan>` too: that stage's `files/` copy is
+then the old revision, so a plan edited in place needs no saved copy. Point
+`--repo` (Codex) or `--cwd` (Gemini) at the new stage and use `Mode: fix delta`
+with its plan scope. The prompt file may sit inside `--repo`: the reviewer can
+read it, which matters only if it holds something the reviewer should work out
+alone.
 
 **No diff** (a module or a staged folder reviewed as it stands): put the files in
 `{{SCOPE}}` and replace "Read the diff yourself with git, then read enough of the
@@ -228,7 +231,8 @@ schema.
 For the round that checks only the fixes after an earlier round's findings were
 fixed: a fresh reviewer, `--effort medium`, usually two or three minutes. Commit
 the fixes first, so the scope names two shas. The stopping rule in
-`references/review.md` gives the final fix this round however small it is.
+`references/review.md` gives every fix this round however small it is, a fix
+to a fix included.
 
 ```
 Review only the fixes in this change. This is a pre-merge review of the author's
@@ -253,6 +257,23 @@ pins the old behaviour.
 Report only defects with a concrete wrong outcome, saying for each whether some
 input reaches it today. An empty findings list is a valid answer. Return JSON
 conforming to the supplied schema.
+```
+
+**For a plan**, staged with `delta:` (above), replace `<scope>` and `<check>`
+with these; the rest stays:
+
+```
+<scope>
+{{STAGE}}/files{{PLAN_PATH}}.diff is what changed in the plan since the last
+round. Read every section of {{STAGE}}/files{{PLAN_PATH}} that the diff touches,
+whole, and what those sections depend on elsewhere in the plan.
+</scope>
+
+<check>
+Whether each change removes its defect in every case the finding named, and
+whether it broke something next to it: a step that relied on the old text, a
+claim elsewhere in the plan it now contradicts, an order of steps it changed.
+</check>
 ```
 
 ---

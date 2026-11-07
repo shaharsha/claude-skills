@@ -175,7 +175,8 @@ if mode in ("quota-after-answer", "quota-mid-answer") and n == 0:
     ev(event="step_update", step_update={"step_index": 9, "step_type": "agent_response", "state": "ACTIVE"})
     if mode == "quota-after-answer":
         ev(event="step_update", step_update={"step_index": 9, "step_type": "agent_response", "state": "DONE", "duration_seconds": 109.7})
-res = {"conversation_id": "conv-fake-1", "status": "SUCCESS", "response": "agy answer", "usage": {}}
+res = {"conversation_id": "conv-fake-1", "status": "SUCCESS", "response": "agy answer",
+       "usage": {"input_tokens": 1000, "output_tokens": 200, "thinking_tokens": 150, "cache_read_tokens": 5000}}
 if mode == "denied":
     res.update(response="", denied_actions=[{"action": "read_file", "display_name": "ReadFile"}])
 if mode == "error":
@@ -205,7 +206,11 @@ if mode == "cut-empty":   # cut in the middle of a tool loop: agy returns no tex
 if mode == "quota-cut":   # the measured r2 run: a 429 while the print timeout fired
     res.update(status="ERROR", response="", error="API error (attempt 1): RESOURCE_EXHAUSTED (code 429): TPM quota exhausted.")
     sys.stderr.write("[agy] print timeout after 590s with turn in progress; returning partial output\n")
-ev(event="result", result=res)
+if mode == "u2028":   # agy writes JSON with non-ASCII raw, and JSON leaves U+2028 unescaped
+    res.update(response="line one\u2028line two\u2029line three")
+    print(json.dumps({"event": "result", "result": res}, ensure_ascii=False), flush=True)
+else:
+    ev(event="result", result=res)
 FAKE
 
 cat > "$FAKE/agent-browser" <<FAKE
@@ -423,6 +428,14 @@ out="$(FAKE_AGY=links PAIR_LINKS_ORIGIN="http://127.0.0.1:$(cat "$T/redirect.por
 kill $RPID 2>/dev/null
 RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
 check "Gemini's grounding links are replaced by their sources; one that does not resolve stays; the pairs are kept" '[[ $rc -eq 0 ]] && grep -q "(https://example.com/source-a)" "$RUN/answer.md" && grep -q "grounding-api-redirect/BBB222=" "$RUN/answer.md" && ! grep -q "AAA111" "$RUN/answer.md" && grep -q AAA111 "$RUN/source-links.json"'
+out="$(cd "$T/arepo" && FAKE_AGY=u2028 bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
+check "an answer holding U+2028 or U+2029 is read whole, not lost with its result event" '[[ $rc -eq 0 && "$out" == *STATUS=ok* ]] && grep -q "line three" "$RUN/answer.md"'
+check "Gemini runs print TOKENS (in, out with thinking, cached) and keep them in meta.json" '[[ "$out" == *"TOKENS=in:1000,out:200,cached:5000"* && "$(jq_py "$RUN/meta.json" "d[\"tokens\"]")" == in:1000,out:200,cached:5000 ]]'
+out="$(bash "$P" --engine codex --mode consult --prompt-file "$T/prompt.md" --web --name x 2>&1)"; r1=$?
+out2="$(bash "$P" --prompt-file "$T/prompt.md" --name 2>&1)"; r2=$?
+out3="$(bash "$SCRIPTS/codex_review.sh" --repo "$T/arepo" --prompt-file "$T/prompt.md" --web --name x 2>&1)"; r3=$?
+check "a flag given no value is named: --web says off, cached or live; exit 64 (pair.sh, codex_review.sh)" '[[ $r1 -eq 64 && "$out" == *"--web needs a value: off, cached or live"* && $r2 -eq 64 && "$out2" == *"--name needs a value"* && $r3 -eq 64 && "$out3" == *"--web needs a value"* ]]'
 # Output the model can read: a log inside --cwd, or PAIR_OUT inside it.
 mkdir -p "$T/logcwd" && printf 'x\n' > "$T/logcwd/notes.md"
 FAKE_CODEX=ok bash "$P" --cwd "$T/logcwd" --prompt-file "$T/prompt.md" > "$T/logcwd/run.log" 2> "$T/logcwd-err.txt"
@@ -501,6 +514,9 @@ check "pair-fs ls and find inside the root"        'FS ls | grep -q notes.txt &&
 check "pair-fs grep finds content"                 'FS grep plum | grep -q "notes.txt:1:marker: plum-7"'
 check "pair-fs refuses a path outside the roots"   '! FS ls /etc >/dev/null 2>&1 && ! FS grep root /etc/passwd >/dev/null 2>&1 && ! FS ls ../.. >/dev/null 2>&1'
 check "pair-fs refuses a symlink out of the root"  '! FS ls etclink >/dev/null 2>&1 && ! FS grep root etclink >/dev/null 2>&1'
+printf 'one\fstill one\n\xe2\x80\xa8two\nthree-ff\n' > "$AREPO/ff.txt"
+check "pair-fs grep numbers lines by newline, not at a form feed or U+2028 (rg and the Python fallback)" '[[ "$(FS grep three-ff ff.txt)" == *"3:three-ff" && "$(PAIR_FS_FORCE_PY_GREP=1 FS grep three-ff ff.txt)" == *"ff.txt:3:three-ff" ]]'
+rm -f "$AREPO/ff.txt"
 check "pair-fs grep skips secret files"            '[[ "$(FS grep SECRET123)" == "no matches" ]]'
 FS grep --pre=/bin/sh x >/dev/null 2>&1; r1=$?; FS grep -- -x >/dev/null 2>&1; r2=$?
 check "pair-fs grep refuses unknown flags, takes a dash pattern after --" '[[ $r1 -eq 2 && $r2 -eq 0 ]]'
@@ -840,6 +856,7 @@ out="$(cd "$T/arepo" && "${VX[@]}" PAIR_AGY_RETRY_WAIT=2 FAKE_AGY=quota-once bas
 pt() { python3 -c 'import json,sys; a=json.load(open(sys.argv[1]))["args"]; print(a[a.index("--print-timeout")+1].rstrip("s"))' "$1"; }
 check "vertex 429: one retry continues the same conversation, then ok" '[[ $rc -eq 0 && "$out" == *"STATUS=ok"* && "$(jq_py "$(last_args agy)" "\" \".join(d[\"args\"])")" == *"--conversation conv-q"* ]]'
 check "vertex 429: the retry gets only the time left"  '[[ $(pt "$LOG/agy-args-1.json") -lt $(pt "$LOG/agy-args-0.json") ]]'
+check "vertex 429: TOKENS sums both attempts, since both are billed" '[[ "$out" == *"TOKENS=in:2000,out:400,cached:10000"* ]]'
 reset_log
 out="$(cd "$T/arepo" && "${VX[@]}" PAIR_AGY_RETRY_WAIT=0 FAKE_AGY=quota-empty bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
 RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
@@ -876,6 +893,10 @@ reset_log
 out="$(cd "$T/arepo" && PAIR_AGY_AUTH=key PAIR_AGY_RETRY_WAIT=0 FAKE_AGY=auth bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
 check "API-key auth failure: exit 69, not retried" '[[ $rc -eq 69 && $(ls "$LOG"/agy-args-*.json | wc -l) -eq 1 && "$out" != *"Run '"'"'agy'"'"' to log in"* ]]'
 
+printf '```json\n{"overall_verdict":"sound","overall_confidence":0.9,"summary":"a\xe2\x80\xa8b","findings":[]}\n```\n' > "$T/fenced.json"
+python3 "$SCRIPTS/render_review.py" --input "$T/fenced.json" --output "$T/fenced.md" --repo "$T/arepo" --model m --effort high --session s --session-key k >/dev/null 2>&1; rc=$?
+check "render_review: a fenced result whose text holds U+2028 still parses as JSON" '[[ $rc -eq 0 ]] && grep -q "Verdict:\*\* sound" "$T/fenced.md"'
+
 # --- pair_stage.sh ----------------------------------------------------------------------
 mkdir -p "$T/st1" && git -C "$T/st1" init -q && mkdir -p "$T/st1/src" && printf 'v1\n' > "$T/st1/src/a.txt" && printf 'top\n' > "$T/st1/top.txt"
 git -C "$T/st1" add . && git -C "$T/st1" -c user.email=t@t -c user.name=t commit -qm one && git -C "$T/st1" tag v1
@@ -902,6 +923,20 @@ out="$(bash "$SCRIPTS/pair_stage.sh" "$T/staged6" "$T/files-repo/files" "file:$T
 check "pair_stage: a repository named files does not land in the loose-files folder" '[[ $rc -eq 0 && -e "$T/staged6/files-2/r.txt" && ! -e "$T/staged6/files/r.txt" ]]'
 bash "$SCRIPTS/pair_stage.sh" "$T/loose/stage" "file:$T/loose" >/dev/null 2>&1; r1=$?
 check "pair_stage: a loose folder holding the destination is refused" '[[ $r1 -eq 64 && ! -e "$T/loose/stage/files" ]]'
+mkdir -p "$T/plans"; printf 'step 1\nstep 2\n' > "$T/plans/plan,r1.md"; printf 'step 1\nstep 2 fixed\n' > "$T/plans/plan.md"
+PLAN="$(cd "$T/plans" && pwd -P)/plan.md"
+out="$(bash "$SCRIPTS/pair_stage.sh" "$T/stage-r2" "delta:$T/plans/plan,r1.md,$T/plans/plan.md" 2>&1)"; rc=$?
+check "pair_stage delta: copies the revised file beside its diff from the old one (a comma in a name is fine)" '[[ $rc -eq 0 && -e "$T/stage-r2/files$PLAN" ]] && grep -q "^+step 2 fixed" "$T/stage-r2/files$PLAN.diff" && grep -q "its changes since" "$T/stage-r2/SHAS.md"'
+printf 'step 1\nstep 2 fixed\nstep 3\n' > "$T/plans/plan.md"
+out="$(bash "$SCRIPTS/pair_stage.sh" "$T/stage-r3" "delta:$T/stage-r2/files$PLAN,$T/plans/plan.md" 2>&1)"; rc=$?
+check "pair_stage delta: the last round's staged copy serves as the old revision" '[[ $rc -eq 0 ]] && grep -q "^+step 3" "$T/stage-r3/files$PLAN.diff" && ! grep -q "^+step 2 fixed" "$T/stage-r3/files$PLAN.diff"'
+bash "$SCRIPTS/pair_stage.sh" "$T/stage-bad" "delta:$T/plans/nope.md,$T/plans/plan.md" >/dev/null 2>&1; r1=$?
+out="$(bash "$SCRIPTS/pair_stage.sh" "$T/stage-same" "delta:$T/plans/plan.md,$T/plans/plan.md" 2>&1)"; r2=$?
+check "pair_stage delta: a missing file is refused (66); two identical files warn" '[[ $r1 -eq 66 && $r2 -eq 0 && "$out" == *WARNING*same* ]]'
+cp "$T/plans/plan.md" "$T/plans/plan.md.diff"
+bash "$SCRIPTS/pair_stage.sh" "$T/stage-clash1" "file:$T/plans/plan.md.diff" "delta:$T/plans/plan,r1.md,$T/plans/plan.md" >/dev/null 2>&1; r1=$?
+bash "$SCRIPTS/pair_stage.sh" "$T/stage-clash2" "delta:$T/plans/plan,r1.md,$T/plans/plan.md" "file:$T/plans/plan.md.diff" >/dev/null 2>&1; r2=$?
+check "pair_stage: a delta and a loose file that would write one path are refused, in either order (64)" '[[ $r1 -eq 64 && $r2 -eq 64 ]]'
 
 # --- pair.sh: argument checks -----------------------------------------------------
 bash "$P" --help >/dev/null 2>&1;                                         check "--help exits 0" '[[ $? -eq 0 ]]'

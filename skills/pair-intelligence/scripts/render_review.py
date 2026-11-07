@@ -24,7 +24,7 @@ def load(path: Path):
         return None, ""
     # Codex occasionally wraps structured output in a fenced block.
     if text.startswith("```"):
-        lines = text.splitlines()
+        lines = text.split("\n")  # not splitlines(): U+2028 inside a JSON string is not a line end
         if len(lines) > 2:
             text = "\n".join(lines[1:-1] if lines[-1].strip().startswith("```") else lines[1:])
     try:

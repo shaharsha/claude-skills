@@ -74,6 +74,15 @@ USAGE
 
 LIST_ONLY=0
 while [[ $# -gt 0 ]]; do
+  # A flag that takes a value must get one: given none, it took the next flag as
+  # its value, and `--web --name x` then failed on "unknown argument: x".
+  case "$1" in
+    --repo|--prompt-file|--name|--resume|--label|--model|--effort|--schema|--web|--out-dir|--domains)
+      if [[ -z "${2:-}" || "$2" == --* ]]; then
+        [[ "$1" == --web ]] && echo "--web needs a value: off, cached or live" >&2 || echo "$1 needs a value" >&2
+        exit 64
+      fi ;;
+  esac
   case "$1" in
     --repo)        REPO="${2:-}"; shift 2 ;;
     --prompt-file) PROMPT_FILE="${2:-}"; shift 2 ;;

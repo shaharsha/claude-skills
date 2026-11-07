@@ -69,7 +69,9 @@ Models, flags and traps per engine: `references/engines.md`.
    heredoc (`cat > /abs/prompt.md <<'EOF'`) so the shell changes nothing in it,
    shaped as the mode's file says. In every mode, give facts, constraints and the question, and withhold your
    own answer, lean or confidence: a reviewer told "this is fine" finds less.
-2. **Run it**, in the background: Codex usually answers in 1 to 10 minutes,
+2. **Run it** with your harness's own background mode, one that waits for the
+   command and returns its exit code, not a shell `&`: a `( ... ) &` job reports
+   done at once and its exit code is lost. Codex usually answers in 1 to 10 minutes,
    Gemini takes longer (defaults: 20 minutes for a Gemini consult, 30 for a
    review); over a large file or a multi-repo stage, give Gemini
    `--timeout 1500` or more. The scripts are in this skill's folder,
@@ -95,7 +97,8 @@ Models, flags and traps per engine: `references/engines.md`.
 3. **Check it ran.** `pair.sh`: exit 0 with `STATUS=ok`, then open the `ANSWER=`
    file. `codex_review.sh`: exit 0, then open the `REVIEW_MD=` file. `READS=0`
    (exit 72, `STATUS=unread`) means the model read no file and answered from your
-   prompt alone. Either way,
+   prompt alone. READS counts read commands, not files: one `cat a b` is 1. A
+   Gemini run also prints `TOKENS=` (what it costs: `references/engines.md`). Either way,
    confirm the answer shows the model reached the material: a file and line, a
    quote, a URL, or for an image, measurements and quoted on-screen text. A
    brainstorm round with no source material shows it in the answer itself. A
@@ -176,10 +179,12 @@ view, and ask before changing anything.
 
 Set the stopping rule before the first answer arrives.
 
-- **Review:** a fresh reviewer each round; at most 4 rounds; from round 3 only a
+- **Review:** a fresh reviewer each round; at most 4 full rounds; from round 3 only a
   real high-severity finding blocks; the same class of high finding twice means
-  redesign; the last round reviews only the fix, and a fix-delta round may run past
-  the cap. If the bytes you merge were not reviewed, say so in the PR.
+  redesign. Every fix to a round's findings gets a fix-delta round of its own,
+  however small: those rounds do not count toward the cap, so no byte you merge
+  goes unreviewed (if one still did, say so in the PR). Full rounds run at `high`
+  effort; only fix-delta rounds drop to `medium`.
 - **Consult:** one round, plus one resumed follow-up if you dispute a specific claim.
 - **Ideate:** at most 3 rounds.
 - **Research and browse:** one task per run.
