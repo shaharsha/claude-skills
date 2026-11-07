@@ -65,8 +65,8 @@ There's nothing to run — this is a reference library the agent loads. It fires
 |---|---|
 | `SKILL.md` | The universal layer: system-prompt structure, altitude, tool descriptions, context engineering, anti-patterns, eval design |
 | `references/claude.md` | Claude / Anthropic — effort defaults, sampling, thinking, caching, migration notes |
-| `references/gpt.md` | GPT / OpenAI incl. Azure — verbosity, reasoning effort, the "stop doing" list |
-| `references/gemini.md` | Gemini / Google incl. Vertex — Gemini 4 Argon, long decode, thought signatures, caching, thinking cost |
+| `references/gpt.md` | GPT / OpenAI incl. Azure and AWS Bedrock — verbosity, reasoning effort, host contracts, the "stop doing" list |
+| `references/gemini.md` | Gemini / Google incl. Vertex — Gemini 4 Argon and (gated) Carbon, long decode, thought signatures, caching, thinking cost |
 | `references/kimi.md` | Kimi / Moonshot — K3.1 Pro's always-on thinking, fixed sampling, `reasoning_content` replay, MFJS tool schemas, host differences |
 | `references/grok.md` | Grok / xAI — Grok 4.7's encrypted reasoning, required sampling values, server-side tools (web/X search), caching keys, compaction |
 | `references/langgraph.md` | LangGraph / LangChain / Deep Agents: layers, context primitives, typed HITL, skill-bound tools, harness profiles, MCP, subagent context modes, eval practice |

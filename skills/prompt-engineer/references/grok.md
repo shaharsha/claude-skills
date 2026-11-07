@@ -57,7 +57,7 @@ Grok is the exception to SKILL.md's "omit sampling parameters" default - xAI ask
 
 ## Effort and cost
 
-Grok 4.7's main cost is its token appetite: Artificial Analysis measured **~81K output tokens per Intelligence Index task at `xhigh`** - 2.25× Grok 4.6 and ~3× GPT-6 Astra - for +2 index points, "very verbose" (240M tokens vs an 87M median), $3.74 per task. Community reports (Cursor forum) consistently mention verbosity, long "exploring" phases, and overthinking at `high`.
+Grok 4.7's main cost is its token appetite: on Artificial Analysis's Intelligence Index v5 it uses **~105K output tokens per task at `xhigh`** (about 2× GPT-6 Astra at `max`) and costs **$7.77 per task for 35.5 points** - `high` scores 35.2 for $6.18 and `low` 31.1 for $2.92, so effort above `low` buys little. Community reports (Cursor forum) consistently mention verbosity, long "exploring" phases, and overthinking at `high`.
 
 - **Start at `low` or `medium`, not the `high` default.** xAI's own effort cookbook on short support tickets: `medium`, `high`, and `xhigh` used about the same ~600 reasoning tokens; **`low` used ~140 and cost half as much, and every effort scored 87-93%.** Per xAI's table: `low` for latency-sensitive agentic use and simple tool calling; `medium` for complex data analysis and long-context reasoning; `high` for very challenging problems; `xhigh` for the hardest work where quality outweighs latency.
 - **Effort doesn't buy premise-checking:** on BullshitBench, Grok 4.3 and 4.6 pushed back on nonsense *less* at higher effort (4.6: 66% clear pushback at minimal vs 56% at max). Grok 4.7 isn't scored yet.
