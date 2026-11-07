@@ -97,7 +97,8 @@ Models, flags and traps per engine: `references/engines.md`.
 3. **Check it ran.** `pair.sh`: exit 0 with `STATUS=ok`, then open the `ANSWER=`
    file. `codex_review.sh`: exit 0, then open the `REVIEW_MD=` file. `READS=0`
    (exit 72, `STATUS=unread`) means the model read no file and answered from your
-   prompt alone. READS counts read commands, not files: one `cat a b` is 1. Either way,
+   prompt alone. READS counts read commands, not files: one `cat a b` is 1. A
+   Gemini run also prints `TOKENS=` (what it costs: `references/engines.md`). Either way,
    confirm the answer shows the model reached the material: a file and line, a
    quote, a URL, or for an image, measurements and quoted on-screen text. A
    brainstorm round with no source material shows it in the answer itself. A

@@ -92,8 +92,9 @@ usage: pair.sh --prompt-file <abs path> [options]
                           (run after an agy or codex upgrade) and exit
   --list                  Print remembered session labels and exit
 
-Prints RUN_DIR, SESSION_ID, SESSION_NAME, STATUS, READS (files the model read)
-and TREE (the commit of --cwd, +uncommitted if it had changes), with ANSWER=<path> last.
+Prints RUN_DIR, SESSION_ID, SESSION_NAME, STATUS, READS (read commands the model ran),
+TOKENS (Gemini: in:N,out:N,cached:N, thinking counted in out) and TREE (the commit
+of --cwd, +uncommitted if it had changes), with ANSWER=<path> last.
 Exit: 0 answered, 64 usage, 66 missing input, 69 missing CLI or credentials, 70 empty answer,
       71 the turn failed or ended without a final step, 75 Gemini quota ran
       out (retry later), 72 the model read no file (review/consult), 124 timed out.
@@ -833,6 +834,7 @@ for i, line in enumerate(events.read_bytes().decode("utf-8", "replace").split("\
 sid, failed, completed, denied, quota, results = "", False, False, False, False, 0
 reads = -1   # files the model read: shell commands for Codex, file tools for agy; -1 unknown
 step = None   # agy: the (type, state) of the last step before each result
+tokens = {}   # agy: usage summed over every result, a retried attempt's included (all of it is billed)
 if engine == "codex":
     reads = 0
     for e in evs:
@@ -875,6 +877,11 @@ elif engine == "agy":
             r = e.get("result") or {}
             results += 1
             sid = r.get("conversation_id", "") or sid
+            # output_tokens includes thinking: the sums matched the billing export
+            # to the token on 2026-11-04 and 11-05.
+            for k, name in (("input_tokens", "in"), ("output_tokens", "out"), ("cache_read_tokens", "cached")):
+                if isinstance((r.get("usage") or {}).get(k), int):
+                    tokens[name] = tokens.get(name, 0) + r["usage"][k]
             if r.get("error"):
                 # agy keeps the reason inside the result, not on stderr.
                 hint = (" (Vertex AI quota: retry later, or PAIR_AGY_AUTH=key)"
@@ -952,9 +959,9 @@ except OSError:
     material = False
 if status == "ok" and reads == 0 and mode in ("review", "consult") and material:
     status = "unread"
-print(status, sid or "-", reads)
+print(status, sid or "-", reads, ",".join("%s:%d" % (k, tokens.get(k, 0)) for k in ("in", "out", "cached")) if tokens else "-")
 PY
-read -r STATUS SESSION_ID READS < "$RUN_DIR/.status" || true
+read -r STATUS SESSION_ID READS TOKENS < "$RUN_DIR/.status" || true
 # agy cites search results as grounding redirect links, which a reader cannot
 # check as given; the answer gets the pages they point to (pair_links.py).
 if [[ "$BACKEND" == agy && -s "$ANSWER" ]] && grep -q 'vertexaisearch\.cloud\.google\.com/grounding-api-redirect/' "$ANSWER"; then
@@ -988,10 +995,10 @@ fi
 
 python3 - "$RUN_DIR/meta.json" "$ENGINE" "$MODE" "$MODEL" "$EFFORT" "$WEB" "$CWD" "$STATUS" \
   "$RC" "$SECS" "$SESSION_ID" "${NAME:-$RESUME}" "$DOMAINS" "$BACKEND" "${AGY_AUTH:+$AGY_AUTH${AGY_PROJECT:+:$AGY_PROJECT}}" \
-  "${READS:--1}" "$TREE" <<'PY'
+  "${READS:--1}" "$TREE" "${TOKENS:--}" <<'PY'
 import json, sys
 keys = ["engine", "mode", "model", "effort", "web", "cwd", "status", "exit_code",
-        "seconds", "session_id", "session_name", "domains", "backend", "auth", "reads", "tree"]
+        "seconds", "session_id", "session_name", "domains", "backend", "auth", "reads", "tree", "tokens"]
 meta = dict(zip(keys, sys.argv[2:]))
 meta["exit_code"], meta["seconds"], meta["reads"] = int(meta["exit_code"]), int(meta["seconds"]), int(meta["reads"])
 json.dump(meta, open(sys.argv[1], "w"), indent=2)
@@ -1003,6 +1010,7 @@ echo "SESSION_ID=$SESSION_ID"
 [[ -n "${NAME:-$RESUME}" ]] && echo "SESSION_NAME=${NAME:-$RESUME}"
 echo "STATUS=$STATUS"
 [[ "${READS:--1}" != -1 ]] && echo "READS=$READS"
+[[ -n "${TOKENS:-}" && "$TOKENS" != - ]] && echo "TOKENS=$TOKENS"
 [[ -n "$TREE" ]] && echo "TREE=$TREE"
 echo "ANSWER=$ANSWER"
 case "$STATUS" in

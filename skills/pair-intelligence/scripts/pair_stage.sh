@@ -9,6 +9,8 @@
 #
 #   <spec>   <repo>[@<ref>][:<path>,<path>...]   a snapshot of a local clone
 #            file:<path>                          a loose file or folder, copied
+#            delta:<old>,<new>                    a revised file, copied, beside its
+#                                                 diff from <old> (<copy>.diff)
 #   <ref>    any git ref or sha; default: the remote's default branch as last
 #            fetched (origin/HEAD), else HEAD. Nothing is fetched: run
 #            `git -C <repo> fetch` first if it should be current. A remote ref
@@ -21,12 +23,14 @@
 # tracked files at that commit, with no .git, no uncommitted changes and nothing
 # git-ignored. Loose files land in <dest>/files/ under their full path, and
 # SHAS.md maps each copy to its original, so a reader knows which path is real.
+# delta: is for re-reviewing a plan after fixes: <old> is the revision the last
+# round read, and the last round's stage still holds it as its files/ copy.
 # <dest> must be new or empty.
 set -euo pipefail
 # One brace group, so bash reads the whole script before running it (a skills
 # pull during a long archive would otherwise shift what it reads next).
 {
-usage() { sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 64; }
+usage() { sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 64; }
 EXCLUDES=()
 while [[ "${1:-}" == --exclude ]]; do
   [[ -n "${2:-}" ]] || usage
@@ -42,6 +46,28 @@ DEST="$(cd "$DEST" && pwd)"
 STAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 ROWS=(); FILES=(); WARNED=0
 for spec in "$@"; do
+  if [[ "$spec" == delta:* ]]; then
+    # Split at the one comma that leaves an existing file on each side: a path
+    # may itself hold a comma.
+    old=""; src=""
+    { IFS= read -r -d '' old && IFS= read -r -d '' src; } < <(python3 -c '
+import os, sys
+s = sys.argv[1]
+hits = [i for i, c in enumerate(s) if c == "," and os.path.isfile(s[:i]) and os.path.isfile(s[i + 1:])]
+if len(hits) == 1:
+    sys.stdout.write(os.path.realpath(s[:hits[0]]) + "\0" + os.path.realpath(s[hits[0] + 1:]) + "\0")
+' "${spec#delta:}") || true
+    [[ -n "$old" && -n "$src" ]] || { echo "delta: takes <old file>,<new file>, both existing files: ${spec#delta:}" >&2; exit 66; }
+    target="$DEST/files$src"
+    mkdir -p "$(dirname "$target")"
+    cp -p "$src" "$target"
+    drc=0; diff -u --label "$old" --label "$src" "$old" "$src" > "$target.diff" || drc=$?
+    [[ $drc -le 1 ]] || { echo "diff failed on $old and $src" >&2; exit 70; }
+    [[ $drc -eq 1 ]] || echo "pair_stage: WARNING $old and $src are the same; $target.diff is empty" >&2
+    FILES+=("| \`files$src\` | \`$src\` | \`$(shasum -a 256 "$src" | cut -c1-16)\` |")
+    FILES+=("| \`files$src.diff\` | its changes since \`$old\` (\`$(shasum -a 256 "$old" | cut -c1-16)\`) | \`$(shasum -a 256 "$target.diff" | cut -c1-16)\` |")
+    continue
+  fi
   if [[ "$spec" == file:* ]]; then
     src="${spec#file:}"
     [[ -e "$src" ]] || { echo "no such file or folder: $src" >&2; exit 66; }

@@ -63,7 +63,8 @@ snapshot of each with a `SHAS.md` of the commits; cite that file in the prompt.
 List a repository twice for two refs; add `--exclude '*.mp4'` (before the folder)
 to leave out recordings and other bulk; stage loose files (a settings file, a
 script outside any repo) as `file:<path>`, which `SHAS.md` maps back to the
-original path. A copy staged by hand can shadow the real path the code reads, and
+original path, and a revised plan as `delta:<old>,<new>`, the plan beside its diff
+from the revision the last round read (`references/prompts.md`, *A revised plan*). A copy staged by hand can shadow the real path the code reads, and
 the model then reasons about the copy (2026-11-06: one refuted claim came from
 exactly that). When
 the repository is a grab-bag of unrelated private files, or the file in question

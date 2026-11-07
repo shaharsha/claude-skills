@@ -175,7 +175,8 @@ if mode in ("quota-after-answer", "quota-mid-answer") and n == 0:
     ev(event="step_update", step_update={"step_index": 9, "step_type": "agent_response", "state": "ACTIVE"})
     if mode == "quota-after-answer":
         ev(event="step_update", step_update={"step_index": 9, "step_type": "agent_response", "state": "DONE", "duration_seconds": 109.7})
-res = {"conversation_id": "conv-fake-1", "status": "SUCCESS", "response": "agy answer", "usage": {}}
+res = {"conversation_id": "conv-fake-1", "status": "SUCCESS", "response": "agy answer",
+       "usage": {"input_tokens": 1000, "output_tokens": 200, "thinking_tokens": 150, "cache_read_tokens": 5000}}
 if mode == "denied":
     res.update(response="", denied_actions=[{"action": "read_file", "display_name": "ReadFile"}])
 if mode == "error":
@@ -430,6 +431,7 @@ check "Gemini's grounding links are replaced by their sources; one that does not
 out="$(cd "$T/arepo" && FAKE_AGY=u2028 bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
 RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
 check "an answer holding U+2028 or U+2029 is read whole, not lost with its result event" '[[ $rc -eq 0 && "$out" == *STATUS=ok* ]] && grep -q "line three" "$RUN/answer.md"'
+check "Gemini runs print TOKENS (in, out with thinking, cached) and keep them in meta.json" '[[ "$out" == *"TOKENS=in:1000,out:200,cached:5000"* ]] && grep -q "\"tokens\": \"in:1000,out:200,cached:5000\"" "$RUN/meta.json"'
 out="$(bash "$P" --engine codex --mode consult --prompt-file "$T/prompt.md" --web --name x 2>&1)"; r1=$?
 out2="$(bash "$P" --prompt-file "$T/prompt.md" --name 2>&1)"; r2=$?
 out3="$(bash "$SCRIPTS/codex_review.sh" --repo "$T/arepo" --prompt-file "$T/prompt.md" --web --name x 2>&1)"; r3=$?
@@ -854,6 +856,7 @@ out="$(cd "$T/arepo" && "${VX[@]}" PAIR_AGY_RETRY_WAIT=2 FAKE_AGY=quota-once bas
 pt() { python3 -c 'import json,sys; a=json.load(open(sys.argv[1]))["args"]; print(a[a.index("--print-timeout")+1].rstrip("s"))' "$1"; }
 check "vertex 429: one retry continues the same conversation, then ok" '[[ $rc -eq 0 && "$out" == *"STATUS=ok"* && "$(jq_py "$(last_args agy)" "\" \".join(d[\"args\"])")" == *"--conversation conv-q"* ]]'
 check "vertex 429: the retry gets only the time left"  '[[ $(pt "$LOG/agy-args-1.json") -lt $(pt "$LOG/agy-args-0.json") ]]'
+check "vertex 429: TOKENS sums both attempts, since both are billed" '[[ "$out" == *"TOKENS=in:2000,out:400,cached:10000"* ]]'
 reset_log
 out="$(cd "$T/arepo" && "${VX[@]}" PAIR_AGY_RETRY_WAIT=0 FAKE_AGY=quota-empty bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
 RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
@@ -920,6 +923,16 @@ out="$(bash "$SCRIPTS/pair_stage.sh" "$T/staged6" "$T/files-repo/files" "file:$T
 check "pair_stage: a repository named files does not land in the loose-files folder" '[[ $rc -eq 0 && -e "$T/staged6/files-2/r.txt" && ! -e "$T/staged6/files/r.txt" ]]'
 bash "$SCRIPTS/pair_stage.sh" "$T/loose/stage" "file:$T/loose" >/dev/null 2>&1; r1=$?
 check "pair_stage: a loose folder holding the destination is refused" '[[ $r1 -eq 64 && ! -e "$T/loose/stage/files" ]]'
+mkdir -p "$T/plans"; printf 'step 1\nstep 2\n' > "$T/plans/plan,r1.md"; printf 'step 1\nstep 2 fixed\n' > "$T/plans/plan.md"
+PLAN="$(cd "$T/plans" && pwd -P)/plan.md"
+out="$(bash "$SCRIPTS/pair_stage.sh" "$T/stage-r2" "delta:$T/plans/plan,r1.md,$T/plans/plan.md" 2>&1)"; rc=$?
+check "pair_stage delta: copies the revised file beside its diff from the old one (a comma in a name is fine)" '[[ $rc -eq 0 && -e "$T/stage-r2/files$PLAN" ]] && grep -q "^+step 2 fixed" "$T/stage-r2/files$PLAN.diff" && grep -q "its changes since" "$T/stage-r2/SHAS.md"'
+printf 'step 1\nstep 2 fixed\nstep 3\n' > "$T/plans/plan.md"
+out="$(bash "$SCRIPTS/pair_stage.sh" "$T/stage-r3" "delta:$T/stage-r2/files$PLAN,$T/plans/plan.md" 2>&1)"; rc=$?
+check "pair_stage delta: the last round's staged copy serves as the old revision" '[[ $rc -eq 0 ]] && grep -q "^+step 3" "$T/stage-r3/files$PLAN.diff" && ! grep -q "^+step 2 fixed" "$T/stage-r3/files$PLAN.diff"'
+bash "$SCRIPTS/pair_stage.sh" "$T/stage-bad" "delta:$T/plans/nope.md,$T/plans/plan.md" >/dev/null 2>&1; r1=$?
+out="$(bash "$SCRIPTS/pair_stage.sh" "$T/stage-same" "delta:$T/plans/plan.md,$T/plans/plan.md" 2>&1)"; r2=$?
+check "pair_stage delta: a missing file is refused (66); two identical files warn" '[[ $r1 -eq 66 && $r2 -eq 0 && "$out" == *WARNING*same* ]]'
 
 # --- pair.sh: argument checks -----------------------------------------------------
 bash "$P" --help >/dev/null 2>&1;                                         check "--help exits 0" '[[ $? -eq 0 ]]'
