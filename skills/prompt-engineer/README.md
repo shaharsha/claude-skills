@@ -28,6 +28,9 @@ Step 0a: identify model family from imports, model IDs, SDK calls
 Step 0b: read references/<family>.md IN FULL — the version-specific knobs
         │
         ▼
+Step 0c (evals, judges, failed runs): also read references/evals.md
+        │
+        ▼
 universal layer (≈70%) + provider layer (≈30%)
         │
         ▼
@@ -70,6 +73,7 @@ There's nothing to run — this is a reference library the agent loads. It fires
 | `references/kimi.md` | Kimi / Moonshot — K3.1 Pro's always-on thinking, fixed sampling, `reasoning_content` replay, MFJS tool schemas, host differences |
 | `references/grok.md` | Grok / xAI — Grok 4.7's encrypted reasoning, required sampling values, server-side tools (web/X search), caching keys, compaction |
 | `references/langgraph.md` | LangGraph / LangChain / Deep Agents: layers, context primitives, typed HITL, skill-bound tools, harness profiles, MCP, subagent context modes, eval practice |
+| `references/evals.md` | Evaluating and debugging agents: eval design, eval integrity (answer leakage, visible tests, side effects, milestones), diagnosing a run from its traces, judge prompts and calibration, reporting a judged pass rate |
 | `references/use-cases.md` | Task playbooks: coding and code review, research/RAG, data/SQL, extraction, multimodal |
 | `references/model-selection.md` | Intelligence, cost per task, agent rankings, false-premise detection, routing math |
 | `templates/` | Reusable prompt scaffolds |
@@ -90,11 +94,13 @@ There's nothing to run — this is a reference library the agent loads. It fires
 - **The platform never tells you the model family.** Bedrock, Vertex, and Foundry each host multiple families. Identify the family from model IDs and `base_url` (then imports), then load *that* file.
 - **Kimi and Grok break two cross-provider defaults.** Kimi fixes its sampling values and degrades silently if you don't replay the full assistant message; Grok asks you to *set* `temperature` 0.7 / `top_p` 0.95 instead of omitting them. Both are in their reference files.
 - **If no provider is identifiable, ask.** A wrong-provider answer is worse than one clarifying question.
+- **Provider-doc claims need a second reader.** When refreshing a reference file, have another model with live web check the new claims before they land (pair-intelligence does this); in one refresh it caught two overstatements the author had missed.
 - **This skill's reference files go stale by design.** They track a fast-moving model roster; when a new flagship ships, the provider files need refreshing — and a refreshed model list sitting above an unrefreshed body section is the failure mode to watch for.
 - **Local-only hook interaction:** if you use a `PreToolUse` hook that gates edits to prompt files, this skill's Step 0 touches the flag file that unblocks it. That's a personal-setup detail, not part of the skill's contract.
 
 ## Related skills
 
+- [pair-intelligence](../pair-intelligence) - cross-model review: have Codex or Gemini check a prompt, a plan, or a provider-doc claim in a fresh context.
 - [writing-project-instructions](../writing-project-instructions) — the sibling for CLAUDE.md / AGENTS.md, which is instruction-writing for a *coding agent* rather than for an API prompt.
 
 ## License
