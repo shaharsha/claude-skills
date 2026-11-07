@@ -128,7 +128,7 @@ Grok 4.7 takes images (jpg/png, ≤ 20 MiB, any number, any order with text; `de
 
 | Host | Model ID | Differences |
 |---|---|---|
-| AWS Bedrock | `xai.grok-4.7` via `global.xai.grok-4.7` / `us.xai.grok-4.7` (no in-Region) | OpenAI-compatible base `bedrock-runtime.{region}.amazonaws.com/openai/v1` plus Converse/Invoke; **no server-side tools**; implicit caching only; 524,288-token shared window. In Converse, effort goes in `additionalModelRequestFields` and **reasoning arrives in the first content block** - search blocks by type, don't read `content[0]`. EOL no sooner than Sept 28 2027. |
+| AWS Bedrock | `xai.grok-4.7` via `global.xai.grok-4.7` / `us.xai.grok-4.7` (no in-Region) | OpenAI-compatible base `bedrock-runtime.{region}.amazonaws.com/openai/v1` plus Converse/Invoke; **no server-side tools**; implicit caching only (a Converse `cachePoint` fails with `AccessDeniedException` "...did not allow prompt caching", seen live Nov 2026); 524,288-token shared window. In Converse, effort goes in `additionalModelRequestFields` and **reasoning arrives in the first content block** - search blocks by type, don't read `content[0]`. EOL no sooner than Sept 28 2027. |
 | Microsoft Foundry | your deployment of `grok-4.7` | **`max_output_tokens` includes reasoning** (unlike xAI); the Responses table lists only `low`/`medium`/`high` (Chat Completions accepts `xhigh`); Live Search options don't apply. GA Grok models stay at least six months. |
 | Oracle OCI | `xai.grok-4.7` | On-demand only; hosted by xAI. |
 | Vertex AI / Gemini Enterprise Agent Platform | `xai/grok-4.7` | OpenAI-compatible Responses and Chat Completions. |
