@@ -431,7 +431,7 @@ check "Gemini's grounding links are replaced by their sources; one that does not
 out="$(cd "$T/arepo" && FAKE_AGY=u2028 bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
 RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
 check "an answer holding U+2028 or U+2029 is read whole, not lost with its result event" '[[ $rc -eq 0 && "$out" == *STATUS=ok* ]] && grep -q "line three" "$RUN/answer.md"'
-check "Gemini runs print TOKENS (in, out with thinking, cached) and keep them in meta.json" '[[ "$out" == *"TOKENS=in:1000,out:200,cached:5000"* ]] && grep -q "\"tokens\": \"in:1000,out:200,cached:5000\"" "$RUN/meta.json"'
+check "Gemini runs print TOKENS (in, out with thinking, cached) and keep them in meta.json" '[[ "$out" == *"TOKENS=in:1000,out:200,cached:5000"* && "$(jq_py "$RUN/meta.json" "d[\"tokens\"]")" == in:1000,out:200,cached:5000 ]]'
 out="$(bash "$P" --engine codex --mode consult --prompt-file "$T/prompt.md" --web --name x 2>&1)"; r1=$?
 out2="$(bash "$P" --prompt-file "$T/prompt.md" --name 2>&1)"; r2=$?
 out3="$(bash "$SCRIPTS/codex_review.sh" --repo "$T/arepo" --prompt-file "$T/prompt.md" --web --name x 2>&1)"; r3=$?
@@ -933,6 +933,10 @@ check "pair_stage delta: the last round's staged copy serves as the old revision
 bash "$SCRIPTS/pair_stage.sh" "$T/stage-bad" "delta:$T/plans/nope.md,$T/plans/plan.md" >/dev/null 2>&1; r1=$?
 out="$(bash "$SCRIPTS/pair_stage.sh" "$T/stage-same" "delta:$T/plans/plan.md,$T/plans/plan.md" 2>&1)"; r2=$?
 check "pair_stage delta: a missing file is refused (66); two identical files warn" '[[ $r1 -eq 66 && $r2 -eq 0 && "$out" == *WARNING*same* ]]'
+cp "$T/plans/plan.md" "$T/plans/plan.md.diff"
+bash "$SCRIPTS/pair_stage.sh" "$T/stage-clash1" "file:$T/plans/plan.md.diff" "delta:$T/plans/plan,r1.md,$T/plans/plan.md" >/dev/null 2>&1; r1=$?
+bash "$SCRIPTS/pair_stage.sh" "$T/stage-clash2" "delta:$T/plans/plan,r1.md,$T/plans/plan.md" "file:$T/plans/plan.md.diff" >/dev/null 2>&1; r2=$?
+check "pair_stage: a delta and a loose file that would write one path are refused, in either order (64)" '[[ $r1 -eq 64 && $r2 -eq 64 ]]'
 
 # --- pair.sh: argument checks -----------------------------------------------------
 bash "$P" --help >/dev/null 2>&1;                                         check "--help exits 0" '[[ $? -eq 0 ]]'

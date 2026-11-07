@@ -402,8 +402,9 @@ rule; use it unless the user sets another.
 - **A "Brittle test:" finding** is low or medium and never blocks a merge on
   its own. When it is on a test this change adds or edits, fix it in the same
   PR if the fix is cheap (replace it with a behavioural test, extend the
-  existing test, or drop it), otherwise declare it; either way it needs no
-  further round. It costs minutes now and a red main later.
+  existing test, or drop it), otherwise declare it. A declared one needs no
+  further round; a fixed one gets its fix-delta round like any other fix. It
+  costs minutes now and a red main later.
 - **State the base explicitly** (`git diff <base>...HEAD`). A lane diffed
   against a branch tip fetched after its own branch was cut, other people's
   hunks entered the review, and a false high came out of them.

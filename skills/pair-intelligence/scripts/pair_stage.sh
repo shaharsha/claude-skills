@@ -59,6 +59,9 @@ if len(hits) == 1:
 ' "${spec#delta:}") || true
     [[ -n "$old" && -n "$src" ]] || { echo "delta: takes <old file>,<new file>, both existing files: ${spec#delta:}" >&2; exit 66; }
     target="$DEST/files$src"
+    # Two specs must not write one path: the diff beside a copy could replace a
+    # loose file staged under that name, or be replaced by one.
+    [[ -e "$target" || -e "$target.diff" ]] && { echo "files$src or files$src.diff is staged already; stage each file once" >&2; exit 64; }
     mkdir -p "$(dirname "$target")"
     cp -p "$src" "$target"
     drc=0; diff -u --label "$old" --label "$src" "$old" "$src" > "$target.diff" || drc=$?
@@ -81,6 +84,7 @@ if len(hits) == 1:
       (cd "$src" && tar -c ${EXCLUDES[@]+"${EXCLUDES[@]}"} -f - .) | (mkdir -p "$target" && tar -x -C "$target")
       FILES+=("| \`files$src/\` | \`$src/\` | folder |")
     else
+      [[ -e "$target" ]] && { echo "files$src is staged already; stage each file once" >&2; exit 64; }
       cp -p "$src" "$target"
       FILES+=("| \`files$src\` | \`$src\` | \`$(shasum -a 256 "$src" | cut -c1-16)\` |")
     fi
