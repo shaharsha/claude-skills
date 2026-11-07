@@ -38,6 +38,15 @@ model given your conclusion grades the conclusion instead of the problem. You
 may say where you are least sure ("the retry path is what I most want checked"),
 which directs attention without supplying an answer.
 
+**When you ask for a critique of a design you already have**, ask first for the
+model's own design for the same goal and constraints, then for its critique of
+yours, in that order and in one prompt: "First sketch how you would do it. Then
+compare ours with your sketch: where yours is better, where ours is, and what
+neither handles." A model that reads your design first tends to patch it; with
+its own sketch on the page it names the gaps its design has and yours lacks
+(2026-11-07: an invite-flow consult to both engines this way gave two different
+concrete gap lists, product detail from Gemini, identity lifecycle from Codex).
+
 Tell the model what it may do, in these words: "You may read any file and run
 read-only commands (cat, rg, git log); you cannot write files or run tests."
 Codex reads files only through shell commands, so a prompt saying it "cannot run

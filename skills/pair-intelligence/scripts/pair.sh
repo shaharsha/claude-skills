@@ -103,6 +103,15 @@ USAGE
 
 LIST_ONLY=0
 while [[ $# -gt 0 ]]; do
+  # A flag that takes a value must get one: given none, it took the next flag as
+  # its value, and `--web --name x` then failed on "unknown argument: x".
+  case "$1" in
+    --engine|--backend|--mode|--prompt-file|--cwd|--image|--name|--resume|--label|--model|--effort|--web|--schema|--timeout|--web-budget|--domains)
+      if [[ -z "${2:-}" || "$2" == --* ]]; then
+        [[ "$1" == --web ]] && echo "--web needs a value: off, cached or live" >&2 || echo "$1 needs a value" >&2
+        exit 64
+      fi ;;
+  esac
   case "$1" in
     --engine)      ENGINE="${2:-}"; shift 2 ;;
     --backend)     BACKEND="${2:-}"; shift 2 ;;
@@ -750,7 +759,9 @@ PY
     [[ -n "$RESUME_ID" ]] || ARGS+=(--conversation "$QUOTA_CONV")
     # The outcome is the retry's alone: a retry that ends with no result must not
     # be read as the first attempt's quota error again.
-    RETRY_FROM="$(python3 -c 'import sys; print(len(open(sys.argv[1], errors="replace").read().splitlines()))' "$EVENTS")"
+    # Count lines the way the reader below splits them, on "\n" alone: splitlines()
+    # also breaks at U+2028 and form feeds, which an answer may hold.
+    RETRY_FROM="$(python3 -c 'import sys; t = open(sys.argv[1], errors="replace", newline="").read(); print(len(t.split("\n")) - t.endswith("\n") if t else 0)' "$EVENTS")"
     run_agy "$RUN_DIR/agy-retry.jsonl"
     RC=$?
   fi
@@ -811,7 +822,10 @@ engine, events, answer, rc = sys.argv[1], pathlib.Path(sys.argv[2]), pathlib.Pat
 errlog = pathlib.Path(sys.argv[6])
 retry_from = int(sys.argv[7])   # agy: events before this line belong to the attempt before a retry
 evs, before_retry = [], set()
-for i, line in enumerate(events.read_text(errors="replace").splitlines() if events.exists() else []):
+# One event per "\n"-ended line. Not splitlines(): it also breaks at U+2028, U+2029
+# and form feeds, which JSON leaves raw inside a string, so an answer holding one
+# lost its result event and the run ended with no answer.
+for i, line in enumerate(events.read_bytes().decode("utf-8", "replace").split("\n") if events.exists() else []):
     try: evs.append(json.loads(line))
     except ValueError: continue
     if i < retry_from:

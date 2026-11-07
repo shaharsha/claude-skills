@@ -56,7 +56,14 @@ a merge gate in a shared clone, read `references/review-evidence.md`.
 2. Run `bash scripts/codex_review.sh --repo <repo> --prompt-file <abs> --label
    <ticket>-r<N>` in the background, outside your harness's own sandbox. Add
    `--out-dir <durable dir>` when the repo is a worktree that will be removed.
-   Use `--effort medium` for small changes.
+   Use `--effort medium` for small changes and fix-delta rounds; round 1 of a
+   real change stays at the default, `high`. `--repo` may be a staged folder
+   that is not a git repository (from `pair_stage.sh`): no `git init` needed.
+   The header then reads "Reviewed: unknown on unknown", and the prompt hash is
+   what the review vouches for. Codex reads any file on disk, so name other
+   repositories by absolute path with read-only commands in the prompt
+   (`git -C /abs/repo show origin/main:path`, `cat /abs/file`); a finding in a
+   file outside `--repo` cites it relative to the repo (`../../.claude/plans/x.md`).
 3. Read the summary lines (`VERDICT=`, `FINDINGS=`, `READS=`), then open the
    `REVIEW_MD` path and check that it cites real files and lines. `READS=0` (exit
    72) means the reviewer ran no command and read no file: rerun with a prompt
@@ -378,7 +385,8 @@ rule; use it unless the user sets another.
   included (tests beyond the code's size need a reason in the PR body), and
   its fail-closed point covered by one behavioural test through its real entry
   point, not a guard that reads source text or structure.
-- **At most 4 rounds**, each a fresh reviewer, never a resumed conversation.
+- **At most 4 full rounds**, each a fresh reviewer, never a resumed conversation.
+  Fix-delta rounds do not count toward the cap.
 - **From round 3, only a real high-severity finding blocks.**
 - **The same class of finding twice, high or medium, means redesign**, not
   another patch. It fired twice on 2026-11-01 and both redesigns came out
@@ -387,7 +395,9 @@ rule; use it unless the user sets another.
 - **The last round reviews only the fix**, named as a diff, and the final fix
   always gets one, past the cap and however small: the small-change template at
   `--effort medium` takes two or three minutes. Twice on 2026-11-04 a lane
-  merged its last two-line fix unreviewed.
+  merged its last two-line fix unreviewed, and on 2026-11-07 a lane refused to
+  review its fix for a high that a fix-delta round had found, "to respect the
+  stopping rule". A fix to a fix gets its own fix-delta round too.
 - **Declare unfixed medium and low findings** in the PR body.
 - **A "Brittle test:" finding** is low or medium and never blocks a merge on
   its own. When it is on a test this change adds or edits, fix it in the same

@@ -32,6 +32,13 @@ SECRET = re.compile(r"^(\.env(\..+)?|.+\.(pem|key|p12|pfx)|id_(rsa|ed25519|ecdsa
 SECRET_OK = re.compile(r"^\.env\.(example|sample|template|dist)$", re.IGNORECASE)
 
 
+def lines_of(text):
+    """Split on "\n" alone, as grep and git count lines. splitlines() also breaks
+    at form feeds and U+2028, which shifted every later line number."""
+    parts = text.split("\n")
+    return parts[:-1] if parts and parts[-1] == "" else parts
+
+
 def is_secret(name):
     name = os.path.basename(name.rstrip("/"))
     return bool(SECRET.match(name)) and not SECRET_OK.match(name)
@@ -161,7 +168,7 @@ def py_grep(pattern, path, flags, glob):
             continue
         if b"\0" in data[:8000]:
             continue
-        for n, line in enumerate(data.decode("utf-8", "replace").splitlines(), 1):
+        for n, line in enumerate(lines_of(data.decode("utf-8", "replace")), 1):
             if rx.search(line):
                 if "-l" in flags:
                     out.append(f)
@@ -215,7 +222,7 @@ def cmd_grep(args):
         return
     if rc not in (0, 1):
         die(err.strip() or "search failed")
-    emit(out.splitlines(), "lines")
+    emit(lines_of(out), "lines")
 
 
 # git: subcommand -> flags taken as they are. Value flags are checked by shape below.
@@ -359,7 +366,7 @@ def cmd_git_cat(git, top, rest):
     rc, so, se = run(base_cmd(git, top, "show") + ["%s:%s" % (rev, rel)], top, GIT_ENV)
     if rc != 0:
         die(se.strip() or "git cat failed")
-    emit(so.splitlines(), "lines")
+    emit(lines_of(so), "lines")
 
 
 def cmd_git(args):
@@ -405,7 +412,7 @@ def cmd_git(args):
     rc, so, se = run(base_cmd(git, top, sub) + out + (["--"] + rel if rel else []), top, GIT_ENV)
     if rc != 0:
         die(se.strip() or "git %s failed" % sub)
-    emit(so.splitlines(), "lines")
+    emit(lines_of(so), "lines")
 
 
 def main():

@@ -205,7 +205,11 @@ if mode == "cut-empty":   # cut in the middle of a tool loop: agy returns no tex
 if mode == "quota-cut":   # the measured r2 run: a 429 while the print timeout fired
     res.update(status="ERROR", response="", error="API error (attempt 1): RESOURCE_EXHAUSTED (code 429): TPM quota exhausted.")
     sys.stderr.write("[agy] print timeout after 590s with turn in progress; returning partial output\n")
-ev(event="result", result=res)
+if mode == "u2028":   # agy writes JSON with non-ASCII raw, and JSON leaves U+2028 unescaped
+    res.update(response="line one\u2028line two\u2029line three")
+    print(json.dumps({"event": "result", "result": res}, ensure_ascii=False), flush=True)
+else:
+    ev(event="result", result=res)
 FAKE
 
 cat > "$FAKE/agent-browser" <<FAKE
@@ -423,6 +427,13 @@ out="$(FAKE_AGY=links PAIR_LINKS_ORIGIN="http://127.0.0.1:$(cat "$T/redirect.por
 kill $RPID 2>/dev/null
 RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
 check "Gemini's grounding links are replaced by their sources; one that does not resolve stays; the pairs are kept" '[[ $rc -eq 0 ]] && grep -q "(https://example.com/source-a)" "$RUN/answer.md" && grep -q "grounding-api-redirect/BBB222=" "$RUN/answer.md" && ! grep -q "AAA111" "$RUN/answer.md" && grep -q AAA111 "$RUN/source-links.json"'
+out="$(cd "$T/arepo" && FAKE_AGY=u2028 bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
+check "an answer holding U+2028 or U+2029 is read whole, not lost with its result event" '[[ $rc -eq 0 && "$out" == *STATUS=ok* ]] && grep -q "line three" "$RUN/answer.md"'
+out="$(bash "$P" --engine codex --mode consult --prompt-file "$T/prompt.md" --web --name x 2>&1)"; r1=$?
+out2="$(bash "$P" --prompt-file "$T/prompt.md" --name 2>&1)"; r2=$?
+out3="$(bash "$SCRIPTS/codex_review.sh" --repo "$T/arepo" --prompt-file "$T/prompt.md" --web --name x 2>&1)"; r3=$?
+check "a flag given no value is named: --web says off, cached or live; exit 64 (pair.sh, codex_review.sh)" '[[ $r1 -eq 64 && "$out" == *"--web needs a value: off, cached or live"* && $r2 -eq 64 && "$out2" == *"--name needs a value"* && $r3 -eq 64 && "$out3" == *"--web needs a value"* ]]'
 # Output the model can read: a log inside --cwd, or PAIR_OUT inside it.
 mkdir -p "$T/logcwd" && printf 'x\n' > "$T/logcwd/notes.md"
 FAKE_CODEX=ok bash "$P" --cwd "$T/logcwd" --prompt-file "$T/prompt.md" > "$T/logcwd/run.log" 2> "$T/logcwd-err.txt"
@@ -501,6 +512,9 @@ check "pair-fs ls and find inside the root"        'FS ls | grep -q notes.txt &&
 check "pair-fs grep finds content"                 'FS grep plum | grep -q "notes.txt:1:marker: plum-7"'
 check "pair-fs refuses a path outside the roots"   '! FS ls /etc >/dev/null 2>&1 && ! FS grep root /etc/passwd >/dev/null 2>&1 && ! FS ls ../.. >/dev/null 2>&1'
 check "pair-fs refuses a symlink out of the root"  '! FS ls etclink >/dev/null 2>&1 && ! FS grep root etclink >/dev/null 2>&1'
+printf 'one\fstill one\n\xe2\x80\xa8two\nthree-ff\n' > "$AREPO/ff.txt"
+check "pair-fs grep numbers lines by newline, not at a form feed or U+2028 (rg and the Python fallback)" '[[ "$(FS grep three-ff ff.txt)" == *"3:three-ff" && "$(PAIR_FS_FORCE_PY_GREP=1 FS grep three-ff ff.txt)" == *"ff.txt:3:three-ff" ]]'
+rm -f "$AREPO/ff.txt"
 check "pair-fs grep skips secret files"            '[[ "$(FS grep SECRET123)" == "no matches" ]]'
 FS grep --pre=/bin/sh x >/dev/null 2>&1; r1=$?; FS grep -- -x >/dev/null 2>&1; r2=$?
 check "pair-fs grep refuses unknown flags, takes a dash pattern after --" '[[ $r1 -eq 2 && $r2 -eq 0 ]]'
@@ -875,6 +889,10 @@ check "vertex auth failure twice: exit 69, and agy's advice to use its own login
 reset_log
 out="$(cd "$T/arepo" && PAIR_AGY_AUTH=key PAIR_AGY_RETRY_WAIT=0 FAKE_AGY=auth bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
 check "API-key auth failure: exit 69, not retried" '[[ $rc -eq 69 && $(ls "$LOG"/agy-args-*.json | wc -l) -eq 1 && "$out" != *"Run '"'"'agy'"'"' to log in"* ]]'
+
+printf '```json\n{"overall_verdict":"sound","overall_confidence":0.9,"summary":"a\xe2\x80\xa8b","findings":[]}\n```\n' > "$T/fenced.json"
+python3 "$SCRIPTS/render_review.py" --input "$T/fenced.json" --output "$T/fenced.md" --repo "$T/arepo" --model m --effort high --session s --session-key k >/dev/null 2>&1; rc=$?
+check "render_review: a fenced result whose text holds U+2028 still parses as JSON" '[[ $rc -eq 0 ]] && grep -q "Verdict:\*\* sound" "$T/fenced.md"'
 
 # --- pair_stage.sh ----------------------------------------------------------------------
 mkdir -p "$T/st1" && git -C "$T/st1" init -q && mkdir -p "$T/st1/src" && printf 'v1\n' > "$T/st1/src/a.txt" && printf 'top\n' > "$T/st1/top.txt"
