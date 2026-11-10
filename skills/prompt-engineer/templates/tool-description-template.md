@@ -65,4 +65,4 @@ Why this works: covers all 6 elements (what/when/when-not/params/returns/caveats
 - [ ] The model isn't asked to fill arguments your code already knows (pass them in code instead)
 - [ ] Invalid combinations are impossible by schema (enums, required fields), not just forbidden in prose
 - [ ] Tool-specific guidance lives here and is NOT repeated in the system prompt
-- [ ] If the tool must be called (Claude Opus 5.5 / Fable 5.1 have no forced `tool_choice`), the prompt says when it applies
+- [ ] If the tool must be called (Claude Opus 5.5 / Sonnet 5.5 / Fable 5.1 / 5.2 have no forced `tool_choice`), the prompt says when it applies

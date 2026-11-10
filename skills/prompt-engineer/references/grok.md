@@ -48,7 +48,7 @@ Applies to the **Grok model family** wherever it runs: the xAI API (`api.x.ai`; 
 
 ## Sampling and rejected parameters
 
-Grok is the exception to SKILL.md's "omit sampling parameters" default - xAI asks you to **set** them:
+On xAI's API, Grok is the exception to SKILL.md's "omit sampling parameters" default - xAI asks you to **set** them (Bedrock's Converse API rejects them - see the Bedrock row under *Third-party hosts*):
 
 - "Set `temperature` to 0.7 and `top_p` to 0.95, and don't deviate far from these values. Grok models don't respond well to other sampling settings, and quality usually drops when you change them." The server also caps them (temperature ≤ 1, top_p ≤ 0.95; higher values are sampled at the cap but echoed back unchanged).
 - **Errors on reasoning models:** `stop`, `presence_penalty`, `frequency_penalty`. Also 400: a `guidelines` field combined with `stop` or on the multi-agent model.
@@ -88,7 +88,7 @@ Grok 4.7's main cost is its token appetite: on Artificial Analysis's Intelligenc
 ## Function calling
 
 - **Responses format:** flat `{"type": "function", "name", "description", "parameters"}`; the model emits `function_call` items (`call_id`, `name`, `arguments`); reply with `{"type": "function_call_output", "call_id", "output"}`. In agent loops keep the **whole** `output` array (reasoning + calls) before appending outputs. With streaming, a function call arrives **whole in one chunk**.
-- **`tool_choice`: `auto` (default), `required`, `none`, or a specific function** - unlike Claude Opus 5.5 / Sonnet 5.5 / Fable 5.1 and Kimi K3.x, **forcing a named tool works** on Grok (`{"type": "function", "name": "…"}` on Responses).
+- **`tool_choice`: `auto` (default), `required`, `none`, or a specific function** - unlike Claude Opus 5.5 / Sonnet 5.5 / Fable 5.1 / 5.2 and Kimi K3.x, **forcing a named tool works** on Grok (`{"type": "function", "name": "…"}` on Responses).
 - **Parallel calls are on by default**; `parallel_tool_calls: false` limits the model to one call per turn.
 - **Schemas:** the `parameters` root must be an object (a root `anyOf`/`oneOf` of objects also works); anything else is rejected with a 400 naming the tool. Arguments are grammar-constrained - "always generate tool call arguments that strictly conform to the tool's input JSON Schema (the `strict` flag is implicitly always `true`)." An omitted description is "treated as empty" - so write one (SKILL.md Section B).
 - **Tool count:** docs say both 350 and 1,000 per request; stay far below either - the 10-20 active-tool guidance applies.
@@ -128,7 +128,7 @@ Grok 4.7 takes images (jpg/png, ≤ 20 MiB, any number, any order with text; `de
 
 | Host | Model ID | Differences |
 |---|---|---|
-| AWS Bedrock | `xai.grok-4.7` via `global.xai.grok-4.7` / `us.xai.grok-4.7` (no in-Region) | OpenAI-compatible base `bedrock-runtime.{region}.amazonaws.com/openai/v1` plus Converse/Invoke; **no server-side tools**; implicit caching only (a Converse `cachePoint` fails with `AccessDeniedException` "...did not allow prompt caching", seen live Nov 2026); 524,288-token shared window. In Converse, effort goes in `additionalModelRequestFields` and **reasoning arrives in the first content block** - search blocks by type, don't read `content[0]`. EOL no sooner than Sept 28 2027. |
+| AWS Bedrock | `xai.grok-4.7` via `global.xai.grok-4.7` / `us.xai.grok-4.7` (no in-Region) | OpenAI-compatible base `bedrock-runtime.{region}.amazonaws.com/openai/v1` plus Converse/Invoke; **no server-side tools**; implicit caching only (a Converse `cachePoint` fails with `AccessDeniedException` "...did not allow prompt caching", seen live Nov 2026); 524,288-token shared window. In Converse, effort goes in `additionalModelRequestFields` and **reasoning arrives in the first content block** - search blocks by type, don't read `content[0]`. **Converse rejects `temperature` and `top_p`** for `grok-4.7` (`ValidationException: This model doesn't support the temperature field`, and the same for `topP`; one team's live calls, Nov 10 2026, matching open-source reports for Grok 4.6 and 4.7) - omit them there, and send only effort; the `/openai/v1` endpoint wasn't tested. AWS's model card: Chat Completions on Bedrock returns no reasoning tokens, so multi-turn reasoning needs Responses with `include:["reasoning.encrypted_content"]`; Priority and Flex tiers aren't available through Converse. EOL no sooner than Sept 28 2027. |
 | Microsoft Foundry | your deployment of `grok-4.7` | **`max_output_tokens` includes reasoning** (unlike xAI); the Responses table lists only `low`/`medium`/`high` (Chat Completions accepts `xhigh`); Live Search options don't apply. GA Grok models stay at least six months. |
 | Oracle OCI | `xai.grok-4.7` | On-demand only; hosted by xAI. |
 | Vertex AI / Gemini Enterprise Agent Platform | `xai/grok-4.7` | OpenAI-compatible Responses and Chat Completions. |
@@ -140,5 +140,5 @@ Grok 4.7 takes images (jpg/png, ≤ 20 MiB, any number, any order with text; `de
 - **4.6 → 4.7:** same price, context, and effort levels. Responses now **always** returns encrypted reasoning - make sure your loop sends output items back unchanged. Expect about 2× output tokens per task: raise timeouts and budgets, and try `low`/`medium`.
 - **4.3 / 4.20 → 4.7:** context drops from 1M to 500K; price rises to $2 / $6; no `none` effort and no non-reasoning sibling; default effort rises from `low` to `high` - set it explicitly. Keep `grok-4.20-0309-non-reasoning` for traffic that must not reason.
 - **Retired IDs** (Grok 4, 4 Fast, 4.1 Fast, Grok 3, `grok-code-fast-1`) silently redirect - replace them and re-run evals.
-- **API:** Chat Completions → Responses (`messages` → `input`, `max_tokens` → `max_output_tokens`, keep full output items); `search_parameters` → `web_search` / `x_search` tools; Anthropic `/v1/messages` → Responses or gRPC; remove `stop` and the penalties; pin `temperature` 0.7 / `top_p` 0.95; add `prompt_cache_key`.
+- **API:** Chat Completions → Responses (`messages` → `input`, `max_tokens` → `max_output_tokens`, keep full output items); `search_parameters` → `web_search` / `x_search` tools; Anthropic `/v1/messages` → Responses or gRPC; remove `stop` and the penalties; on xAI's API pin `temperature` 0.7 / `top_p` 0.95 (on Bedrock's Converse API drop them); add `prompt_cache_key`.
 - **Prompts:** prompts tuned for another provider need their own tuning pass on Grok (xAI's own advice); remove CoT scaffolding; move timestamps out of the system prompt; add a `guidelines` policy if your app needs stricter content limits than Grok's defaults.
