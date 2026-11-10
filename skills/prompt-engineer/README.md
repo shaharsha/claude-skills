@@ -67,11 +67,11 @@ There's nothing to run — this is a reference library the agent loads. It fires
 | Path | What |
 |---|---|
 | `SKILL.md` | The universal layer: system-prompt structure, altitude, tool descriptions, context engineering, anti-patterns, eval design |
-| `references/claude.md` | Claude / Anthropic — effort defaults, sampling, thinking, caching, migration notes |
+| `references/claude.md` | Claude / Anthropic — Fable 5.2's prompting and breaking changes, effort defaults, sampling, thinking, caching, migration notes |
 | `references/gpt.md` | GPT / OpenAI incl. Azure and AWS Bedrock — verbosity, reasoning effort, host contracts, the "stop doing" list |
 | `references/gemini.md` | Gemini / Google incl. Vertex — Gemini 4 Argon and (gated) Carbon, long decode, thought signatures, caching, thinking cost |
 | `references/kimi.md` | Kimi / Moonshot — K3.1 Pro's always-on thinking, fixed sampling, `reasoning_content` replay, MFJS tool schemas, host differences |
-| `references/grok.md` | Grok / xAI — Grok 4.7's encrypted reasoning, required sampling values, server-side tools (web/X search), caching keys, compaction |
+| `references/grok.md` | Grok / xAI — Grok 4.7's encrypted reasoning, sampling values (required on xAI's API, rejected by Bedrock Converse), server-side tools (web/X search), caching keys, compaction |
 | `references/langgraph.md` | LangGraph / LangChain / Deep Agents: layers, context primitives, typed HITL, skill-bound tools, harness profiles, MCP, subagent context modes, eval practice |
 | `references/evals.md` | Evaluating and debugging agents: eval design, eval integrity (answer leakage, visible tests, side effects, milestones), diagnosing a run from its traces, judge prompts and calibration, reporting a judged pass rate |
 | `references/use-cases.md` | Task playbooks: coding and code review, research/RAG, data/SQL, extraction, multimodal |
@@ -92,7 +92,7 @@ There's nothing to run — this is a reference library the agent loads. It fires
 
 - **The universal section is not enough for "small" changes.** Even a one-line prompt edit interacts with provider defaults — reasoning effort, thinking, caching, sampling. Load the reference file first, every time.
 - **The platform never tells you the model family.** Bedrock, Vertex, and Foundry each host multiple families. Identify the family from model IDs and `base_url` (then imports), then load *that* file.
-- **Kimi and Grok break two cross-provider defaults.** Kimi fixes its sampling values and degrades silently if you don't replay the full assistant message; Grok asks you to *set* `temperature` 0.7 / `top_p` 0.95 instead of omitting them. Both are in their reference files.
+- **Kimi and Grok break two cross-provider defaults.** Kimi fixes its sampling values and degrades silently if you don't replay the full assistant message; Grok on xAI's API asks you to *set* `temperature` 0.7 / `top_p` 0.95 instead of omitting them (Bedrock's Converse API rejects them). Both are in their reference files.
 - **If no provider is identifiable, ask.** A wrong-provider answer is worse than one clarifying question.
 - **Provider-doc claims need a second reader.** When refreshing a reference file, have another model with live web check the new claims before they land (pair-intelligence does this); in one refresh it caught two overstatements the author had missed.
 - **This skill's reference files go stale by design.** They track a fast-moving model roster; when a new flagship ships, the provider files need refreshing — and a refreshed model list sitting above an unrefreshed body section is the failure mode to watch for.
