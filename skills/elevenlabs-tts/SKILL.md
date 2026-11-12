@@ -115,7 +115,7 @@ python3 <this-skill-dir>/scripts/generate_tts.py scripts.json VOICE_ID audio/ \
 ```bash
 python3 <this-skill-dir>/scripts/check_tags_spoken.py scripts.json audio/ [--only 03 07] [--language-code he]
 ```
-`check_tags_spoken.py` flags a clip when a tag word was spoken (`LEAK`), the transcript runs longer than the tag-free script (`EXTRA` — catches a tag spoken in another script's letters), or it runs much shorter even allowing for numbers written as digits (`SHORT` — a dropped sentence). It finds the clips through the manifest, so a `--prefix` given to the generator need not be repeated. It costs speech-to-text credits; run it on the sample and on a few batch clips, not on every draft.
+`check_tags_spoken.py` flags a clip when a tag word was spoken (`LEAK`), the transcript runs longer than the tag-free script (`EXTRA` — catches a tag spoken in another script's letters), or it runs much shorter even allowing for numbers written as digits (`SHORT` — a dropped sentence). It finds the clips through the manifest, so a `--prefix` given to the generator need not be repeated. It transcribes with Scribe v3 (`scribe_v3`); on 10 Hebrew v4 clips it gave the same ratios as v2 (0.97-1.05, checked 2026-11-13), and `--model scribe_v2` stays available to compare. It costs speech-to-text credits ($0.20 per audio hour); run it on the sample and on a few batch clips, not on every draft. For transcription itself (meetings, talks, subtitles), use elevenlabs-stt.
 
 Reading its numbers: "words said/scripted" sits around 0.92-1.01 on a clean clip. A number-heavy script reads lower (0.75-0.87 on Hebrew decks) because Scribe writes spoken numbers as digits; the script allows for that before calling a clip `SHORT`, and prints a note instead. To confirm nothing was dropped, compare the clip's pace with its neighbours (the generator prints it).
 
@@ -237,4 +237,5 @@ Characters (tags included) are billed: `eleven_v4` is $0.08 per 1K at API list p
 
 - **narrating-pptx** — puts these clips one-per-slide on a deck: a pptx with PowerPoint-authored autoplay, or a Google Slides deck.
 - **deck-to-video** — builds the mp4 from the same clips; consumes `alignment/` for subtitles and highlights.
+- **elevenlabs-stt** — the other direction: Scribe v3 transcripts, SRT subtitles and live transcription.
 - **self-presenting-decks** — the deck → narration → video map and its update matrix.

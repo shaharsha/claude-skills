@@ -6,12 +6,12 @@
   },
   "metadata": {
     "description": "Agent skills by Shahar Shavit for Claude Code, Codex, Cursor, and other Agent-Skills-compatible harnesses",
-    "version": "1.16.0"
+    "version": "1.17.0"
   },
   "plugins": [
     {
       "name": "shaharsha-skills",
-      "description": "All 25 agent skills - gdoc-sync, gslides-sync, gsheets, presentation-generator, elevenlabs-tts, narrating-pptx, deck-to-video, self-presenting-decks, writing-plainly, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-instructions, tech-design-doc, namecheap-domains, office-render, viewing-videos, proton-pass, excalidraw-diagrams, tavily-extract, pair-intelligence, reviving-sessions, generating-video-clips, producing-animated-episodes",
+      "description": "All 26 agent skills - gdoc-sync, gslides-sync, gsheets, presentation-generator, elevenlabs-tts, elevenlabs-stt, narrating-pptx, deck-to-video, self-presenting-decks, writing-plainly, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-instructions, tech-design-doc, namecheap-domains, office-render, viewing-videos, proton-pass, excalidraw-diagrams, tavily-extract, pair-intelligence, reviving-sessions, generating-video-clips, producing-animated-episodes",
       "source": "./",
       "strict": false,
       "skills": [
@@ -20,6 +20,7 @@
         "./skills/gsheets",
         "./skills/presentation-generator",
         "./skills/elevenlabs-tts",
+        "./skills/elevenlabs-stt",
         "./skills/narrating-pptx",
         "./skills/deck-to-video",
         "./skills/self-presenting-decks",
@@ -44,7 +45,7 @@
     },
     {
       "name": "documents-and-decks",
-      "description": "Sync Markdown to Google Docs, .pptx to Google Slides, CSV / values to Google Sheets, generate AI-rendered 16:9 presentation decks, generate ElevenLabs Eleven v4 speech with audio-tag direction, add per-slide voice narration with autoplay to any pptx, turn narrated decks into self-playing mp4 videos, orchestrate the whole deck-to-narration-to-video chain, and write messages, emails, updates and tickets that read plainly and not like AI",
+      "description": "Sync Markdown to Google Docs, .pptx to Google Slides, CSV / values to Google Sheets, generate AI-rendered 16:9 presentation decks, generate ElevenLabs Eleven v4 speech with audio-tag direction, transcribe speech and make subtitles with ElevenLabs Scribe v3, add per-slide voice narration with autoplay to any pptx, turn narrated decks into self-playing mp4 videos, orchestrate the whole deck-to-narration-to-video chain, and write messages, emails, updates and tickets that read plainly and not like AI",
       "source": "./",
       "strict": false,
       "skills": [
@@ -53,6 +54,7 @@
         "./skills/gsheets",
         "./skills/presentation-generator",
         "./skills/elevenlabs-tts",
+        "./skills/elevenlabs-stt",
         "./skills/narrating-pptx",
         "./skills/deck-to-video",
         "./skills/self-presenting-decks",

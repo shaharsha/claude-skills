@@ -3,7 +3,7 @@
 
   python3 check_tags_spoken.py scripts.json audio/ [--only 03 07] [--language-code he]
 
-Transcribes each clip with ElevenLabs Scribe (scribe_v2) and flags a clip when
+Transcribes each clip with ElevenLabs Scribe (scribe_v3; --model scribe_v2 to compare) and flags a clip when
   LEAK   a word from its tags shows up in the transcript more often than the
          script itself says it (e.g. "conversational" spoken from
          "[Warm, conversational tone]"), or
@@ -42,9 +42,10 @@ def words(s):
     return [w.lower() for w in WORD.findall(s)]
 
 
-def transcribe(mp3, key, language_code=None, retries=3):
+def transcribe(mp3, key, language_code=None, model="scribe_v3", numbers=None, retries=3):
     b = "----scribe"
-    fields = [("model_id", "scribe_v2")] + ([("language_code", language_code)] if language_code else [])
+    fields = [("model_id", model)] + ([("language_code", language_code)] if language_code else []) \
+        + ([("numbers_format", numbers)] if numbers else [])
     body = b"".join(
         f'--{b}\r\nContent-Disposition: form-data; name="{n}"\r\n\r\n{v}\r\n'.encode() for n, v in fields
     ) + (f'--{b}\r\nContent-Disposition: form-data; name="file"; filename="a.mp3"\r\n'
@@ -97,6 +98,9 @@ def main():
                     help="flag when transcript words / script words exceeds this")
     ap.add_argument("--only", nargs="*", help="check just these keys (e.g. a one-slide sample)")
     ap.add_argument("--concurrency", type=int, default=3)
+    ap.add_argument("--model", default="scribe_v3", help="Scribe model (scribe_v3 default; scribe_v2 to compare)")
+    ap.add_argument("--numbers", choices=["digits", "words"], default=None,
+                    help="numbers_format, scribe_v3 only")
     a = ap.parse_args()
     key = api_key()
     scripts = json.load(open(a.scripts))
@@ -106,7 +110,7 @@ def main():
         mp3 = clip_path(a.audio_dir, k, a.prefix)
         if not os.path.exists(mp3):
             return k, None, f"MISSING {mp3}"
-        text = transcribe(mp3, key, a.language_code)
+        text = transcribe(mp3, key, a.language_code, a.model, a.numbers)
         return k, check(scripts[k], text, a.extra_ratio), text
 
     flagged = []
