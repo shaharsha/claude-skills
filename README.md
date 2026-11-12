@@ -1,6 +1,6 @@
 # claude-skills
 
-Agent skills by [@shaharsha](https://github.com/shaharsha) - 24 production-grade [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills) that work in Claude Code, claude.ai, Codex, Cursor, and any other harness that reads the SKILL.md format.
+Agent skills by [@shaharsha](https://github.com/shaharsha) - 25 production-grade [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills) that work in Claude Code, claude.ai, Codex, Cursor, and any other harness that reads the SKILL.md format.
 
 MIT licensed. Built day-to-day; battle-tested in real projects.
 
@@ -15,10 +15,10 @@ MIT licensed. Built day-to-day; battle-tested in real projects.
 /plugin install shaharsha-skills@shaharsha-skills
 ```
 
-This installs all 24 skills as one plugin. Or pick a subset:
+This installs all 25 skills as one plugin. Or pick a subset:
 
 ```bash
-/plugin install documents-and-decks@shaharsha-skills    # gdoc-sync + gslides-sync + gsheets + presentation-generator + elevenlabs-tts + narrating-pptx + deck-to-video + self-presenting-decks
+/plugin install documents-and-decks@shaharsha-skills    # gdoc-sync + gslides-sync + gsheets + presentation-generator + elevenlabs-tts + narrating-pptx + deck-to-video + self-presenting-decks + writing-plainly
 /plugin install brand-and-visuals@shaharsha-skills      # brand-system + brand-assets + image-generation + excalidraw-diagrams
 /plugin install engineering-decisions@shaharsha-skills  # tech-design-doc + pair-intelligence
 /plugin install building-agents@shaharsha-skills        # prompt-engineer + writing-project-instructions + reviving-sessions
@@ -54,6 +54,7 @@ Each links to its own README — what it does, why it exists, install, and the g
 | [narrating-pptx](skills/narrating-pptx) | Per-slide ElevenLabs narration embedded in a pptx, with autoplay authored by real PowerPoint — the one method that doesn't corrupt the file — or added to a Google Slides deck as autoplaying Drive videos. |
 | [deck-to-video](skills/deck-to-video) | Slides + narration → a self-playing mp4 with a progress bar, countdown, and slide counter, baked with PIL because ffmpeg's animated `drawbox` silently renders full. |
 | [self-presenting-decks](skills/self-presenting-decks) | The orchestration map over the whole chain, plus the update matrix for what to rebuild when something changes. |
+| [writing-plainly](skills/writing-plainly) | Messages, emails, updates, PR descriptions and tickets that people read to the end and that don't read as AI: one recipe, a shape per genre, Slack and email specifics, Hebrew rules, and a checker for the mechanical tells. |
 
 ### Brand & visuals
 
