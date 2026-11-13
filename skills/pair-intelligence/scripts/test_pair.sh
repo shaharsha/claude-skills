@@ -14,6 +14,8 @@ SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 T="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/pair-test.XXXXXX")" && pwd)"
 trap 'rm -rf "$T"' EXIT
 FAKE="$T/bin"; LOG="$T/log"; mkdir -p "$FAKE" "$LOG"
+# The machine's own deny-read list must not reach these runs; tests that need one set it.
+export XDG_CONFIG_HOME="$T/xdg-empty"; unset PAIR_DENY_READ
 PASS=0; FAIL=0
 
 ok()   { PASS=$((PASS + 1)); printf 'ok    %s\n' "$1"; }
@@ -26,6 +28,16 @@ cat > "$FAKE/codex" <<'FAKE'
 import json, os, subprocess, sys, time
 log = os.environ["FAKE_LOG"]
 args = sys.argv[1:]
+if args[:1] == ["sandbox"] and "--" in args and args[args.index("--") + 1] in ("/bin/ls", "/usr/bin/wc"):
+    # The deny-read preflight: refused when the target is under a path the tier
+    # denies, unless FAKE_DENY_BROKEN plays a Codex that ignores the profile.
+    import re
+    open(f"{log}/codex-deny-check.jsonl", "a").write(json.dumps(args) + "\n")
+    target = os.path.normpath(args[-1])
+    denied = [p for a in args if ".filesystem=" in a for p in re.findall(r'"([^"]+)"="deny"', a)]
+    if any(target == p or target.startswith(p.rstrip("/") + "/") for p in denied) and not os.environ.get("FAKE_DENY_BROKEN"):
+        sys.stderr.write("%s: Operation not permitted\n" % args[-1]); sys.exit(1)
+    print(args[-1]); sys.exit(0)
 if args[:1] == ["sandbox"]:
     # `codex sandbox <profile flags> <cmd...>`: record the flags; FAKE_SANDBOX=run
     # runs the command unsandboxed (so a preflight sees the open network and fails).
@@ -75,7 +87,12 @@ if mode == "browse-client":
     open(f"{log}/codex-browse.txt", "w").write(f"rc={r.returncode}\n{r.stdout}{r.stderr}")
     subprocess.run(["pair-browser", "screenshot", "page.png"], capture_output=True)
     mode = "ok"
-if mode in ("review", "review-doubt") and out:
+if mode == "review-findings" and out:
+    f1 = {"title": "Low thing", "severity": "low", "file": "a.txt", "line_start": 3}
+    f2 = {"title": "The  retry\nloses a write", "severity": "high", "file": "pay.py", "line_start": 42}
+    json.dump({"scan_notes": "x", "overall_verdict": "not sound", "overall_explanation": "x",
+               "overall_confidence": 0.9, "findings": [f1, f2]}, open(out, "w"))
+elif mode in ("review", "review-doubt") and out:
     json.dump({"scan_notes": "read a.txt", "overall_verdict": "sound", "overall_explanation": "fine",
                "overall_confidence": 0.2 if mode == "review-doubt" else 0.9, "findings": []}, open(out, "w"))
 elif mode == "ok" and out:
@@ -169,6 +186,8 @@ if not os.environ.get("FAKE_AGY_TOOLS") and not os.environ.get("FAKE_AGY_NOREAD"
                                          "tool_info": {"parameters": {"Path": "/x/notes.txt"}}})
 if mode == "nores" or (mode == "quota-nores" and n == 1):
     sys.exit(0)
+if mode == "net-after-answer" and n == 0:
+    ev(event="step_update", step_update={"step_index": 9, "step_type": "agent_response", "state": "DONE", "duration_seconds": 80.0})
 if mode in ("quota-after-answer", "quota-mid-answer") and n == 0:
     # The answer is streamed in one agent_response step; measured twice on 2026-11-02/03:
     # the step finished (DONE), then a later call hit the 429 and the turn was marked ERROR.
@@ -194,6 +213,12 @@ if mode == "quota":
 if mode in ("quota-after-answer", "quota-mid-answer") and n == 0:
     res.update(status="ERROR", conversation_id="conv-q", response="the whole review, findings and verdict",
                error="API error (attempt 1): RESOURCE_EXHAUSTED (code 429): TPM quota exhausted.")
+if mode in ("net-once", "net-twice") and (n == 0 or mode == "net-twice"):
+    res.update(status="ERROR", conversation_id="conv-n", response="",
+               error="agent executor error: generating and executing: request failed: Post ...: net/http: cannot rewind body after connection loss")
+if mode == "net-after-answer" and n == 0:
+    res.update(status="ERROR", conversation_id="conv-n", response="the whole plan review, all five questions",
+               error="API error (attempt 1): request failed: stream idle timeout (5m0s): context deadline exceeded")
 if mode == "links":
     res.update(response="see [a](https://vertexaisearch.cloud.google.com/grounding-api-redirect/AAA111) and "
                         "[b](https://vertexaisearch.cloud.google.com/grounding-api-redirect/BBB222=)")
@@ -431,6 +456,9 @@ check "Gemini's grounding links are replaced by their sources; one that does not
 out="$(cd "$T/arepo" && FAKE_AGY=u2028 bash "$P" --engine gemini --backend agy --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
 RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
 check "an answer holding U+2028 or U+2029 is read whole, not lost with its result event" '[[ $rc -eq 0 && "$out" == *STATUS=ok* ]] && grep -q "line three" "$RUN/answer.md"'
+printf 'Review this.\nReturn JSON conforming to the supplied\nschema.\n' > "$T/schema-prompt.md"
+out="$(cd "$T/arepo" && FAKE_AGY=ok bash "$P" --engine gemini --backend agy --mode review --prompt-file "$T/schema-prompt.md" 2>&1)"
+check "Gemini gets the templates' JSON request as a request for prose findings" '! agy_prompt "$(ls -t "$LOG"/agy-stdin-*.txt | head -1)" | grep -q "supplied" && agy_prompt "$(ls -t "$LOG"/agy-stdin-*.txt | head -1)" | grep -q "Report the findings in prose"'
 check "Gemini runs print TOKENS (in, out with thinking, cached) and keep them in meta.json" '[[ "$out" == *"TOKENS=in:1000,out:200,cached:5000"* && "$(jq_py "$RUN/meta.json" "d[\"tokens\"]")" == in:1000,out:200,cached:5000 ]]'
 out="$(bash "$P" --engine codex --mode consult --prompt-file "$T/prompt.md" --web --name x 2>&1)"; r1=$?
 out2="$(bash "$P" --prompt-file "$T/prompt.md" --name 2>&1)"; r2=$?
@@ -522,12 +550,22 @@ FS grep --pre=/bin/sh x >/dev/null 2>&1; r1=$?; FS grep -- -x >/dev/null 2>&1; r
 check "pair-fs grep refuses unknown flags, takes a dash pattern after --" '[[ $r1 -eq 2 && $r2 -eq 0 ]]'
 out="$(cd "$AREPO" && FAKE_CODEX=ok bash "$P" --cwd "$AREPO" --prompt-file "$T/prompt.md" 2>&1)"
 check "TREE names the commit of --cwd, marked when files differ from it" '[[ "$out" == *"TREE=$(git -C "$AREPO" rev-parse HEAD)+uncommitted"* ]]'
+out="$(cd "$AREPO" && FAKE_CODEX=ok bash "$P" --cwd "$AREPO" --prompt-file "$T/prompt.md" --out-dir "$T/evidence" 2>&1)"
+COPY="$(sed -n 's/^COPY=//p' <<<"$out")"
+check "SECONDS is printed; --out-dir copies the answer and meta.json beside the caller's evidence" '[[ "$out" == *"SECONDS="* && -s "$COPY" && -s "${COPY%.md}.meta.json" ]] && cmp -s "$COPY" "$(sed -n "s/^ANSWER=//p" <<<"$out")"'
 check "pair-fs git log, show and cat work"        'FS git log --oneline | grep -q init && FS git show --stat HEAD | grep -q a.txt && FS git cat HEAD a.txt | grep -q "^a$"'
 git -C "$AREPO" config core.fsmonitor "touch $T/fsmonitor_ran"
 git -C "$AREPO" config core.pager "touch $T/pager_ran"
 FS git status >/dev/null 2>&1; r1=$?; FS git diff >/dev/null 2>&1
 check "pair-fs git refuses a repo whose config names a program, and runs none" '[[ $r1 -eq 2 && ! -e "$T/fsmonitor_ran" && ! -e "$T/pager_ran" ]]'
 git -C "$AREPO" config --unset core.fsmonitor; git -C "$AREPO" config --unset core.pager
+git -C "$AREPO" config core.hooksPath .husky
+check "pair-fs git works in a repo that sets core.hooksPath (husky): no command it runs fires a hook" 'FS git log --oneline | grep -q init'
+git -C "$AREPO" config --unset core.hooksPath
+git -C "$AREPO" config core.pager "touch $T/pager_ran"
+out="$(cd "$AREPO" && FAKE_AGY=ok FAKE_AGY_TOOLS='[["run_command",{"CommandLine":"pair-fs git log"}]]' bash "$P" --engine gemini --backend agy --cwd "$AREPO" --prompt-file "$T/prompt.md" 2>&1)"
+check "Gemini's git refused for the run: GIT=off and a warning to stage the ref" '[[ "$out" == *"GIT=off"* && "$out" == *"saw the working tree only"* && ! -e "$T/pager_ran" ]]'
+git -C "$AREPO" config --unset core.pager
 git -C "$AREPO" config gpg.program "touch $T/gpg_ran"
 check "pair-fs git refuses gpg.program in repo config" '! FS git log --oneline >/dev/null 2>&1 && [[ ! -e "$T/gpg_ran" ]]'
 git -C "$AREPO" config --unset gpg.program
@@ -881,6 +919,17 @@ check "vertex 429 after the answer step finished: answered, no retry" '[[ $rc -e
 reset_log
 out="$(cd "$T/arepo" && "${VX[@]}" PAIR_AGY_RETRY_WAIT=0 FAKE_AGY=quota-mid-answer bash "$P" --engine gemini --backend agy --timeout 300 --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
 check "vertex 429 while the answer was still streaming: retried" '[[ $rc -eq 0 && $(ls "$LOG"/agy-args-*.json | wc -l) -eq 2 ]]'
+reset_log
+out="$(cd "$T/arepo" && PAIR_AGY_AUTH=key PAIR_AGY_NET_RETRY_WAIT=0 FAKE_AGY=net-once bash "$P" --engine gemini --backend agy --timeout 300 --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+check "a dropped connection: one retry continues the conversation, on either route, then ok" '[[ $rc -eq 0 && "$out" == *"STATUS=ok"* && "$(jq_py "$(last_args agy)" "\" \".join(d[\"args\"])")" == *"--conversation conv-n"* ]] && grep -q "dropped connection" "$LOG/agy-stdin-1.txt"'
+reset_log
+out="$(cd "$T/arepo" && PAIR_AGY_AUTH=key PAIR_AGY_NET_RETRY_WAIT=0 FAKE_AGY=net-twice bash "$P" --engine gemini --backend agy --timeout 300 --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
+check "a connection that drops again on the retry: exit 71 saying so, and meta.json records 71 beside agy's own exit" '[[ $rc -eq 71 && "$out" == *"dropped again"* && $(ls "$LOG"/agy-args-*.json | wc -l) -eq 2 && "$(jq_py "$RUN/meta.json" "d[\"exit_code\"]")" == 71 && "$(jq_py "$RUN/meta.json" "d[\"engine_exit_code\"]")" == 0 ]]'
+reset_log
+out="$(cd "$T/arepo" && PAIR_AGY_AUTH=key PAIR_AGY_NET_RETRY_WAIT=0 FAKE_AGY=net-after-answer bash "$P" --engine gemini --backend agy --timeout 300 --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+RUN="$(sed -n 's/^RUN_DIR=//p' <<<"$out")"
+check "a dropped connection after the answer step finished: answered, no retry" '[[ $rc -eq 0 && "$out" == *"STATUS=ok"* && $(ls "$LOG"/agy-args-*.json | wc -l) -eq 1 ]] && grep -q "all five questions" "$RUN/answer.md"'
 
 # --- agy: an authentication failure ----------------------------------------------------
 reset_log
@@ -896,6 +945,80 @@ check "API-key auth failure: exit 69, not retried" '[[ $rc -eq 69 && $(ls "$LOG"
 printf '```json\n{"overall_verdict":"sound","overall_confidence":0.9,"summary":"a\xe2\x80\xa8b","findings":[]}\n```\n' > "$T/fenced.json"
 python3 "$SCRIPTS/render_review.py" --input "$T/fenced.json" --output "$T/fenced.md" --repo "$T/arepo" --model m --effort high --session s --session-key k >/dev/null 2>&1; rc=$?
 check "render_review: a fenced result whose text holds U+2028 still parses as JSON" '[[ $rc -eq 0 ]] && grep -q "Verdict:\*\* sound" "$T/fenced.md"'
+
+# --- codex_review.sh: the range, the slots, the finding lines ----------------------------
+reset_log
+B1="$(git -C "$T/arepo" rev-parse HEAD)"
+git -C "$T/arepo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m "fix"
+H1="$(git -C "$T/arepo" rev-parse HEAD)"
+printf 'Review git diff {{BEFORE_FIX_SHA}}..{{AFTER_FIX_SHA}} only.\n' > "$T/fd-prompt.md"
+out="$(cd "$T/arepo" && FAKE_CODEX=review bash "$SCRIPTS/codex_review.sh" --repo "$T/arepo" --prompt-file "$T/fd-prompt.md" --base "$B1" --head HEAD --out-dir "$T/fd-out" 2>&1)"; rc=$?
+PROV="$(ls -t "$T"/fd-out/*.provenance | head -1)"
+check "--base/--head fill the fix-delta slots with full shas, print RANGE and record it" '[[ $rc -eq 0 && "$out" == *"RANGE=$B1..$H1"* ]] && grep -q "git diff $B1..$H1 only" "$(ls -t "$LOG"/codex-stdin-*.txt | head -1)" && grep -q "^range=$B1..$H1$" "$PROV"'
+printf 'Review this.\n<intent>\n{{INTENT}}\n</intent>\n' > "$T/slot-prompt.md"
+out="$(cd "$T/arepo" && FAKE_CODEX=review-findings bash "$SCRIPTS/codex_review.sh" --repo "$T/arepo" --prompt-file "$T/slot-prompt.md" --base "$B1" --out-dir "$T/fd-out" 2>&1)"; rc=$?
+check "no slot to fill: a scope line is added; a slot left unfilled is warned about" '[[ $rc -eq 0 && "$out" == *"template slots: {{INTENT}}"* ]] && grep -q "The change under review is .git diff $B1..$H1." "$(ls -t "$LOG"/codex-stdin-*.txt | head -1)"'
+check "one FINDING line per finding, most severe first, title on one line" '[[ "$(grep "^FINDING=" <<<"$out" | head -1)" == "FINDING=high The retry loses a write (pay.py:42)" && "$(grep -c "^FINDING=" <<<"$out")" -eq 2 ]]'
+bash "$SCRIPTS/codex_review.sh" --repo "$T/arepo" --prompt-file "$T/fd-prompt.md" --base nope --out-dir "$T/fd-out" >/dev/null 2>&1; r1=$?
+check "--base naming no commit: exit 66" '[[ $r1 -eq 66 ]]'
+
+# --- folders no reviewer may read (--deny-read) -------------------------------------------
+reset_log
+mkdir -p "$T/held/out" && echo key > "$T/held/out/answers.txt"
+HELD="$(cd "$T/held" && pwd -P)"
+out="$(cd "$T/arepo" && FAKE_CODEX=review XDG_CONFIG_HOME="$T/nocfg" bash "$SCRIPTS/codex_review.sh" --repo "$T/arepo" --prompt-file "$T/prompt.md" --deny-read "$T/held" --out-dir "$T/deny-out" 2>&1)"; rc=$?
+A="$(last_args codex)"
+check "codex_review --deny-read: a permission profile denies the folder, no -s (which would turn it off), checked first" '[[ $rc -eq 0 ]] && jq_py "$A" "\" \".join(d[\"args\"])" | grep -q "default_permissions=" && jq_py "$A" "\" \".join(d[\"args\"])" | grep -qF "\"$HELD\"=\"deny\"" && ! jq_py "$A" "d[\"args\"]" | grep -q "'"'"'-s'"'"'" && grep -q "$HELD" "$LOG/codex-deny-check.jsonl"'
+reset_log
+out="$(cd "$T/arepo" && FAKE_CODEX=review FAKE_DENY_BROKEN=1 XDG_CONFIG_HOME="$T/nocfg" bash "$SCRIPTS/codex_review.sh" --repo "$T/arepo" --prompt-file "$T/prompt.md" --deny-read "$T/held" --out-dir "$T/deny-out" 2>&1)"; rc=$?
+check "a Codex that ignores the profile is caught: exit 71, the review never starts" '[[ $rc -eq 71 && "$out" == *"deny-read check failed"* ]] && ! ls "$LOG"/codex-args-*.json >/dev/null 2>&1'
+reset_log
+mkdir -p "$T/cfg/pair-intelligence" && printf '# answer keys\n%s\n' "$T/held" > "$T/cfg/pair-intelligence/deny-read"
+out="$(cd "$T/arepo" && FAKE_CODEX=ok XDG_CONFIG_HOME="$T/cfg" bash "$P" --engine codex --mode consult --cwd "$T/arepo" --prompt-file "$T/prompt.md" 2>&1)"; rc=$?
+check "pair.sh reads the deny list from ~/.config/pair-intelligence/deny-read" '[[ $rc -eq 0 ]] && jq_py "$(last_args codex)" "\" \".join(d[\"args\"])" | grep -qF "\"$HELD\"=\"deny\""'
+out="$(XDG_CONFIG_HOME="$T/nocfg" bash "$P" --engine gemini --backend agy --cwd "$T/held" --prompt-file "$T/prompt.md" --deny-read "$T/held/out" 2>&1)"; r1=$?
+XDG_CONFIG_HOME="$T/nocfg" bash "$P" --engine codex --prompt-file "$T/prompt.md" --deny-read relative/path >/dev/null 2>&1; r2=$?
+check "Gemini with a --cwd that holds a denied folder is refused (64), agy never started; a relative deny path is refused (64)" '[[ $r1 -eq 64 && $r2 -eq 64 ]] && ! ls "$LOG"/agy-args-*.json >/dev/null 2>&1'
+
+reset_log
+echo img > "$T/held/out/key.png"
+XDG_CONFIG_HOME="$T/nocfg" bash "$P" --engine gemini --backend agy --cwd "$T/held/out" --prompt-file "$T/prompt.md" --deny-read "$T/held" >/dev/null 2>&1; r1=$?
+XDG_CONFIG_HOME="$T/nocfg" bash "$P" --engine gemini --backend agy --cwd "$T/arepo" --image "$T/held/out/key.png" --prompt-file "$T/prompt.md" --deny-read "$T/held" >/dev/null 2>&1; r2=$?
+check "Gemini: a --cwd inside a denied folder, or an --image in one, is refused (64)" '[[ $r1 -eq 64 && $r2 -eq 64 ]] && ! ls "$LOG"/agy-args-*.json >/dev/null 2>&1'
+# A denied folder that git tracks: its history could show the files, so the repository's
+# git directory is denied too, and reviewing that repository itself is refused.
+mkdir -p "$T/keyrepo/held" && echo k > "$T/keyrepo/held/key.txt" && echo r > "$T/keyrepo/readme"
+git -C "$T/keyrepo" init -q && git -C "$T/keyrepo" add -A && git -C "$T/keyrepo" -c user.email=t@t -c user.name=t commit -qm k
+KGIT="$(cd "$T/keyrepo/.git" && pwd -P)"
+reset_log
+XDG_CONFIG_HOME="$T/nocfg" FAKE_CODEX=review bash "$SCRIPTS/codex_review.sh" --repo "$T/keyrepo" --prompt-file "$T/prompt.md" --deny-read "$T/keyrepo/held" --out-dir "$T/deny-out" >/dev/null 2>&1; r1=$?
+out="$(cd "$T/arepo" && FAKE_CODEX=ok XDG_CONFIG_HOME="$T/nocfg" bash "$P" --engine codex --cwd "$T/arepo" --prompt-file "$T/prompt.md" --deny-read "$T/keyrepo/held" 2>&1)"; r2=$?
+check "a denied folder git tracks: its repository's .git is denied too, and a review of that repository is refused (64)" '[[ $r1 -eq 64 && $r2 -eq 0 ]] && jq_py "$(last_args codex)" "\" \".join(d[\"args\"])" | grep -qF "\"$KGIT\"=\"deny\""'
+mkdir -p "$T/keyrepo/side" && echo s > "$T/keyrepo/side/s.txt" && echo u > "$T/keyrepo/side/untracked-key.txt"
+XDG_CONFIG_HOME="$T/nocfg" FAKE_AGY=ok bash "$P" --engine gemini --backend agy --cwd "$T/keyrepo/side" --prompt-file "$T/prompt.md" --deny-read "$T/keyrepo/held" >/dev/null 2>&1; r1=$?
+mkdir -p "$T/plainrepo/k" && echo k > "$T/plainrepo/k/never-committed.txt" && git -C "$T/plainrepo" init -q
+PGIT="$(cd "$T/plainrepo/.git" && pwd -P)"
+out="$(cd "$T/arepo" && FAKE_CODEX=ok XDG_CONFIG_HOME="$T/nocfg" bash "$P" --engine codex --cwd "$T/arepo" --prompt-file "$T/prompt.md" --deny-read "$T/plainrepo/k" 2>&1)"; r2=$?
+mkdir -p "$T/srcrepo" "$T/keys" && echo a > "$T/srcrepo/a.txt" && git -C "$T/srcrepo" init -q && git -C "$T/srcrepo" add -A && git -C "$T/srcrepo" -c user.email=t@t -c user.name=t commit -qm a
+git -C "$T/srcrepo" worktree add -q "$T/keys/answers" -b answers >/dev/null 2>&1
+XDG_CONFIG_HOME="$T/nocfg" FAKE_CODEX=review bash "$SCRIPTS/codex_review.sh" --repo "$T/srcrepo" --prompt-file "$T/prompt.md" --deny-read "$T/keys" --out-dir "$T/deny-out" >/dev/null 2>&1; r3=$?
+check "a linked worktree inside a denied folder takes its repository's .git with it: a run in that repository is refused (64)" '[[ $r3 -eq 64 ]]'
+mkdir -p "$T/keys2/locked" && chmod 111 "$T/keys2/locked"
+XDG_CONFIG_HOME="$T/nocfg" FAKE_CODEX=review bash "$SCRIPTS/codex_review.sh" --repo "$T/arepo" --prompt-file "$T/prompt.md" --deny-read "$T/keys2" --out-dir "$T/deny-out" >/dev/null 2>&1; r4=$?
+chmod 755 "$T/keys2/locked"
+check "a denied folder with a subfolder that cannot be listed is refused (64): it could hide a worktree" '[[ $r4 -eq 64 ]]'
+check "Gemini in a repository whose git dir is denied is refused (64); a denied path git never saw still takes its repository's .git" '[[ $r1 -eq 64 && $r2 -eq 0 ]] && jq_py "$(last_args codex)" "\" \".join(d[\"args\"])" | grep -qF "\"$PGIT\"=\"deny\""'
+XDG_CONFIG_HOME="$T/nocfg" FAKE_CODEX=review bash "$SCRIPTS/codex_review.sh" --repo "$T/keyrepo" --runnable --prompt-file "$T/prompt.md" --deny-read "$T/keyrepo/readme" --out-dir "$HT/deny-rev-out" >/dev/null 2>&1; r1=$?
+check "--runnable on a repository holding a denied path is refused (64): the copy would carry it out" '[[ $r1 -eq 64 ]]'
+# Every bundled template reaches Gemini with no request for a schema it never gets.
+reset_log
+mkdir -p "$T/tpl" && cp "$SCRIPTS/../references/prompts.md" "$T/tpl/all.md"
+FAKE_AGY=ok bash "$P" --engine gemini --backend agy --mode review --cwd "$T/arepo" --prompt-file "$T/tpl/all.md" >/dev/null 2>&1
+check "every bundled template's JSON request becomes a prose request on Gemini" '! agy_prompt "$(ls -t "$LOG"/agy-stdin-*.txt | head -1)" | tr "\n" " " | grep -q "conforming to the supplied"'
+XDG_CONFIG_HOME="$T/nocfg" bash "$P" --engine codex --prompt-file "$T/prompt.md" --out-dir /dev/null/x >/dev/null 2>&1; r1=$?
+: > "$T/empty-prompt.md"
+bash "$SCRIPTS/codex_review.sh" --repo "$T/arepo" --prompt-file "$T/empty-prompt.md" --base HEAD --out-dir "$T/fd-out" >/dev/null 2>&1; r2=$?
+check "an --out-dir that cannot be written is refused before the run (64); an empty prompt with --base still exits 66" '[[ $r1 -eq 64 && $r2 -eq 66 ]]'
 
 # --- pair_stage.sh ----------------------------------------------------------------------
 mkdir -p "$T/st1" && git -C "$T/st1" init -q && mkdir -p "$T/st1/src" && printf 'v1\n' > "$T/st1/src/a.txt" && printf 'top\n' > "$T/st1/top.txt"

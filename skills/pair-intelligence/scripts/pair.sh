@@ -79,12 +79,21 @@ usage: pair.sh --prompt-file <abs path> [options]
                           the turn (default 40 for research, else 20)
   --schema <file>         Codex only: JSON Schema the answer must match
   --timeout <secs>        Wall-clock limit. Defaults: review 1200 (Gemini 1800),
-                          consult 600 (Gemini 1200), research and browse 900,
+                          consult 600 (Codex at high effort or above and Gemini
+                          1200), research and browse 900,
                           ideate 600. On agy, tools are refused after 70% of it,
                           so time is left to answer.
   --domains <a.com,b.com> Open a live browser limited to these domains (required
                           for browse; optional for the other modes). A local host
                           needs its port: localhost:5173
+  --out-dir <dir>         Also copy the answer (and meta.json) into <dir> as
+                          <run>.md, printed as COPY=, to keep it with your other
+                          evidence. The run directory stays where it is.
+  --deny-read <path>      A folder or file the model may never read (repeatable;
+                          absolute or ~/), added to ~/.config/pair-intelligence/
+                          deny-read and PAIR_DENY_READ. Codex: enforced by its
+                          sandbox and checked first. Gemini: a --cwd holding one
+                          is refused.
   --runnable              Codex review/consult only: run in a disposable copy of
                           the repo where it may run tests and write files, with
                           its network off. Not resumable.
@@ -93,8 +102,9 @@ usage: pair.sh --prompt-file <abs path> [options]
   --list                  Print remembered session labels and exit
 
 Prints RUN_DIR, SESSION_ID, SESSION_NAME, STATUS, READS (read commands the model ran),
-TOKENS (Gemini: in:N,out:N,cached:N, thinking counted in out) and TREE (the commit
-of --cwd, +uncommitted if it had changes), with ANSWER=<path> last.
+SECONDS, TOKENS (Gemini: in:N,out:N,cached:N, thinking counted in out), GIT=off when
+Gemini's git reads were refused, TREE (the commit of --cwd, +uncommitted if it had
+changes) and COPY (with --out-dir), with ANSWER=<path> last.
 Exit: 0 answered, 64 usage, 66 missing input, 69 missing CLI or credentials, 70 empty answer,
       71 the turn failed or ended without a final step, 75 Gemini quota ran
       out (retry later), 72 the model read no file (review/consult), 124 timed out.
@@ -103,11 +113,13 @@ USAGE
 }
 
 LIST_ONLY=0
+COPY_DIR=""
+DENY_ARGS=()
 while [[ $# -gt 0 ]]; do
   # A flag that takes a value must get one: given none, it took the next flag as
   # its value, and `--web --name x` then failed on "unknown argument: x".
   case "$1" in
-    --engine|--backend|--mode|--prompt-file|--cwd|--image|--name|--resume|--label|--model|--effort|--web|--schema|--timeout|--web-budget|--domains)
+    --engine|--backend|--mode|--prompt-file|--cwd|--image|--name|--resume|--label|--model|--effort|--web|--schema|--timeout|--web-budget|--domains|--out-dir|--deny-read)
       if [[ -z "${2:-}" || "$2" == --* ]]; then
         [[ "$1" == --web ]] && echo "--web needs a value: off, cached or live" >&2 || echo "$1 needs a value" >&2
         exit 64
@@ -143,6 +155,8 @@ for n in sorted(os.listdir(d)):
     --timeout)     TIMEOUT="${2:-}"; shift 2 ;;
     --web-budget)  WEB_BUDGET="${2:-}"; shift 2 ;;
     --domains)     DOMAINS="${2:-}"; shift 2 ;;
+    --out-dir)     COPY_DIR="${2:-}"; shift 2 ;;
+    --deny-read)   DENY_ARGS+=("${2:-}"); shift 2 ;;
     --runnable)    RUNNABLE=1; shift ;;
     --selftest)    exec bash "$SKILL_DIR/scripts/pair_selftest.sh" ;;
     --list)        LIST_ONLY=1; shift ;;
@@ -217,6 +231,12 @@ case "$MODE" in consult|ideate|research|browse|review) ;; *) echo "unknown --mod
 [[ "$PROMPT_FILE" = /* ]] || { echo "--prompt-file must be an absolute path" >&2; exit 64; }
 [[ -f "$PROMPT_FILE" ]] || { echo "no such prompt file: $PROMPT_FILE" >&2; exit 66; }
 [[ -n "$(tr -d '[:space:]' < "$PROMPT_FILE")" ]] || { echo "the prompt file is empty: $PROMPT_FILE" >&2; exit 66; }
+if [[ -n "$COPY_DIR" ]]; then
+  # Checked before the run, so a long run does not end without the copy asked for.
+  mkdir -p "$COPY_DIR" 2>/dev/null && [[ -d "$COPY_DIR" && -w "$COPY_DIR" ]] \
+    || { echo "--out-dir $COPY_DIR is not a folder this script can write" >&2; exit 64; }
+  COPY_DIR="$(cd "$COPY_DIR" && pwd)"
+fi
 for img in ${IMAGES[@]+"${IMAGES[@]}"}; do
   [[ "$img" = /* && -f "$img" ]] || { echo "--image must be an existing absolute path: $img" >&2; exit 66; }
 done
@@ -389,6 +409,9 @@ fi
 # 600 s (2026-11-05/06) where Codex answered in minutes.
 [[ "$ENGINE" == gemini && "$MODE" == review ]] && : "${TIMEOUT:=1800}"
 [[ "$ENGINE" == gemini && "$MODE" == consult ]] && : "${TIMEOUT:=1200}"
+# A Codex consult at high effort that read two repositories was cut at 600 s with
+# no text (a cut Codex turn returns none), and answered in time at 1700 (2026-11-13).
+[[ "$ENGINE" == codex && "$MODE" == consult && "$EFFORT" =~ ^(high|xhigh|max)$ ]] && : "${TIMEOUT:=1200}"
 case "$MODE" in
   review)  : "${TIMEOUT:=1200}" ;;
   research|browse) : "${TIMEOUT:=900}" ;;
@@ -495,6 +518,22 @@ cleanup() {
   pb_cleanup
   return 0
 }
+# shellcheck source=codex_lockdown.sh
+source "$SKILL_DIR/scripts/codex_lockdown.sh"
+pair_deny_load ${DENY_ARGS[@]+"${DENY_ARGS[@]}"} || exit 64
+if [[ -n "$PAIR_DENY_TABLE" ]]; then
+  if [[ "$ENGINE" == gemini ]]; then
+    # Gemini reads under its roots by its own rules: none may overlap a denied path.
+    pair_deny_overlap "--cwd" "$CWD" || exit 64
+    for _img in ${IMAGES[@]+"${IMAGES[@]}"}; do pair_deny_overlap "--image" "$_img" || exit 64; done
+  fi
+  # Either engine reads the history of the repository it runs in (pair-fs git for
+  # Gemini), so a repository whose git directory is denied is refused for both.
+  pair_deny_repo_check "$CWD" || exit 64
+  if [[ $RUNNABLE -eq 1 ]]; then
+    pair_deny_overlap "--runnable copies the repository" "$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null || echo "$CWD")" || exit 64
+  fi
+fi
 # shellcheck source=pair_browser.sh
 source "$SKILL_DIR/scripts/pair_browser.sh"
 trap cleanup EXIT
@@ -536,8 +575,8 @@ if [[ "$BACKEND" == "agy" ]]; then
     ROOTS_JSON="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' "${AGY_ROOTS[@]}")"
     # bash -p and env -i for the same reasons as pair-browser: the model's shell
     # environment must not reach the code that does the reading.
-    printf '#!/bin/bash -p\n# pair-fs: generated by pair.sh for one run.\nexec /usr/bin/env -i PATH=/usr/bin:/bin PAIR_FS_ROOTS=%q /usr/bin/python3 -I %q "$@"\n' \
-      "$ROOTS_JSON" "$SKILL_DIR/scripts/pair_fs.py" > "$RUN_DIR/bin/pair-fs"
+    printf '#!/bin/bash -p\n# pair-fs: generated by pair.sh for one run.\nexec /usr/bin/env -i PATH=/usr/bin:/bin PAIR_FS_ROOTS=%q PAIR_FS_LOG=%q /usr/bin/python3 -I %q "$@"\n' \
+      "$ROOTS_JSON" "$RUN_DIR/pair-fs.log" "$SKILL_DIR/scripts/pair_fs.py" > "$RUN_DIR/bin/pair-fs"
     chmod 755 "$RUN_DIR/bin/pair-fs"
   fi
   # agy can search but has no page reader in API-key mode; live web gets one.
@@ -576,7 +615,23 @@ dur() { if [[ $1 -ge 120 ]]; then echo "$(( $1 / 60 )) minutes"; else echo "$1 s
     printf '<harness>\nYou have about %s for this turn. After about %s every tool call is refused, so finish looking things up by then and leave time to write your answer: a turn cut off by the time limit returns nothing.%s Quote a file only with text you read from it in this turn, with its path and line; anything you recall or paraphrase, say so.\n</harness>\n\n' \
       "$(dur "$TIMEOUT")" "$(dur $(( TIMEOUT * 7 / 10 )))" "$BUDGETLINE"
   fi
-  cat "$PROMPT_FILE"
+  if [[ "$ENGINE" == gemini && -z "$SCHEMA" ]]; then
+    # The review templates end by asking for JSON in "the supplied schema", which
+    # Gemini is never given; a session sed-edited that line out for every Gemini
+    # run (2026-11-12). The same findings are asked for in prose instead.
+    python3 - "$PROMPT_FILE" <<'PY'
+import re, sys
+t = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+# Any line breaks inside the sentence: the fix-delta template wraps it.
+prose = ("Report the findings in prose, one per paragraph: a title, severity (critical, high, medium or "
+         "low), the file and line, the evidence, a failure scenario, a suggested fix and your confidence; "
+         "then your overall verdict")
+t = re.sub(r"Return\s+(?:your\s+result\s+as\s+)?JSON\s+conforming\s+to\s+the\s+supplied\s+schema", prose, t)
+sys.stdout.write(t)
+PY
+  else
+    cat "$PROMPT_FILE"
+  fi
   # Codex opens images with its view_image tool and agy with its file reader;
   # OpenCode gets them attached with -f. Codex's own -i flag is avoided: it is
   # variadic and swallows the prompt that follows it.
@@ -614,6 +669,12 @@ if [[ "$ENGINE" == "codex" ]]; then
     # with one unix socket open, the broker's.
     TIER=("${CODEX_BROKER_TIER[@]}")
     SANDBOX_FLAG=()
+  elif [[ -n "$PAIR_DENY_TABLE" ]]; then
+    # Folders no model may read: a permission profile, and no -s, which would
+    # turn the profile off (codex_lockdown.sh).
+    pair_deny_tier "$([[ $RUNNABLE -eq 1 ]] && echo :workspace || echo :read-only)"
+    TIER=("${CODEX_DENY_TIER[@]}")
+    SANDBOX_FLAG=()
   elif [[ $RUNNABLE -eq 1 ]]; then
     # Writes only inside the disposable copy (and temp dirs), network off.
     TIER=(-c 'sandbox_mode="workspace-write"' -c 'sandbox_workspace_write.network_access=false')
@@ -623,6 +684,9 @@ if [[ "$ENGINE" == "codex" ]]; then
     # its sandbox, and this machine's global config is commonly full access.
     TIER=(-c 'sandbox_mode="read-only"')
     SANDBOX_FLAG=(-s read-only)
+  fi
+  if [[ -n "$PAIR_DENY_TABLE" ]]; then
+    pair_deny_preflight "$RUN_CWD" "${TIER[@]}" || exit 71
   fi
   case "$WEB" in off) WEBCFG='web_search="disabled"' ;; cached) WEBCFG='web_search="cached"' ;; live) WEBCFG='web_search="live"' ;; esac
   # --ignore-user-config: the user's config.toml loads MCP servers (Linear, with
@@ -717,8 +781,12 @@ PY
   # the same conversation once, if the time budget allows.
   # Not when the answer was already complete: twice the 429 came after the
   # answer's step had finished, and a retry only wrote the answer again.
+  # A dropped connection ends a turn the same way (2026-11-10/12: "stream idle
+  # timeout", "read: operation timed out", "cannot rewind body after connection
+  # loss"); a manual rerun then worked, so it gets the same one retry.
   python3 - "$EVENTS" > "$RUN_DIR/.quota" <<'PY'
-import json, sys
+import json, re, sys
+NET = re.compile(r"stream idle timeout|operation timed out|cannot rewind body|connection reset|connection lost|unexpected EOF|broken pipe|deadline exceeded|\b50[234]\b|UNAVAILABLE", re.I)
 last, step, answered = None, None, False
 for line in open(sys.argv[1], errors="replace"):
     try:
@@ -731,14 +799,23 @@ for line in open(sys.argv[1], errors="replace"):
     elif e.get("event") == "result":
         last = e.get("result") or {}
         answered = step == ("agent_response", "DONE") and bool((last.get("response") or "").strip())
-if last and last.get("status") != "SUCCESS" and "RESOURCE_EXHAUSTED" in (last.get("error") or "") and not answered:
-    print(last.get("conversation_id", ""))
+err = (last or {}).get("error") or ""
+if last and last.get("status") != "SUCCESS" and not answered and last.get("conversation_id"):
+    if "RESOURCE_EXHAUSTED" in err:
+        print("quota", last["conversation_id"])
+    elif NET.search(err):
+        print("net", last["conversation_id"])
 PY
-  QUOTA_CONV="$(cat "$RUN_DIR/.quota")"; rm -f "$RUN_DIR/.quota"
-  RETRY_WAIT="${PAIR_AGY_RETRY_WAIT:-60}"
+  RETRY_KIND=""; QUOTA_CONV=""
+  read -r RETRY_KIND QUOTA_CONV < "$RUN_DIR/.quota" || true; rm -f "$RUN_DIR/.quota"
+  if [[ "$RETRY_KIND" == net ]]; then RETRY_WAIT="${PAIR_AGY_NET_RETRY_WAIT:-10}"; else RETRY_WAIT="${PAIR_AGY_RETRY_WAIT:-60}"; fi
   LEFT=$(( TIMEOUT - ($(date +%s) - START) - RETRY_WAIT ))
-  if [[ -n "$QUOTA_CONV" && "$AGY_AUTH" == vertex && $LEFT -gt 120 ]]; then
-    echo "agy: Vertex AI quota exhausted; retrying once in ${RETRY_WAIT}s with the ${LEFT}s left (conversation $QUOTA_CONV)" >> "$ERRLOG"
+  if [[ -n "$QUOTA_CONV" && ( "$RETRY_KIND" == net || "$AGY_AUTH" == vertex ) && $LEFT -gt 120 ]]; then
+    if [[ "$RETRY_KIND" == net ]]; then
+      echo "agy: the connection to Gemini dropped mid-turn; retrying once in ${RETRY_WAIT}s with the ${LEFT}s left (conversation $QUOTA_CONV)" >> "$ERRLOG"
+    else
+      echo "agy: Vertex AI quota exhausted; retrying once in ${RETRY_WAIT}s with the ${LEFT}s left (conversation $QUOTA_CONV)" >> "$ERRLOG"
+    fi
     sleep "$RETRY_WAIT"
     RETRIED=1
     # The retry gets what is left of the budget, not a fresh one, and its own
@@ -755,7 +832,8 @@ d["tools_until"] = int(sys.argv[2])
 json.dump(d, open(p + ".new", "w"), indent=2)
 os.replace(p + ".new", p)
 PY
-    python3 -c 'import json; print(json.dumps({"event": "user", "message": {"content": "Your last turn was cut off by a rate limit. Finish the task and give your complete final answer."}}))' \
+    CUT_BY="a rate limit"; [[ "$RETRY_KIND" == net ]] && CUT_BY="a dropped connection"
+    python3 -c 'import json, sys; print(json.dumps({"event": "user", "message": {"content": "Your last turn was cut off by %s. Finish the task and give your complete final answer." % sys.argv[1]}}))' "$CUT_BY" \
       > "$RUN_DIR/agy-retry.jsonl"
     [[ -n "$RESUME_ID" ]] || ARGS+=(--conversation "$QUOTA_CONV")
     # The outcome is the retry's alone: a retry that ends with no result must not
@@ -818,7 +896,8 @@ STATUS="failed"; SESSION_ID="-"
 # inside a process substitution.
 python3 - "${BACKEND:-$ENGINE}" "$EVENTS" "$ANSWER" "$RC" "$RUN_DIR/tools.txt" "$ERRLOG" "$RETRY_FROM" \
   "$MODE" "$RUN_CWD" > "$RUN_DIR/.status" <<'PY'
-import json, os, shlex, sys, pathlib
+import json, os, re, shlex, sys, pathlib
+NET = re.compile(r"stream idle timeout|operation timed out|cannot rewind body|connection reset|connection lost|unexpected EOF|broken pipe|deadline exceeded|\b50[234]\b|UNAVAILABLE", re.I)
 engine, events, answer, rc = sys.argv[1], pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3]), int(sys.argv[4])
 errlog = pathlib.Path(sys.argv[6])
 retry_from = int(sys.argv[7])   # agy: events before this line belong to the attempt before a retry
@@ -896,12 +975,15 @@ elif engine == "agy":
             failed = not completed
             denied = bool(r.get("denied_actions"))
             quota = failed and "RESOURCE_EXHAUSTED" in (r.get("error") or "")
-            if quota and step == ("agent_response", "DONE") and (r.get("response") or "").strip():
-                # The answer's step had finished before the 429 (a later call hit
-                # it), so the answer is whole.
-                quota, failed, completed = False, False, True
+            net = failed and bool(NET.search(r.get("error") or ""))
+            if (quota or net) and step == ("agent_response", "DONE") and (r.get("response") or "").strip():
+                # The answer's step had finished before the error (a later call hit
+                # a 429, or the connection dropped as the turn closed), so the
+                # answer is whole: measured both ways, 2026-11-03 and 11-10.
                 with open(sys.argv[6], "a") as f:
-                    f.write("agy: the 429 came after the answer was complete; the answer is whole\n")
+                    f.write("agy: the %s came after the answer was complete; the answer is whole\n"
+                            % ("429" if quota else "dropped connection"))
+                quota, failed, completed = False, False, True
             if (r.get("response") or "").strip():
                 answer.write_text(r["response"].strip() + "\n")
             elif answer.exists():
@@ -993,14 +1075,28 @@ PY
   fi
 fi
 
+# meta.json's exit_code is this script's, the one the caller saw; the engine's own
+# is engine_exit_code (agy exits 0 on a turn it reports as failed).
+case "$STATUS" in ok) EXIT=0 ;; timeout) EXIT=124 ;; quota) EXIT=75 ;; auth) EXIT=69 ;;
+  unread) EXIT=72 ;; empty) EXIT=70 ;; *) EXIT=71 ;; esac
+# Gemini's git reads refused for the whole run: it read the working tree, not
+# history, so a review of a ref or a diff may have judged the wrong version
+# (2026-11-11: core.hooksPath turned git off, and all 11 answers came back unsure).
+GIT_OFF=""
+[[ -s "$RUN_DIR/pair-fs.log" ]] && GIT_OFF="$(sed -n 's/^git-off: //p' "$RUN_DIR/pair-fs.log" | head -1)"
+if [[ -n "$GIT_OFF" ]]; then
+  echo "pair: WARNING Gemini's git reads were refused ($GIT_OFF): it saw the working tree only. For a review of a ref, a branch or a diff, stage it with pair_stage.sh and point --cwd at the stage, or check out that ref in a worktree." >&2
+fi
 python3 - "$RUN_DIR/meta.json" "$ENGINE" "$MODE" "$MODEL" "$EFFORT" "$WEB" "$CWD" "$STATUS" \
-  "$RC" "$SECS" "$SESSION_ID" "${NAME:-$RESUME}" "$DOMAINS" "$BACKEND" "${AGY_AUTH:+$AGY_AUTH${AGY_PROJECT:+:$AGY_PROJECT}}" \
-  "${READS:--1}" "$TREE" "${TOKENS:--}" <<'PY'
+  "$EXIT" "$SECS" "$SESSION_ID" "${NAME:-$RESUME}" "$DOMAINS" "$BACKEND" "${AGY_AUTH:+$AGY_AUTH${AGY_PROJECT:+:$AGY_PROJECT}}" \
+  "${READS:--1}" "$TREE" "${TOKENS:--}" "$RC" "${GIT_OFF:+off}" <<'PY'
 import json, sys
 keys = ["engine", "mode", "model", "effort", "web", "cwd", "status", "exit_code",
-        "seconds", "session_id", "session_name", "domains", "backend", "auth", "reads", "tree", "tokens"]
+        "seconds", "session_id", "session_name", "domains", "backend", "auth", "reads", "tree", "tokens",
+        "engine_exit_code", "git"]
 meta = dict(zip(keys, sys.argv[2:]))
-meta["exit_code"], meta["seconds"], meta["reads"] = int(meta["exit_code"]), int(meta["seconds"]), int(meta["reads"])
+for k in ("exit_code", "seconds", "reads", "engine_exit_code"):
+    meta[k] = int(meta[k])
 json.dump(meta, open(sys.argv[1], "w"), indent=2)
 PY
 
@@ -1010,8 +1106,18 @@ echo "SESSION_ID=$SESSION_ID"
 [[ -n "${NAME:-$RESUME}" ]] && echo "SESSION_NAME=${NAME:-$RESUME}"
 echo "STATUS=$STATUS"
 [[ "${READS:--1}" != -1 ]] && echo "READS=$READS"
+echo "SECONDS=$SECS"
 [[ -n "${TOKENS:-}" && "$TOKENS" != - ]] && echo "TOKENS=$TOKENS"
+[[ -n "$GIT_OFF" ]] && echo "GIT=off"
 [[ -n "$TREE" ]] && echo "TREE=$TREE"
+if [[ -n "$COPY_DIR" && -s "$ANSWER" ]]; then
+  if cp "$ANSWER" "$COPY_DIR/$(basename "$RUN_DIR").md" && cp "$RUN_DIR/meta.json" "$COPY_DIR/$(basename "$RUN_DIR").meta.json"; then
+    echo "COPY=$COPY_DIR/$(basename "$RUN_DIR").md"
+  else
+    echo "pair: WARNING could not copy the answer into $COPY_DIR; it is only at $ANSWER" >&2
+    echo "COPY=failed"
+  fi
+fi
 echo "ANSWER=$ANSWER"
 case "$STATUS" in
   ok)      exit 0 ;;
@@ -1046,14 +1152,22 @@ case "$STATUS" in
     exit 72 ;;
   empty)
     if [[ $RETRIED -eq 1 ]]; then
-      echo "no answer: the one retry after the Vertex AI quota error ended without one; see $ERRLOG and $EVENTS" >&2
+      echo "no answer: the one retry after ${CUT_BY:-the quota error} ended without one; see $ERRLOG and $EVENTS" >&2
     else
       echo "no answer; see $ERRLOG and $EVENTS" >&2
     fi
     exit 70 ;;
   incomplete) echo "the turn ended without a final step; $ANSWER holds only what arrived" >&2; exit 71 ;;
   denied)  echo "agy ended the turn on a permission it could not ask for; see $RUN_DIR/tools.txt and $ERRLOG" >&2; exit 71 ;;
-  *)       echo "the turn failed; see $ERRLOG and $EVENTS" >&2; tail -5 "$ERRLOG" >&2; exit 71 ;;
+  *)
+    if [[ "${RETRY_KIND:-}" == net && $RETRIED -eq 1 ]]; then
+      echo "the connection to Gemini dropped again on the one retry; rerun in a few minutes. See $ERRLOG and $EVENTS" >&2
+    elif [[ "${RETRY_KIND:-}" == net ]]; then
+      echo "the connection to Gemini dropped mid-turn and too little of the time limit was left to retry; rerun with a longer --timeout. See $ERRLOG" >&2
+    else
+      echo "the turn failed; see $ERRLOG and $EVENTS" >&2
+    fi
+    tail -5 "$ERRLOG" >&2; exit 71 ;;
 esac
 exit
 }

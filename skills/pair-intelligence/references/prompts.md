@@ -1,6 +1,11 @@
 # Review prompt templates
 
 Fill the `{{PLACEHOLDERS}}`, write the result to a file, pass it as `--prompt-file`.
+The templates are headed `## Mode: code`, `small change`, `fix delta`, `plan`,
+`code-vs-plan`, `follow-up` and `re-review after fixes`; `codex_review.sh` warns
+about a `{{SLOT}}` left unfilled. They end by asking for JSON in the supplied
+schema: send the same file to Gemini as it is, and `pair.sh --engine gemini`
+swaps that sentence for a request for the same findings in prose.
 
 The templates are deliberately lean. GPT-5.6 follows a single clear statement and
 loses ground when instructions repeat — OpenAI's own evals put the cost of
@@ -57,7 +62,8 @@ Most of the value is in the middle three, which are also the ones authors skip.
 | **Goal** — what this change is for | Without it, every finding is judged against a guess |
 | **Requirements and invariants** — what must hold | The only way it can catch "doesn't do what it promised" |
 | **Runtime context** — concurrency model, where inputs come from and whether they're trusted, scale, blast radius | Drives severity, and prevents whole classes of false positive |
-| **Settled decisions** — chosen, not up for review, with the reason it's settled | Stops it relitigating architecture |
+| **Settled decisions** — chosen, not up for review, with the reason it's settled | Stops it relitigating architecture (a round 1 that "fixed" a deliberate schedule move by reverting it, 2026-11-11) |
+| **Out of scope** — what this change deliberately does not touch | Stops highs about work that belongs to another PR |
 | **Deliberately deferred** — known gaps that are not this change's job | Stops it reporting your backlog as defects |
 | **Constraints hit while building** — a library that doesn't behave as documented, an API that forced an awkward shape | Points it at the load-bearing weirdness. State the constraint, not your defence of it |
 | **Known-failing or skipped tests** | Otherwise reported as a defect |
@@ -87,6 +93,9 @@ Concretely:
 - Bad: "I used a read-modify-write here because the table is small and
   contention is unlikely, so I think the race is theoretical."
 - Bad: "This should be correct — I've already checked the concurrency."
+- Bad: a requirement you have not checked the code supports. The reviewer holds
+  the change to every "must" you write: on 2026-11-12 "the legacy host must keep
+  logging in", which the codebase never supported, came back as a high.
 
 ---
 
@@ -215,6 +224,11 @@ the pasted live data; tests or fixtures elsewhere that pin a value this change
 edits; rules elsewhere in the same document that this text contradicts.
 </check>
 
+You can read files and run read-only commands; you cannot run tests or write
+files, so do not try the test suite. In docs, a runbook or a comment, stale text,
+a statement another file contradicts, and a command that would fail as written
+are defects: report them as findings, not in scan_notes.
+
 Report only defects with a concrete wrong outcome. An empty findings list is a
 valid answer. A missing test is not a defect. A test or assertion this change
 adds that a harmless edit would turn red (it pins line numbers, source text or a
@@ -230,7 +244,11 @@ schema.
 
 For the round that checks only the fixes after an earlier round's findings were
 fixed: a fresh reviewer, `--effort medium`, usually two or three minutes. Commit
-the fixes first, so the scope names two shas. The stopping rule in
+the fixes first, so the scope names two shas: `codex_review.sh --base <sha the
+last round read> --head <new sha>` fills `{{BEFORE_FIX_SHA}}` and
+`{{AFTER_FIX_SHA}}` and records the range. After a rebase the old sha is gone
+from the branch: `git range-diff <old-base>..<old-head> <new-base>..<new-head>`
+shows which rebased commit it became. The stopping rule in
 `references/review.md` gives every fix this round however small it is, a fix
 to a fix included.
 

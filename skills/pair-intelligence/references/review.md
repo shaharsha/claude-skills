@@ -20,7 +20,12 @@ provenance sidecar. Its only command is `pair-fs`, which covers `git diff`, `log
 `show` and `cat REV PATH` (a file at a revision) with a fixed set of flags, so
 name the base as usual; `HEAD:path` forms are refused there. A Gemini review
 at high effort took 2 to 6 minutes in testing. For a two-engine review, send the
-identical prompt to both and adjudicate the union.
+identical prompt to both and adjudicate the union. `pair.sh` swaps the
+templates' JSON request for a prose one on Gemini, so one prompt file serves
+both. On code diffs Codex alone was usually enough in November 2026 (Gemini
+mostly overlapped, took 10 to 20 minutes and made up a test name or a file);
+on plans and design questions Gemini found rollout-order and design gaps Codex
+missed, and the disagreement was the useful part.
 
 **Reviewing against the running page.** When the change is visual, add
 `--domains` (a local dev server needs its port, `localhost:5173`) and run the
@@ -38,6 +43,27 @@ is removed afterwards. The sidecar records `runnable=yes`. Name the test command
 in the prompt; dependencies must already be installed in the real repo. It runs
 the repository's code, so keep it for code you would run yourself, and keep the
 repo and `--out-dir` out of temp folders (Codex can write there; refused).
+
+## Small change: the short path
+
+A config, docs or comment change, or a few lines that change no logic. Any change
+to logic, however short, gets the full round 1 at `high` (a 10-line alert fix run
+at medium was a guess, 2026-11-11).
+
+1. Copy the `## Mode: small change` template from `references/prompts.md` and
+   fill `{{SCOPE}}`, the read-also files and `<check>`.
+2. Run, outside your harness's sandbox and in the background:
+
+   ```bash
+   bash scripts/codex_review.sh --repo /abs/repo --prompt-file /abs/prompt.md \
+     --label <ticket>-r1 --effort medium --out-dir <durable dir>
+   ```
+3. Read the `FINDING=` lines, then the `REVIEW_MD` file, its scan notes
+   included. Fix what is real.
+4. Every fix gets a fix-delta round (`## Mode: fix delta`, `--base <reviewed
+   sha> --head <fixed sha>`, `--effort medium`), usually under two minutes. A
+   docs round on a runbook with commands is worth the minute: one found a resume
+   command the CLI refuses (2026-11-11).
 
 ## Quick path
 
@@ -57,15 +83,28 @@ a merge gate in a shared clone, read `references/review-evidence.md`.
    <ticket>-r<N>` in the background, outside your harness's own sandbox. Add
    `--out-dir <durable dir>` when the repo is a worktree that will be removed.
    Use `--effort medium` for small changes and fix-delta rounds; round 1 of a
-   real change stays at the default, `high`. `--repo` may be a staged folder
+   real change stays at the default, `high`. For a fix-delta round pass `--base
+   <sha the last round read> --head <fixed sha>`: the script fills the
+   template's sha slots and records the range. With `--runnable`, give
+   `--out-dir` a durable folder before you start: one in a temp folder is
+   refused, and a background run reports that only when you collect it. `--repo` may be a staged folder
    that is not a git repository (from `pair_stage.sh`): no `git init` needed.
    The header then reads "Reviewed: unknown on unknown", and the prompt hash is
    what the review vouches for. Codex reads any file on disk, so name other
    repositories by absolute path with read-only commands in the prompt
-   (`git -C /abs/repo show origin/main:path`, `cat /abs/file`); a finding in a
-   file outside `--repo` cites it relative to the repo (`../../.claude/plans/x.md`).
-3. Read the summary lines (`VERDICT=`, `FINDINGS=`, `READS=`), then open the
-   `REVIEW_MD` path and check that it cites real files and lines. `READS=0` (exit
+   (`git -C /abs/repo show origin/main:path`, `cat /abs/file`), at `origin/main`
+   rather than a checkout that may be stale. A finding in a file outside `--repo`
+   cites it relative to the repo (`../../.claude/plans/x.md`), and the provenance
+   covers the repo, not that file: stage a plan with `pair_stage.sh file:` and
+   point `--repo` at the stage when the record must pin it. Folders the reviewer
+   must never read (an answer key, a held-out set) go in
+   `~/.config/pair-intelligence/deny-read` or `--deny-read`: Codex's sandbox
+   then refuses them, and the run checks that before it starts (2026-11-12: a
+   reviewer opened a benchmark answer folder on its own).
+3. Read the summary lines (`VERDICT=`, `FINDINGS=`, one `FINDING=` per finding,
+   `READS=`), then open the `REVIEW_MD` path and check that it cites real files
+   and lines. Read its scan notes too: a reviewer told to report only concrete
+   defects has put a real stale line there. `READS=0` (exit
    72) means the reviewer ran no command and read no file: rerun with a prompt
    that lets it read, outside your harness's sandbox.
 4. Adjudicate every finding against the source; reproduce runtime and UI claims.
@@ -153,7 +192,9 @@ need not be a git repository: a staged folder of documents works too.
 
 A review that needs images (a UI change, a scanned document) goes through
 `bash scripts/pair.sh --mode review --image <file>` instead: prose findings, no
-schema or provenance sidecar.
+schema or provenance sidecar. For binary assets the reviewer cannot open (icons,
+fonts), you can stay in `codex_review.sh` by pasting what you measured (sizes,
+a colour histogram) into `<intent>` as facts.
 
 `--name` records the reviewer under a label you choose, so you can come back to
 that exact reviewer later. Use one per piece of work.
@@ -398,6 +439,15 @@ rule; use it unless the user sets another.
   merged its last two-line fix unreviewed, and on 2026-11-07 a lane refused to
   review its fix for a high that a fix-delta round had found, "to respect the
   stopping rule". A fix to a fix gets its own fix-delta round too.
+- **A fix-delta round blocks only on medium and above.** Declare its low
+  findings in the PR body instead of starting another round: on 2026-11-12 a low
+  "brittle test" in a fix-delta led to a fix flagged brittle again, and a third
+  round. The small-change path gets fix-delta rounds too.
+- **More than three fix-delta rounds in a row is a signal to step back**, like
+  the redesign rule: one PR needed five before it came back sound (2026-11-12).
+- **A merge of main that leaves the diff against main unchanged needs no
+  round** (a merge queue's refresh). Check it: `git diff <base>...<reviewed sha>`
+  and `git diff <new base>...<new head>` should match.
 - **Declare unfixed medium and low findings** in the PR body.
 - **A "Brittle test:" finding** is low or medium and never blocks a merge on
   its own. When it is on a test this change adds or edits, fix it in the same
