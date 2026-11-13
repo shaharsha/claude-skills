@@ -1,6 +1,6 @@
 # writing-project-instructions
 
-Author or audit a `CLAUDE.md` / `AGENTS.md` project-instruction file — the file an AI coding agent reads at the start of every session for project context. Encodes Anthropic's cardinal include/exclude rules, the under-200-line target, the falsifiability test, locations and loading semantics, AGENTS.md interop, and the compounding-engineering loop.
+Author or audit a `CLAUDE.md` / `AGENTS.md` project-instruction file — the file an AI coding agent reads at the start of every session for project context. Encodes Anthropic's cardinal include/exclude rules, the under-200-line target, the falsifiability test, locations and loading semantics, AGENTS.md interop (including how Codex, Gemini CLI and Cursor load these files), and the compounding-engineering loop.
 
 Part of [shaharsha/claude-skills](../..). MIT.
 
@@ -12,10 +12,10 @@ A project-instruction file compounds in value and bloats just as easily, and the
 
 There's also a lot of folklore around these files that's subtly wrong, and the skill exists partly to correct it:
 
-- **The 200-line target is soft, and people over-index on it.** CLAUDE.md is *never truncated* — it loads in full regardless of length; adherence just decays gradually. Nothing breaks at line 201. A 250-line file of real foot-guns beats a 190-line file that cut them to hit a number.
+- **The 200-line target is soft, and people over-index on it.** A CLAUDE.md that loads at launch isn't cut at 200 lines (you get a warning); adherence just decays gradually. A 250-line file of real foot-guns beats a 190-line file that cut them to hit a number. Files that load on demand (a subdirectory CLAUDE.md, a path-scoped rule) are different: past a per-file character limit Claude gets only their start.
 - **The *hard* 200-line/25 KB cap is a different file.** That's auto-memory's `MEMORY.md`, where content past the limit is silently dropped at load. Conflating the two leads people to gut a CLAUDE.md for no reason.
 - **Splitting into `@path` imports saves nothing.** Imported files load in full at launch. Only `paths:`-scoped rules and skills reduce startup context.
-- **`.claude/rules/` is Claude-only.** If a repo keeps instructions in AGENTS.md for cross-agent parity, moving content into `.claude/rules/` makes it invisible to Codex, Cursor, and Gemini — breaking the exact parity AGENTS.md exists for.
+- **`.claude/rules/` is invisible to most other agents.** If a repo keeps instructions in AGENTS.md for cross-agent parity, moving content into `.claude/rules/` hides it from Codex, Cursor, and Gemini CLI (Grok Build reads it) — breaking the exact parity AGENTS.md exists for.
 - **CLAUDE.md is advisory, not deterministic.** It's delivered as a user message, not the system prompt. Anything that *must* always happen — formatters, lint gates, blocking dangerous commands — belongs in a hook.
 
 ## What it does
@@ -79,6 +79,7 @@ If you can't articulate the mistake the line prevents, cut the line.
 | Architectural decisions specific to the project (why X not Y) | Long explanations — link to `docs/X.md` instead |
 | Required env vars, ports, OS quirks | File-by-file directory listings — the agent can `ls` |
 | Common gotchas and non-obvious foot-guns | Stale rules referencing tools you no longer use |
+| Where to look up live state (the command or file that reports it) | Live state itself: what's switched on, which workflows exist, who owns what |
 
 ## Every rule must be falsifiable
 
@@ -99,14 +100,17 @@ A reviewer should be able to point at code and say "this rule was violated."
 | `~/.claude/CLAUDE.md` | You, all projects | Every session |
 | `./.claude/rules/<topic>.md` with `paths:` | Per-glob | Only when matching files open |
 
-Subdirectory CLAUDE.md files load on demand, not at session start. Claude Code reads `CLAUDE.md`, **not** `AGENTS.md` — if your repo has AGENTS.md for cross-agent parity, add a CLAUDE.md whose first line is `@AGENTS.md`, or symlink it.
+Subdirectory CLAUDE.md files load on demand, not at session start. Claude Code (v2.1.277+) also reads `AGENTS.md`, by default only when there is no `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` at or above the working directory, so a personal `CLAUDE.local.md` switches it off (the **Project instructions** setting can load both instead). To share one file and add Claude-only lines, keep a `CLAUDE.md` whose first line is `@AGENTS.md`.
+
+Other agents load these files differently. Codex reads one file per directory from the project root down to where it started, nothing below that, and stops adding files at 32 KiB combined; Gemini CLI reads `GEMINI.md` unless told to read `AGENTS.md`; Cursor reads `AGENTS.md` in the root and subdirectories. The skill has the full table.
 
 ## Gotchas
 
 - **`IMPORTANT` everywhere dilutes it.** Reserve for ≤2 genuinely load-bearing rules (security, data loss).
 - **Don't hand-maintain in CLAUDE.md what auto memory already captures.** CLAUDE.md = instructions you write, team-shared, in git. Auto memory = learnings the agent writes, personal, automatic. Saying "remember X" lands in *private* auto memory — if the fact is team-relevant, say "add this to CLAUDE.md" so it's shared and versioned.
 - **Don't auto-apply an audit.** The file is in git; propose the diff and let a human review it.
-- **Run `/doctor`** (Claude Code v2.1.206+) for trims proposed against the real criteria — it cuts what the agent can derive from the codebase and keeps pitfalls and rationale. Better than eyeballing.
+- **Run `/doctor`** (Claude Code v2.1.206+) for trims proposed against the real criteria — it cuts what the agent can derive from the codebase and keeps pitfalls and rationale. Better than eyeballing. `/doctor prompt-audit` (v2.1.283+) also finds instructions written for older models, references to missing files, and contradictions.
+- **Don't copy live state into the file.** "Feature X is on", "these workflows exist" go stale within days; point to the command or file that reports it instead.
 
 ## The compounding loop
 
