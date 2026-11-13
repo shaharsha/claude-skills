@@ -23,13 +23,16 @@ LLM code / prompt / failure report in scope
         │
         ▼
 Step 0a: identify model family from imports, model IDs, SDK calls
-        │  claude · gpt · gemini · kimi · grok  (load all that match; ask if none)
+        │  claude · gpt · gemini · kimi · grok  (load all that match; if none, check 0d, then ask)
         ▼
 Step 0b: read references/<family>.md IN FULL — the version-specific knobs
-        │
+        │  (Claude: claude.md + the per-model file: opus / fable / sonnet-haiku)
         ▼
 Step 0c (evals, judges, failed runs): also read references/evals.md
         │
+        ▼
+Step 0d (framework code → langgraph.md; a coding agent's CLAUDE.md /
+        │  AGENTS.md → the writing-project-instructions skill)
         ▼
 universal layer (≈70%) + provider layer (≈30%)
         │
@@ -67,9 +70,10 @@ There's nothing to run — this is a reference library the agent loads. It fires
 | Path | What |
 |---|---|
 | `SKILL.md` | The universal layer: system-prompt structure, altitude, tool descriptions, context engineering, anti-patterns, eval design |
-| `references/claude.md` | Claude / Anthropic — Fable 5.2's prompting and breaking changes, effort defaults, sampling, thinking, caching, migration notes |
+| `references/claude.md` | Claude / Anthropic — current models, the 5.5-generation API contract (incl. Fable 5.2's breaking changes), effort defaults, sampling, thinking, caching, migration checklists |
+| `references/claude-opus.md`, `claude-fable.md`, `claude-sonnet-haiku.md` | Per-model Claude prompting: Opus 5.5 / 5 / 4.8; Fable 5.2 / 5.1 and Mythos; Sonnet 5.5, Haiku 5.5, Sonnet 5, Haiku 4.5 (read with `claude.md`) |
 | `references/gpt.md` | GPT / OpenAI incl. Azure and AWS Bedrock — verbosity, reasoning effort, host contracts, the "stop doing" list |
-| `references/gemini.md` | Gemini / Google incl. Vertex — Gemini 4 Argon and (gated) Carbon, long decode, thought signatures, caching, thinking cost |
+| `references/gemini.md` | Gemini / Google incl. Vertex — Gemini 4 Carbon, Argon and Hydrogen, the Decisions API, long decode, thought signatures (incl. Gemini 4 prefix binding), caching, thinking cost |
 | `references/kimi.md` | Kimi / Moonshot — K3.1 Pro's always-on thinking, fixed sampling, `reasoning_content` replay, MFJS tool schemas, host differences |
 | `references/grok.md` | Grok / xAI — Grok 4.7's encrypted reasoning, sampling values (required on xAI's API, rejected by Bedrock Converse), server-side tools (web/X search), caching keys, compaction |
 | `references/langgraph.md` | LangGraph / LangChain / Deep Agents: layers, context primitives, typed HITL, skill-bound tools, harness profiles, MCP, subagent context modes, eval practice |
