@@ -33,6 +33,9 @@ WEB="disabled"
 OUT_OVERRIDE=""
 DOMAINS=""
 RUNNABLE=0
+RANGE_BASE=""
+RANGE_HEAD=""
+DENY_ARGS=()
 
 usage() {
   cat >&2 <<'USAGE'
@@ -60,12 +63,21 @@ usage: codex_review.sh --repo <dir> --prompt-file <file> [options]
                         localhost:5173). It stays read-only: the browser is
                         reached through a broker socket, checked by a preflight.
                         Screenshots are kept beside the review as <base>.shots/.
+  --base <rev>          The range under review starts here (with --head, default
+  --head <rev>          HEAD). Both resolve to full shas, fill the prompt's
+                        {{BASE}}/{{HEAD}} (or {{BEFORE_FIX_SHA}}/{{AFTER_FIX_SHA}})
+                        slots, or add a scope line, and go in the provenance.
+  --deny-read <path>    A folder or file the reviewer may never read (repeatable;
+                        absolute or ~/). Added to the list in
+                        ~/.config/pair-intelligence/deny-read and PAIR_DENY_READ;
+                        enforced by Codex's sandbox and checked before the run.
   --runnable            Review in a disposable copy of the repo where Codex may
                         run tests and write files, network off. Not resumable.
   --list                Print known session labels for --repo and exit
 
-Prints the paths it wrote, then VERDICT, FINDINGS, CONFIDENCE, READS (commands
-the reviewer ran; 0 means it read no file) and SECONDS, with REVIEW_MD=<path> last.
+Prints the paths it wrote, then VERDICT, FINDINGS, one FINDING= line per finding
+(severity, title, file:line), CONFIDENCE, RANGE (with --base), READS (commands the
+reviewer ran; 0 means it read no file) and SECONDS, with REVIEW_MD=<path> last.
 Exit: 0 reviewed, 64 usage, 66 missing input, 69 missing CLI, 70 no output,
       72 the reviewer read no file (the .md is written, with a warning on top).
 USAGE
@@ -77,7 +89,7 @@ while [[ $# -gt 0 ]]; do
   # A flag that takes a value must get one: given none, it took the next flag as
   # its value, and `--web --name x` then failed on "unknown argument: x".
   case "$1" in
-    --repo|--prompt-file|--name|--resume|--label|--model|--effort|--schema|--web|--out-dir|--domains)
+    --repo|--prompt-file|--name|--resume|--label|--model|--effort|--schema|--web|--out-dir|--domains|--base|--head|--deny-read)
       if [[ -z "${2:-}" || "$2" == --* ]]; then
         [[ "$1" == --web ]] && echo "--web needs a value: off, cached or live" >&2 || echo "$1 needs a value" >&2
         exit 64
@@ -98,6 +110,9 @@ while [[ $# -gt 0 ]]; do
                      *) echo "--web must be off, cached or live" >&2; exit 64 ;; esac; shift 2 ;;
     --ephemeral)   EPHEMERAL=1; shift ;;
     --out-dir)     OUT_OVERRIDE="${2:-}"; shift 2 ;;
+    --base)        RANGE_BASE="${2:-}"; shift 2 ;;
+    --deny-read)   DENY_ARGS+=("${2:-}"); shift 2 ;;
+    --head)        RANGE_HEAD="${2:-}"; shift 2 ;;
     --domains)     DOMAINS="${2:-}"; shift 2 ;;
     --runnable)    RUNNABLE=1; shift ;;
     --list)        LIST_ONLY=1; shift ;;
@@ -116,6 +131,12 @@ OUT_DIR="${OUT_OVERRIDE:-$REPO/.codex-review}"
 IS_GIT=1
 git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1 || IS_GIT=0
 SESSIONS="$OUT_DIR/sessions.json"
+
+# shellcheck source=codex_lockdown.sh
+source "$SKILL_DIR/scripts/codex_lockdown.sh"
+pair_deny_load ${DENY_ARGS[@]+"${DENY_ARGS[@]}"} || exit 64
+[[ -n "$PAIR_DENY_TABLE" ]] && { pair_deny_repo_check "$REPO" || exit 64; }
+
 
 # --- attribution ---------------------------------------------------------------
 # Artifacts land in ONE directory per repo, so when several agents review in the
@@ -156,6 +177,38 @@ fi
 [[ -n "$PROMPT_FILE" ]] || usage
 [[ -f "$PROMPT_FILE" ]] || { echo "no such prompt file: $PROMPT_FILE" >&2; exit 66; }
 [[ -n "$(tr -d '[:space:]' < "$PROMPT_FILE")" ]] || { echo "the prompt file is empty: $PROMPT_FILE" >&2; exit 66; }
+PROMPT_GIVEN="$PROMPT_FILE"
+
+# --- the range under review -------------------------------------------------------
+# Four sessions (2026-11-11/12) wrote each fix-delta scope by hand, one after a
+# rebase had changed the shas: the script resolves the range, fills the prompt's
+# slots and records it, so the provenance names what was reviewed.
+RANGE=""
+if [[ -n "$RANGE_BASE" || -n "$RANGE_HEAD" ]]; then
+  [[ $IS_GIT -eq 1 ]] || { echo "--base/--head need a git repository; $REPO is not one" >&2; exit 64; }
+  [[ -n "$RANGE_BASE" ]] || { echo "--head needs --base too" >&2; exit 64; }
+  B="$(git -C "$REPO" rev-parse --verify -q "${RANGE_BASE}^{commit}")" || { echo "$REPO has no commit $RANGE_BASE" >&2; exit 66; }
+  H="$(git -C "$REPO" rev-parse --verify -q "${RANGE_HEAD:-HEAD}^{commit}")" || { echo "$REPO has no commit ${RANGE_HEAD:-HEAD}" >&2; exit 66; }
+  git -C "$REPO" merge-base --is-ancestor "$B" "$H" || echo "codex_review: WARNING $RANGE_BASE is not an ancestor of ${RANGE_HEAD:-HEAD}; after a rebase, name the rebased commit (git range-diff shows which)" >&2
+  RANGE="$B..$H"
+  FILLED="$(mktemp "${TMPDIR:-/tmp}/codex-review-prompt.XXXXXX")"
+  python3 - "$PROMPT_FILE" "$FILLED" "$B" "$H" <<'PY'
+import sys
+src, dst, b, h = sys.argv[1:5]
+t = open(src, encoding="utf-8", errors="replace").read()
+slots = {"{{BASE}}": b, "{{BEFORE_FIX_SHA}}": b, "{{HEAD}}": h, "{{AFTER_FIX_SHA}}": h}
+if any(s in t for s in slots):
+    for s, v in slots.items():
+        t = t.replace(s, v)
+else:
+    t = t.rstrip("\n") + "\n\nThe change under review is `git diff %s..%s`.\n" % (b, h)
+open(dst, "w", encoding="utf-8").write(t)
+PY
+  PROMPT_FILE="$FILLED"
+fi
+# A slot left unfilled reads to the reviewer as an instruction it cannot follow.
+SLOTS="$(grep -oE '\{\{[A-Z_]+\}\}' "$PROMPT_FILE" | sort -u | tr '\n' ' ' || true)"
+[[ -n "$SLOTS" ]] && echo "codex_review: WARNING the prompt still holds template slots: $SLOTS" >&2
 command -v codex >/dev/null || { echo "codex CLI not found on PATH" >&2; exit 69; }
 [[ -n "$RESUME" && "$EPHEMERAL" -eq 1 ]] && { echo "--resume and --ephemeral are incompatible" >&2; exit 64; }
 if [[ $RUNNABLE -eq 1 ]]; then
@@ -353,7 +406,7 @@ PROMPT_SHA="$(shasum -a 256 "$PROMPT_FILE" 2>/dev/null | awk '{print $1}')" || P
 # `prompt_sha256`. The retention worked; the path spelling threw it away. So
 # `prompt_relative=` is emitted too, and a checker resolves THAT first.
 PROMPT_COPY="$BASE.prompt.md"
-PROMPT_ORIGIN="$PROMPT_FILE"
+PROMPT_ORIGIN="$PROMPT_GIVEN"
 PROMPT_RELATIVE=""
 if cp "$PROMPT_FILE" "$PROMPT_COPY" 2>/dev/null; then
   PROMPT_CITE="$PROMPT_COPY"
@@ -408,6 +461,8 @@ if [[ $RUNNABLE -eq 1 ]]; then
   # A runnable Codex may write to temp folders: the real repo, this skill (the
   # host runs its scripts later) and the review's artifacts must not be in one.
   bash "$SKILL_DIR/scripts/pair_scratch.sh" check "$(git -C "$REPO" rev-parse --show-toplevel)" "$SKILL_DIR" "$OUT_DIR" || exit 64
+  # The copy would carry a denied folder inside the repository out to an allowed one.
+  [[ -n "$PAIR_DENY_TABLE" ]] && { pair_deny_overlap "--runnable copies the repository" "$(git -C "$REPO" rev-parse --show-toplevel)" || exit 64; }
   SCRATCH_PARENT="$(mktemp -d "${TMPDIR:-/tmp}/pair-run.XXXXXX")"
   RUN_REPO="$(bash "$SKILL_DIR/scripts/pair_scratch.sh" create "$REPO" "$SCRATCH_PARENT")" \
     || { echo "could not make a runnable copy of $REPO" >&2; exit 71; }
@@ -451,6 +506,12 @@ if [[ -n "$DOMAINS" ]]; then
   # Read-only (or the writable copy) with one unix socket open, the broker's.
   SANDBOX_TIER=("${CODEX_BROKER_TIER[@]}")
   SANDBOX_FLAG=()
+elif [[ -n "$PAIR_DENY_TABLE" ]]; then
+  # Folders no reviewer may read: a permission profile, and no -s, which would
+  # turn the profile off (codex_lockdown.sh).
+  pair_deny_tier "$([[ $RUNNABLE -eq 1 ]] && echo :workspace || echo :read-only)"
+  SANDBOX_TIER=("${CODEX_DENY_TIER[@]}")
+  SANDBOX_FLAG=()
 elif [[ $RUNNABLE -eq 1 ]]; then
   # Writes only inside the disposable copy (and temp dirs), network off.
   SANDBOX_TIER=(-c 'sandbox_mode="workspace-write"' -c 'sandbox_workspace_write.network_access=false')
@@ -462,6 +523,10 @@ else
   # danger-full-access. This must stay in COMMON, not the fresh-session branch.
   SANDBOX_TIER=(-c 'sandbox_mode="read-only"')
   SANDBOX_FLAG=(-s read-only)
+fi
+
+if [[ -n "$PAIR_DENY_TABLE" ]]; then
+  pair_deny_preflight "$RUN_REPO" "${SANDBOX_TIER[@]}" || exit 71
 fi
 
 COMMON=(
@@ -534,9 +599,14 @@ f = d.get("findings") or []
 c = collections.Counter(x.get("severity", "?") for x in f)
 sev = ", ".join("%d %s" % (c[s], s) for s in ("critical", "high", "medium", "low") if c[s])
 print("%s\t%d%s\t%s" % (d.get("overall_verdict", "?"), len(f), " (%s)" % sev if sev else "", d.get("overall_confidence", "?")))
+order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+for x in sorted(f, key=lambda x: order.get(x.get("severity"), 9)):
+    title = " ".join(str(x.get("title", "?")).split())[:140]
+    print("%s %s (%s:%s)" % (x.get("severity", "?"), title, x.get("file", "?"), x.get("line_start", "?")))
 PY
 )"
-  IFS=$'\t' read -r V_VERDICT V_FINDINGS V_CONF <<< "$SUMMARY" || true
+  IFS=$'\t' read -r V_VERDICT V_FINDINGS V_CONF <<< "$(head -1 <<< "$SUMMARY")" || true
+  FINDING_LINES="$(tail -n +2 <<< "$SUMMARY")"
   if [[ "${V_FINDINGS%% *}" == 0 ]] && python3 -c 'import sys; sys.exit(0 if float(sys.argv[1]) < 0.5 else 1)' "${V_CONF:-1}" 2>/dev/null; then
     WARNINGS+=("**No findings, at confidence ${V_CONF}.** A clean verdict the reviewer itself doubts: check that it reached the source before counting this round.")
   fi
@@ -651,6 +721,7 @@ printf 'sha=%s\nbranch=%s\ntree=%s\nprompt=%s\nprompt_relative=%s\nprompt_sha256
 # runnable copy. New keys at the end, so existing readers are unaffected.
 printf 'browser_domains=%s\nrunnable=%s\n' "${DOMAINS:-none}" "$([[ $RUNNABLE -eq 1 ]] && echo yes || echo no)" >> "$BASE.provenance"
 printf 'reads=%s\nhead_after=%s\nseconds=%s\n' "$READS" "$HEAD_AFTER" "$SECS" >> "$BASE.provenance"
+[[ -n "$RANGE" ]] && printf 'range=%s\n' "$RANGE" >> "$BASE.provenance"
 
 echo "RAW_JSON=$RAW"
 echo "CODEX_LOG=$LOG"
@@ -661,7 +732,12 @@ echo "REVIEWED_TREE=$REVIEW_DIRTY"
 keep_shots
 [[ -d "$BASE.shots" ]] && echo "SHOTS=$BASE.shots"
 for w in ${WARNINGS[@]+"${WARNINGS[@]}"}; do echo "codex_review: WARNING ${w//\*\*/}" >&2; done
-[[ -n "$SUMMARY" ]] && { echo "VERDICT=$V_VERDICT"; echo "FINDINGS=$V_FINDINGS"; echo "CONFIDENCE=$V_CONF"; }
+if [[ -n "$SUMMARY" ]]; then
+  echo "VERDICT=$V_VERDICT"; echo "FINDINGS=$V_FINDINGS"
+  [[ -n "${FINDING_LINES:-}" ]] && while IFS= read -r l; do echo "FINDING=$l"; done <<< "$FINDING_LINES"
+  echo "CONFIDENCE=$V_CONF"
+fi
+[[ -n "$RANGE" ]] && echo "RANGE=$RANGE"
 echo "READS=$READS"
 echo "SECONDS=$SECS"
 echo "REVIEW_MD=$MD"

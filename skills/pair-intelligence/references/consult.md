@@ -25,12 +25,42 @@ Neutral descriptions in no particular order. You may propose an option not liste
 
 <answer_format>
 1. Your pick or diagnosis, in one sentence.
-2. The reasons, each tied to a file and line, a measurement, or a source.
+2. The reasons, each tied to a file and line, a measurement, or a source, and
+   marked "read" (you saw it at that file:line or URL) or "inferred".
 3. The strongest case against your pick, and what would change your mind.
 4. What you could not verify by reading.
-Plain prose: about 15 lines for two or three options, a few more for each option
-beyond that.
+Plain prose, citations as plain path:line (no links): about 15 lines for two or
+three options, a few more for each option beyond that.
 </answer_format>
+```
+
+The read/inferred mark is what makes an answer quick to check: four sessions
+(2026-11-11 to 13) said the answers they could adjudicate fastest quoted a file
+and line for every fact, and the claims that failed were the unmarked runtime
+inferences. Gemini otherwise wraps citations in `file://` links, slow to read.
+
+**When the question is a list of claims to check** (your draft's facts, another
+session's summary), number them and ask for one line each:
+`C3: CONFIRMED | REFUTED | PARTLY - path:line - what the source says`.
+
+**Before one live command** (a PROD write, a migration, a key rotation), ask in
+this shape, which three sessions wrote by hand:
+
+```
+<command>
+The exact command, verbatim, and where it runs.
+</command>
+<before>
+What must be true first, and how each is checked.
+</before>
+<after>
+The checks after it ran, and what each result means.
+</after>
+<way_back>
+The rollback, verbatim, and what it cannot undo.
+</way_back>
+Is the command right as written? Report what to change in any of the four parts,
+each tied to a file and line or a doc.
 ```
 
 Leave out your own lean, which option you prefer, and how confident you are. A
@@ -71,6 +101,17 @@ the repository is a grab-bag of unrelated private files, or the file in question
 embeds a secret, copy the relevant files (redacted) into a temp directory and
 point `--cwd` there. Without `--cwd`, consult runs in the current directory.
 
+A spec is a path, relative to where you run the script, not a repository name:
+
+```bash
+bash scripts/pair_stage.sh /tmp/stage-x ~/Projects/api@origin/main:src,tests \
+  ~/Projects/infra@origin/main:modules/dns "file:$HOME/.claude/plans/x.md"
+bash scripts/pair_stage.sh /tmp/stage-skill "file:$HOME/.claude/skills/foo" "file:/tmp/foo-evals/outputs"
+```
+
+`--out-dir <dir>` copies the answer (and its meta.json) next to the rest of your
+evidence and prints `COPY=`; the run folder stays under `~/.cache/pair-intelligence`.
+
 ## Non-code documents
 
 A contract, a policy, a pitch or a research write-up is consulted the same way,
@@ -88,6 +129,12 @@ and it worked well in practice (11 of 11 findings held up on a legal review):
 - Stage the files in a scratch directory and point `--cwd` at it, so the other
   model cannot wander into unrelated private files. Ask the user before sending
   personal or legal material to another vendor.
+- **Reviewing writing** (drafts, a skill's prose, a message): an editor role, the
+  brief in the user's own words, then per draft a verdict with the exact
+  replacement text, then any conflict between instructions. A style opinion
+  ("reads as machine rhythm") is a claim like any other: check it against the
+  brief, which may ask for exactly that. When the review tests a skill, stage the
+  outputs with and without it, so the reviewer can tell what the skill caused.
 
 ## After the answer
 

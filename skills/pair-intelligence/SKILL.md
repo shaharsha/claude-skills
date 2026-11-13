@@ -23,9 +23,10 @@ Also worth it: your own recommendation, before you present it to the user.
 
 Not worth it: work still changing, anything the tests already settle, a question
 you can answer by reading the code yourself, and mechanical commits (lint, a
-re-stamp, an unused import): read those diffs yourself. A small config or docs
-change gets the short template at medium effort and one round, not the full
-review (see `references/review.md`).
+re-stamp, an unused import): read those diffs yourself. A config or docs change,
+or a few lines that change no logic, takes the short path at the top of
+`references/review.md` (the `## Mode: small change` template, medium effort);
+any change to logic gets a full round 1 at high effort.
 
 ## Pick the mode
 
@@ -69,12 +70,14 @@ Models, flags and traps per engine: `references/engines.md`.
    heredoc (`cat > /abs/prompt.md <<'EOF'`) so the shell changes nothing in it,
    shaped as the mode's file says. In every mode, give facts, constraints and the question, and withhold your
    own answer, lean or confidence: a reviewer told "this is fine" finds less.
-2. **Run it** with your harness's own background mode, one that waits for the
-   command and returns its exit code, not a shell `&`: a `( ... ) &` job reports
-   done at once and its exit code is lost. Codex usually answers in 1 to 10 minutes,
-   Gemini takes longer (defaults: 20 minutes for a Gemini consult, 30 for a
-   review); over a large file or a multi-repo stage, give Gemini
-   `--timeout 1500` or more. The scripts are in this skill's folder,
+2. **Run it outside your harness's own sandbox** (an engine's sandbox cannot start
+   inside another one), with the harness's own background mode, one that waits
+   for the command and returns its exit code, not a shell `&`: a `( ... ) &` job
+   reports done at once and its exit code is lost. Codex usually answers in 1 to
+   10 minutes, Gemini takes longer (defaults: 20 minutes for a Gemini consult, 30
+   for a review). **Gemini over a large file or a multi-repo stage: always in the
+   background, with `--timeout 1500` or more**; a foreground wait hits a
+   harness's 10-minute cap (2026-11-12). The scripts are in this skill's folder,
    `~/.claude/skills/pair-intelligence/scripts/`:
 
    ```bash
@@ -86,19 +89,22 @@ Models, flags and traps per engine: `references/engines.md`.
    `--name` / `--resume` (a resumed session keeps its engine, mode and
    directory; browse sessions are not resumable), `--domains` (a live browser,
    in any mode), `--runnable` (Codex may run tests in a disposable copy), `--web`,
-   `--web-budget` (Gemini: searches plus page reads), `--effort`, `--timeout`.
+   `--web-budget` (Gemini: searches plus page reads), `--effort`, `--timeout`,
+   `--out-dir` (a copy of the answer beside your evidence), `--deny-read`
+   (a folder no model may read; the standing list is
+   `~/.config/pair-intelligence/deny-read`).
    `--help` lists the rest. To show the model other repositories or another
    ref, stage them first with `bash scripts/pair_stage.sh` (see `consult.md`). After an agy or codex
    upgrade, run `bash scripts/pair.sh --selftest` (a few cents of live checks).
 
-   If your shell tool runs commands inside its own sandbox, run these scripts
-   outside it: an engine's sandbox cannot start inside another one, and the
-   engine still enforces read-only itself.
+   The engine still enforces read-only itself outside your sandbox.
 3. **Check it ran.** `pair.sh`: exit 0 with `STATUS=ok`, then open the `ANSWER=`
    file. `codex_review.sh`: exit 0, then open the `REVIEW_MD=` file. `READS=0`
    (exit 72, `STATUS=unread`) means the model read no file and answered from your
    prompt alone. READS counts read commands, not files: one `cat a b` is 1. A
-   Gemini run also prints `TOKENS=` (what it costs: `references/engines.md`). Either way,
+   Gemini run also prints `TOKENS=` (what it costs: `references/engines.md`), and
+   `GIT=off` when it could not read git history: it then saw only the working
+   tree, so stage the ref you meant (`pair_stage.sh`). Either way,
    confirm the answer shows the model reached the material: a file and line, a
    quote, a URL, or for an image, measurements and quoted on-screen text. A
    brainstorm round with no source material shows it in the answer itself. A
@@ -169,11 +175,14 @@ before you fix it. Check the extent of a confirmed finding (it often names four 
 five cases), judge the suggested remedy separately from the finding, and read the
 model's notes, not only its conclusions. Grep every quote it attributes to a file
 (Gemini has invented some), and verify numbers and URLs: a citation can be wrong
-while the claim is right, and the other way round. Watch for two pulls in yourself: deferring to the other
+while the claim is right, and the other way round. A quote or number taken from
+the live web is a claim too: open the page (on 2026-11-10 each engine misquoted a
+vendor page once). Watch for two pulls in yourself: deferring to the other
 model's confidence, and defending your own work.
 
 Report a verdict table, keep the other model's claims labelled apart from your own
-view, and ask before changing anything.
+view, and ask before changing anything, unless the user or your brief already said
+what to do with the findings (a brief that carries the go to fix and merge).
 
 ## Stopping
 
@@ -183,8 +192,10 @@ Set the stopping rule before the first answer arrives.
   real high-severity finding blocks; the same class of high finding twice means
   redesign. Every fix to a round's findings gets a fix-delta round of its own,
   however small: those rounds do not count toward the cap, so no byte you merge
-  goes unreviewed (if one still did, say so in the PR). Full rounds run at `high`
-  effort; only fix-delta rounds drop to `medium`.
+  goes unreviewed (if one still did, say so in the PR). A fix-delta round blocks
+  only on medium and above; its lows go in the PR body. More than three fix-delta
+  rounds in a row means step back. Full rounds run at `high` effort; only
+  fix-delta rounds drop to `medium`. Details: `references/review.md`.
 - **Consult:** one round, plus one resumed follow-up if you dispute a specific claim.
 - **Ideate:** at most 3 rounds.
 - **Research and browse:** one task per run.

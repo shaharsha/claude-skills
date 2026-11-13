@@ -59,6 +59,20 @@ def die(msg, code=2):
     sys.exit(code)
 
 
+def git_off(msg):
+    """Refuse git for this run, and tell pair.sh, which warns the caller: a model
+    that cannot read history reads the working tree instead, often the wrong
+    version for a review."""
+    log = os.environ.get("PAIR_FS_LOG")
+    if log:
+        try:
+            with open(log, "a") as fh:
+                fh.write("git-off: %s\n" % msg)
+        except OSError:
+            pass
+    die(msg + "; pair-fs git is off for this run")
+
+
 def inside(full, root):
     return full == root or full.startswith(root + os.sep)
 
@@ -256,9 +270,12 @@ GIT_VALUE = re.compile(r"^(--max-count|--unified|--since|--until|--after|--befor
 # name the user chose (a branch, a remote, a driver), and matching it refused a
 # repository whose branch name held "driver" or "helper" (2026-11-04, a
 # branch.<name>.merge key).
+# core.hooksPath is not among them: no command pair-fs runs fires a hook, and
+# base_cmd points it at /dev/null anyway. Husky and the like set it, and refusing
+# it turned git off for such repositories (2026-11-11, the torque repo).
 RISKY_SECTIONS = {"include", "includeif", "alias", "uploadpack", "pager"}
 RISKY_VARIABLE = re.compile(r"program|command|helper|pager|editor|driver|fsmonitor|textconv|showsignature|"
-                            r"alternate|hookspath|askpass|gitproxy|external|uploadpack|receivepack")
+                            r"alternate|askpass|gitproxy|external|uploadpack|receivepack")
 
 
 def risky_config(key):
@@ -290,13 +307,12 @@ def git_toplevel():
             top = os.path.realpath(out.strip())
             # History covers the whole repository; a root inside it would leak the rest.
             if not any(inside(top, root) for root in ROOTS):
-                die("git history covers the whole repository at %s, wider than the folders you may read; "
-                    "pair-fs git is off for this run" % top)
+                git_off("git history covers the whole repository at %s, wider than the folders you may read" % top)
             rc, cfg, _ = run([git, "-C", top, "config", "--list", "--includes", "--name-only"], top, GIT_ENV)
             risky = sorted({k for k in cfg.split() if risky_config(k)})
             if risky:
-                die("this repository's git config sets %s, which can make git run a program; "
-                    "pair-fs git is off for it" % ", ".join(risky[:5]))
+                git_off("this repository's git config sets %s, which can make git run a program"
+                        % ", ".join(risky[:5]))
             return git, top
     die("none of the readable folders is a git repository")
 

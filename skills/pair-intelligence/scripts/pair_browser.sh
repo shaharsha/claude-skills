@@ -296,6 +296,7 @@ CLIENT
   CODEX_BROKER_TIER=(-c 'default_permissions="pair_browse"' -c "permissions.pair_browse.extends=\"$PB_BASE_PROFILE\""
     -c 'permissions.pair_browse.network.enabled=true'
     -c "permissions.pair_browse.network.unix_sockets={\"$BROKER_SOCK\"=\"allow\"}" --enable network_proxy)
+  [[ -n "${PAIR_DENY_TABLE:-}" ]] && CODEX_BROKER_TIER+=(-c "permissions.pair_browse.filesystem=$PAIR_DENY_TABLE")
   cp "$SKILL_DIR/scripts/pair_preflight.py" "$PB_DIR/host/preflight.py"
   if ! (cd "$PB_SANDBOX_CWD" && codex sandbox "${CODEX_BROKER_TIER[@]}" /usr/bin/python3 -I "$PB_DIR/host/preflight.py" \
           "$BROKER_SOCK" "$SOCK" "$PB_CHECK_DIR") > "$PB_DIR/preflight.json" 2> "$PB_DIR/preflight.log"; then

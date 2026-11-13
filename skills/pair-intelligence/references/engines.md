@@ -11,7 +11,7 @@ Tested on codex-cli 0.165.0, signed in with a ChatGPT plan.
   the ChatGPT plan's limits, not an API bill.
 - **What the script passes on every call:** `--json` (events on stdout), `-o` (the
   final answer), `--skip-git-repo-check`, the sandbox as both `-s` and
-  `-c sandbox_mode=...`, `approval_policy="never"`, `web_search`
+  `-c sandbox_mode=...` (with denied folders, a permission profile and no `-s`), `approval_policy="never"`, `web_search`
   (`disabled` / `cached` / `live`), CLAUDE.md as a fallback instruction file, and
   the prompt on stdin.
 - **`--ignore-user-config`, on every call (codex_review.sh too).** This machine's
@@ -30,6 +30,29 @@ Tested on codex-cli 0.165.0, signed in with a ChatGPT plan.
   `--selftest` checks that after every upgrade. `codex_review.sh` also sets
   `web_search` on every call (off unless `--web`/`--search`): left unset, Codex
   gives the reviewer its web tool by default.
+- **Folders no model may read** (`--deny-read`, `~/.config/pair-intelligence/deny-read`,
+  `PAIR_DENY_READ`). The read-only sandbox reads the whole disk, and on
+  2026-11-12 a reviewer pointed at one repository opened a benchmark answer-key
+  folder beside it. With a list, the scripts swap `sandbox_mode` for a
+  permission profile (`default_permissions="pair_review"`, extending
+  `:read-only` or, for `--runnable`, `:workspace` with its network off) whose
+  `filesystem` table denies each path, given and resolved, and pass no `-s`:
+  in codex-cli 0.165 `-s` turns a profile off. Before Codex starts, `codex
+  sandbox` with the same tier must be refused each path that exists, or the run
+  stops (exit 71). Tested 2026-11-13: cat, ls, stat, cp -r, git -C, a symlink
+  into the folder and the `/private` spelling were all refused, and a live
+  `codex exec` got "Operation not permitted" through a symlink. Codex's prompt
+  names the denied paths (PR #23924), so it knows they exist. A denied path
+  inside a git repository denies that repository's git directory too (history,
+  reflogs and stray objects can all hold the file), and a run in that repository
+  is refused: keep answer keys outside the repositories you review. Gemini reads
+  under `--cwd` and each `--image`: one that overlaps a denied path is refused
+  (exit 64), and so is `--runnable` on a repository that holds one.
+- **A cut turn returns no text.** A Codex consult at high effort over two
+  repositories was cut at 600 s with nothing (2026-11-13), so a consult at
+  `high` or above now defaults to 1200 s.
+- **Log noise:** `git: error: couldn't create cache file '/tmp/xcrun_db-...'`
+  lines in a Codex log come from the read-only sandbox and are harmless.
 - **Reads are counted.** Codex reads files only through shell commands, so
   `pair.sh` prints `READS=` (commands it ran) and stops a review or consult
   that read nothing in a folder with something to read: `STATUS=unread`, exit
@@ -156,6 +179,9 @@ Tested on the Antigravity CLI (`agy`) 1.4.12 with a Gemini API key, 2026-11-02.
 - **Models:** the id carries the effort: `gemini-4-argon-high` (the script adds
   `-<effort>` to `--model gemini-4-argon`), `gemini-3.8-flash-low`,
   `gemini-3.1-pro-high`. `agy models` lists them.
+- **Run folders pile up** under `~/.cache/pair-intelligence` (273 by
+  2026-11-13). To prune: `find ~/.cache/pair-intelligence -mindepth 1 -maxdepth 1
+  -type d -mtime +14 -exec rm -rf {} +` (sessions.json stays).
 - **Cost:** a Gemini run prints `TOKENS=in:N,out:N,cached:N`, and `out` includes
   thinking (the sums matched the billing export to the token on 2026-11-04 and
   11-05). Argon's list price per 1M tokens is $4 input, $20 output and $0.20
@@ -164,7 +190,8 @@ Tested on the Antigravity CLI (`agy`) 1.4.12 with a Gemini API key, 2026-11-02.
   percentile $5.66, highest $10.53; the median read 3.3M input and cached
   tokens) and a consult $1.08 ($3.08). Several engines or rounds per document
   multiply it: a five-page reference panel across sessions came to about
-  $90-104.
+  $90-104. A Gemini fix-delta round still reads broadly (340K-950K input
+  tokens for a three-finding delta, 2026-11-10): run fix-delta rounds on Codex.
 - **What the script sets up:**
   - a private HOME (`~/.local/share/pair-intelligence/agy-home`, `PAIR_AGY_HOME`)
     so your agy settings, login, hooks and MCP servers stay out;
@@ -225,10 +252,19 @@ Traps, each seen in testing:
   lines", Argon wrote 16 items and about 40 KB (2026-11-05), as Google says it
   does. Read the answer file rather than printing it whole, and shape what you
   need with the prompt's structure, not a count.
-- **A stream timeout or the output limit can end a turn early.** On 2026-11-07
-  one review ended on an API stream timeout and its rerun completed, and a batch
-  that asked for many labels in one answer ran into the output limit. Rerun
-  once after a stream timeout; split a batch that hits the limit.
+- **A dropped connection can end a turn early** ("stream idle timeout", "read:
+  operation timed out", "cannot rewind body after connection loss"; four runs,
+  2026-11-07 to 11-12). The script continues the same conversation once after
+  10 s, on either route, if time is left. When the answer's step had finished
+  before the drop, the answer is whole and the run reports `STATUS=ok` (two
+  runs came back "failed" with a complete 31-41 KB answer before this). A batch
+  that asks for many labels in one answer can hit the output limit: split it.
+- **`GIT=off`** means pair-fs refused git for the run, and Gemini saw the
+  working tree only: on 2026-11-11 it read main instead of the PR head and all
+  11 answers came back unsure. pair-fs refuses a repository whose config names a
+  program git could run; `core.hooksPath` (husky) is no longer among them,
+  since no command it runs fires a hook. For a ref or a diff, stage it with
+  `pair_stage.sh` or check it out in a worktree.
 
 - **A project as workspace runs its code.** agy loads `.agents/` hooks, MCP
   servers, rules and agents from its workspace and each parent up to the repo
