@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Agent skills by Shahar Shavit for Claude Code, Codex, Cursor, and other Agent-Skills-compatible harnesses",
-    "version": "1.17.0"
+    "version": "1.18.0"
   },
   "plugins": [
     {
@@ -92,6 +92,16 @@
         "./skills/prompt-engineer",
         "./skills/writing-project-instructions",
         "./skills/reviving-sessions"
+      ]
+    },
+    {
+      "name": "prompts-and-second-opinions",
+      "description": "Just two skills: the prompt-engineering reference for AI agents on Claude, GPT, Gemini, Kimi, and Grok APIs, and a second model (OpenAI Codex or Google Gemini) to review a plan, diff, or prompt before it lands",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/prompt-engineer",
+        "./skills/pair-intelligence"
       ]
     },
     {
