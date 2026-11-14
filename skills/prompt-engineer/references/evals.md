@@ -102,6 +102,12 @@ When using LLMs to evaluate outputs (LLM-as-judge), the prompt design differs fr
 
 A gate classifier is a judge that runs before an action instead of after an output: it allows or blocks a tool call an agent is about to make. Two published designs show how to build one: Anthropic's *How we built Claude Code auto mode* (anthropic.com/engineering), and the guardian review prompts in OpenAI's open-source Codex CLI (`prompts/templates/guardian/` on GitHub). When to ask and who can approve are covered in `agent-harness-patterns.md`.
 
+- **Put cheap tiers in front of the classifier.** In Anthropic's design most calls never reach it:
+  - a fixed allowlist of tools that can't change state (file reads, searches) runs first, with the user's own allow rules;
+  - file edits inside the project come next, since version control makes them reviewable;
+  - only the rest goes to the classifier: shell commands, web fetches, file operations outside the project, subagent spawns.
+
+  On entering auto mode it drops the user's broad allow rules that grant arbitrary code execution (blanket shell access, a wildcarded script interpreter). Left active, they would keep the most dangerous commands away from the classifier.
 - **Choose what the classifier sees.** Anthropic shows its classifier only the user's messages and the bare tool-call payloads.
   - It strips the agent's prose so the agent "can't talk the classifier into making a bad call".
   - It strips tool results because they are where injected text enters.
@@ -131,6 +137,7 @@ A gate classifier is a judge that runs before an action instead of after an outp
   - Anthropic's first stage is a single-token filter told to err toward blocking; it blocked 8.5% of benign actions.
   - Only what it flags goes to a second stage, with the same prompt except a final instruction to reason; that brings false blocks down to 0.4%.
   - Because the inputs match, the second stage reads almost entirely from the cache.
+  - The post describes this on Sonnet 4.6. On a model that thinks natively, the second stage's reasoning comes from thinking: ask for the verdict, not for written reasoning (*Writing Evaluation / Judge Prompts* above). A first stage with no reasoning needs a model that can answer without thinking, such as Haiku 5.5 with thinking disabled (`claude-sonnet-haiku.md`).
   - A verdict in the first output token parses fast, but only fits two cases:
     - a first stage whose flags go to a reasoning pass. Codex's first-pass reviewer is one: it runs alongside the agent without blocking, and a "high" verdict turns on blocking review for later actions;
     - a model that thinks before it answers.
@@ -138,6 +145,7 @@ A gate classifier is a judge that runs before an action instead of after an outp
     Otherwise the model commits before it reasons (SKILL.md, *Output Format*).
 - **Measure both error rates on real data.** Measure false blocks on real traffic, and misses on a set of real overeager actions taken from transcripts. Anthropic's pipeline misses 17% of real overeager actions. Most misses saw the danger but misjudged whether the user's consent covered this action. Prompt changes didn't fix that at an acceptable cost, so keep the riskiest actions behind hard rules in code.
 - **Return a denial the agent can act on.** Send the block back as a tool result with its reason and an instruction to find a safer path, not to route around it. Cap repeated denials, then escalate to a human: Anthropic stops at 3 consecutive or 20 total.
+- **Screen what the agent reads, too.** The classifier never sees tool results, so injected text can still steer the agent itself. Anthropic adds a probe on the input side: when a tool result looks like an injection attempt, it puts a warning next to the result that tells the agent to go back to what the user asked.
 - **Check hand-offs too.** A subagent sees the orchestrator's instruction as the user's request. Anthropic runs the same gate on the subagent's own calls, checks the task at delegation, and reviews the subagent's actions at return, in case content it read compromised it.
 - **Cheaper gates:** a calibrated decision model (see *Judge repeatability* above) or a framework guard such as LangChain's `AutoModeMiddleware` (`langgraph.md`) can serve as the first stage, with a threshold set on your own labeled actions.
 

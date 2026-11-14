@@ -83,6 +83,7 @@ There's nothing to run — this is a reference library the agent loads. It fires
 | `references/use-cases.md` | Task playbooks: coding and code review, app builders, research/RAG, data/SQL, extraction, multimodal, chat assistants, document agents, voice agents, browser agents |
 | `references/model-selection.md` | Intelligence, cost per task, agent rankings, false-premise detection, routing math |
 | `templates/` | Reusable prompt scaffolds |
+| `SOURCES.md` | For maintainers: where each rule in the agent-harness guidance came from (official docs, vendors' open-source prompts, and public collections of extracted prompts), with commits and line references. The research record behind it is in [`docs/research/prompt-engineer/`](../../docs/research/prompt-engineer/) |
 
 ## The rules that carry the most weight
 
