@@ -25,7 +25,7 @@ Returns:
 
 [Caveats/limitations — rate limits, data freshness, error conditions, etc.]
 
-[Cost or latency, if notable. Fails when X; then do Y. Retry: transient (once, and only if repeating is safe: read-only, idempotent, or checked first) / fix the input / never (a denial).]
+[Cost or latency, if notable. Fails when X; then do Y. Retry: transient (once, and only if repeating is safe: read-only, idempotent, or checked first) / fix the input / not while a denial stands.]
 [Async tools only: how completion arrives. If the harness notifies, say there is no need to poll; if not, name the status call and how often to check.]
 ```
 
