@@ -77,7 +77,7 @@ Each links to its own README — what it does, why it exists, install, and the g
 
 | Skill | What it does |
 |---|---|
-| [prompt-engineer](skills/prompt-engineer) | Prompt and context engineering for the Claude / GPT / Gemini / Kimi / Grok APIs — system prompts, tool descriptions, provider differences, judge-prompt design. |
+| [prompt-engineer](skills/prompt-engineer) | Prompt and context engineering for the Claude / GPT / Gemini / Kimi / Grok APIs — system prompts, tool descriptions, provider differences, agent harness patterns (approvals, modes, async work, compaction), judge-prompt design. |
 | [writing-project-instructions](skills/writing-project-instructions) | Author or audit a `CLAUDE.md` / `AGENTS.md`, with the falsifiability test and the loading semantics people usually get wrong. |
 | [reviving-sessions](skills/reviving-sessions) | Bring back sessions the Claude desktop app cannot see — adopt CLI and headless sessions into it, fix renames, recover stranded transcripts, and read what an ended session said. |
 

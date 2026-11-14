@@ -1,6 +1,6 @@
 # Tool Description Template
 
-Every tool description must cover these elements. Minimum 3-4 sentences for full models, 5-6 for budget models.
+Every tool description must cover these elements. Count coverage across the description, the parameter descriptions, enums and the tool's errors, not sentences: Anthropic asks for at least 3-4 sentences per description (more for complex tools), and budget models need more spelled out (5-6).
 
 ---
 
@@ -24,6 +24,9 @@ Returns:
     [What it does NOT return — to prevent hallucinated assumptions.]
 
 [Caveats/limitations — rate limits, data freshness, error conditions, etc.]
+
+[Cost or latency, if notable. Fails when X; then do Y. Retry: transient (once, and only if repeating is safe: read-only, idempotent, or checked first) / fix the input / never (a denial).]
+[Async tools only: how completion arrives. If the harness notifies, say there is no need to poll; if not, name the status call and how often to check.]
 ```
 
 ---
@@ -61,8 +64,12 @@ Why this works: covers all 6 elements (what/when/when-not/params/returns/caveats
 - [ ] "When NOT to use" prevents common misuse and names alternatives
 - [ ] Every parameter has type, meaning, and constraints
 - [ ] Return value is specific about what's included AND excluded
-- [ ] Total description is at least 3-4 sentences (coverage of the six elements, not padding; trim hand-holding on frontier models)
+- [ ] The six elements are covered across the description and schema (Anthropic: at least 3-4 description sentences; no padding; trim hand-holding on frontier models)
+- [ ] Failures are covered: what the tool fails on, the next step, and whether a retry can help
+- [ ] Fields a person reads (a command's summary, an approval reason) state a length and show an example
+- [ ] Anything the UI adds itself (for example an "Other" option on a question) is named, so the model doesn't add it twice
+- [ ] Parameters that multiply cost (model, effort, fan-out) are used only when the user asked for them
 - [ ] The model isn't asked to fill arguments your code already knows (pass them in code instead)
 - [ ] Invalid combinations are impossible by schema (enums, required fields), not just forbidden in prose
-- [ ] Tool-specific guidance lives here and is NOT repeated in the system prompt
+- [ ] Each piece of guidance is stated once: here, or (on GPT) the routing between tools in the system prompt, as OpenAI's function-calling guide places it
 - [ ] If the tool must be called (Claude Opus 5.5 / Sonnet 5.5 / Fable 5.1 / 5.2 have no forced `tool_choice`), the prompt says when it applies
