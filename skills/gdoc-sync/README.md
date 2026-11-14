@@ -33,8 +33,10 @@ Google Docs imports markdown natively, which handles most of the conversion. It 
 
 ```bash
 /plugin marketplace add shaharsha/claude-skills
-/plugin install documents-and-decks@shaharsha-skills
+/plugin install gdoc-sync@shaharsha-skills
 ```
+
+That installs only this skill. For the whole `documents-and-decks` bundle, run `/plugin install documents-and-decks@shaharsha-skills` instead.
 
 **Any other harness**
 

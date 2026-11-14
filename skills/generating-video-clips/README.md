@@ -30,8 +30,10 @@ All four are Python standard library plus ffmpeg. No SDKs.
 
 ```bash
 /plugin marketplace add shaharsha/claude-skills
-/plugin install video-production@shaharsha-skills
+/plugin install generating-video-clips@shaharsha-skills
 ```
+
+That installs only this skill. For the whole `video-production` bundle, run `/plugin install video-production@shaharsha-skills` instead.
 
 **Any other harness**
 

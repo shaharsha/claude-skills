@@ -30,8 +30,10 @@ This skill fills the gap: every slide is a custom-rendered 16:9 image, but the r
 
 ```bash
 /plugin marketplace add shaharsha/claude-skills
-/plugin install documents-and-decks@shaharsha-skills
+/plugin install presentation-generator@shaharsha-skills
 ```
+
+That installs only this skill. For the whole `documents-and-decks` bundle, run `/plugin install documents-and-decks@shaharsha-skills` instead.
 
 **Any other harness**
 

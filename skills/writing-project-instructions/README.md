@@ -40,8 +40,10 @@ existing?  ──▶ score every line against the falsifiability test
 
 ```bash
 /plugin marketplace add shaharsha/claude-skills
-/plugin install building-agents@shaharsha-skills
+/plugin install writing-project-instructions@shaharsha-skills
 ```
+
+That installs only this skill. For the whole `building-agents` bundle, run `/plugin install building-agents@shaharsha-skills` instead.
 
 **Any other harness**
 

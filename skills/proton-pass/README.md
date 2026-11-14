@@ -33,8 +33,10 @@ Proton Pass vaults ──pass-cli──▶ list / view / create / update / delet
 
 ```bash
 /plugin marketplace add shaharsha/claude-skills
-/plugin install utilities@shaharsha-skills
+/plugin install proton-pass@shaharsha-skills
 ```
+
+That installs only this skill. For the whole `utilities` bundle, run `/plugin install utilities@shaharsha-skills` instead.
 
 **Any other harness**
 

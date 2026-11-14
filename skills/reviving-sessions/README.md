@@ -38,8 +38,10 @@ the desktop app's index              ~/.claude/projects/*/*.jsonl
 
 ```bash
 /plugin marketplace add shaharsha/claude-skills
-/plugin install building-agents@shaharsha-skills
+/plugin install reviving-sessions@shaharsha-skills
 ```
+
+That installs only this skill. For the whole `building-agents` bundle, run `/plugin install building-agents@shaharsha-skills` instead.
 
 **Monorepo path:** `skills/reviving-sessions/`
 

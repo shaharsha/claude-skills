@@ -40,8 +40,10 @@ One Python file, no dependencies: it uses `google-auth` if it is installed, and 
 
 ```bash
 /plugin marketplace add shaharsha/claude-skills
-/plugin install documents-and-decks@shaharsha-skills
+/plugin install gsheets@shaharsha-skills
 ```
+
+That installs only this skill. For the whole `documents-and-decks` bundle, run `/plugin install documents-and-decks@shaharsha-skills` instead.
 
 Or install the whole monorepo:
 

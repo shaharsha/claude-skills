@@ -36,8 +36,10 @@ file.docx/.pptx/.xlsx ──▶ stage into ~/Downloads ──▶ real Word/Power
 
 ```bash
 /plugin marketplace add shaharsha/claude-skills
-/plugin install utilities@shaharsha-skills
+/plugin install office-render@shaharsha-skills
 ```
+
+That installs only this skill. For the whole `utilities` bundle, run `/plugin install utilities@shaharsha-skills` instead.
 
 **Any other harness**
 

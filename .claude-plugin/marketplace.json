@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Agent skills by Shahar Shavit for Claude Code, Codex, Cursor, and other Agent-Skills-compatible harnesses",
-    "version": "1.18.0"
+    "version": "1.19.0"
   },
   "plugins": [
     {
@@ -95,16 +95,6 @@
       ]
     },
     {
-      "name": "prompts-and-second-opinions",
-      "description": "Just two skills: the prompt-engineering reference for AI agents on Claude, GPT, Gemini, Kimi, and Grok APIs, and a second model (OpenAI Codex or Google Gemini) to review a plan, diff, or prompt before it lands",
-      "source": "./",
-      "strict": false,
-      "skills": [
-        "./skills/prompt-engineer",
-        "./skills/pair-intelligence"
-      ]
-    },
-    {
       "name": "utilities",
       "description": "Domain availability via Namecheap API; rendering Microsoft Office files (.docx/.pptx/.xlsx) to PDF/images via the real Office apps on macOS; viewing video files (mp4/mov) by extracting the fewest frames that answer the question; managing credentials and secrets via the Proton Pass CLI (pass-cli); plus fetching JavaScript-rendered or bot-blocked web pages that WebFetch can't, via the Tavily Extract API",
       "source": "./",
@@ -124,6 +114,240 @@
       "strict": false,
       "skills": [
         "./skills/generating-video-clips",
+        "./skills/producing-animated-episodes"
+      ]
+    },
+    {
+      "name": "gdoc-sync",
+      "description": "Only the gdoc-sync skill. Push a local .md to an existing Google Doc, fixing what Google's converter breaks (#anchor links, cross-doc refs, 1500pt images, missing RTL), re-applying the styling each push resets, and refusing to overwrite edits made in the Doc since the last sync.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/gdoc-sync"
+      ]
+    },
+    {
+      "name": "gslides-sync",
+      "description": "Only the gslides-sync skill. The same shape for .pptx → an existing Google Slides: native pageObjectId links, scaled images, RTL per text shape, warnings for what the import drops, and the command that restores narration videos a push deleted.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/gslides-sync"
+      ]
+    },
+    {
+      "name": "gsheets",
+      "description": "Only the gsheets skill. Sheets API v4 CLI: read as records, find rows, compare-and-set writes for shared Sheets, one-call table layout, validation, inspect and export, plus a raw batchUpdate with A1 ranges. Runs on a bare python3.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/gsheets"
+      ]
+    },
+    {
+      "name": "presentation-generator",
+      "description": "Only the presentation-generator skill. 16:9 PDF + PPTX decks where every slide is a custom AI-rendered image. Style locks globally; composition varies per slide.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/presentation-generator"
+      ]
+    },
+    {
+      "name": "elevenlabs-tts",
+      "description": "Only the elevenlabs-tts skill. Speech with ElevenLabs Eleven v4 in any language — short spoken briefings (\"explain this to me as an MP3\"), v4 audio-tag direction, consistent 429-safe batches, a speech-to-text check that no tag was read aloud, and forced-alignment timings for subtitles.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/elevenlabs-tts"
+      ]
+    },
+    {
+      "name": "elevenlabs-stt",
+      "description": "Only the elevenlabs-stt skill. Transcripts and subtitles with ElevenLabs Scribe v3 in any language: meetings, talks and YouTube links into timestamped, speaker-labelled transcript.md and clean SRT, keyterms and a clean mode that keep English terms in Latin script inside Hebrew speech, and live transcription over the Scribe v3 Live WebSocket.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/elevenlabs-stt"
+      ]
+    },
+    {
+      "name": "narrating-pptx",
+      "description": "Only the narrating-pptx skill. Per-slide ElevenLabs narration embedded in a pptx, with autoplay authored by real PowerPoint — the one method that doesn't corrupt the file — or added to a Google Slides deck as autoplaying Drive videos.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/narrating-pptx"
+      ]
+    },
+    {
+      "name": "deck-to-video",
+      "description": "Only the deck-to-video skill. Slides + narration → a self-playing mp4 with a progress bar, countdown, and slide counter, baked with PIL because ffmpeg's animated drawbox silently renders full.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/deck-to-video"
+      ]
+    },
+    {
+      "name": "self-presenting-decks",
+      "description": "Only the self-presenting-decks skill. The orchestration map over the whole chain, plus the update matrix for what to rebuild when something changes.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/self-presenting-decks"
+      ]
+    },
+    {
+      "name": "writing-plainly",
+      "description": "Only the writing-plainly skill. Messages, emails, updates, PR descriptions and tickets that people read to the end and that don't read as AI: one recipe, a shape per genre, Slack and email specifics, Hebrew rules, and a checker for the mechanical tells.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/writing-plainly"
+      ]
+    },
+    {
+      "name": "brand-system",
+      "description": "Only the brand-system skill. A production-grade brand book: 20-section BRAND.md, printable PDF sibling, and matched tokens.css (Tailwind v4) + tokens.json (W3C DTCG). WCAG 2.2 AA audited at authoring time.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/brand-system"
+      ]
+    },
+    {
+      "name": "brand-assets",
+      "description": "Only the brand-assets skill. The mechanical-pixel sibling: vectorize, finalize-svg, rasterize, icon-pack, colour-audit. Bash + Python stdlib.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/brand-assets"
+      ]
+    },
+    {
+      "name": "image-generation",
+      "description": "Only the image-generation skill. Logos, icons, mockups, and product shots via OpenAI GPT Image 2.5 (Sunburst for finals, Flare for drafts) or Gemini Nano Banana — each prompted in its provider's native grammar, with native transparent PNGs.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/image-generation"
+      ]
+    },
+    {
+      "name": "prompt-engineer",
+      "description": "Only the prompt-engineer skill. Prompt and context engineering for the Claude / GPT / Gemini / Kimi / Grok APIs — system prompts, tool descriptions, provider differences, agent harness patterns (approvals, modes, async work, compaction), judge-prompt design.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/prompt-engineer"
+      ]
+    },
+    {
+      "name": "writing-project-instructions",
+      "description": "Only the writing-project-instructions skill. Author or audit a CLAUDE.md / AGENTS.md, with the falsifiability test and the loading semantics people usually get wrong.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/writing-project-instructions"
+      ]
+    },
+    {
+      "name": "tech-design-doc",
+      "description": "Only the tech-design-doc skill. RFCs, ADRs, KEPs, and partner-mode TDRs, triaged to the right format first and audited against documented anti-patterns.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/tech-design-doc"
+      ]
+    },
+    {
+      "name": "namecheap-domains",
+      "description": "Only the namecheap-domains skill. Domain availability via Namecheap's API — one domain, batches of 50, or TLD sweeps, with premium and EAP fees surfaced.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/namecheap-domains"
+      ]
+    },
+    {
+      "name": "office-render",
+      "description": "Only the office-render skill. Render .docx / .pptx / .xlsx to PDF and page images using the real Office apps on macOS — pixel-faithful, unlike LibreOffice.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/office-render"
+      ]
+    },
+    {
+      "name": "viewing-videos",
+      "description": "Only the viewing-videos skill. How an agent sees a video: the fewest ffmpeg frames that answer the question, triaged on a contact sheet.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/viewing-videos"
+      ]
+    },
+    {
+      "name": "proton-pass",
+      "description": "Only the proton-pass skill. Credentials and secrets from the CLI via Proton Pass, with never-print-secrets guardrails.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/proton-pass"
+      ]
+    },
+    {
+      "name": "excalidraw-diagrams",
+      "description": "Only the excalidraw-diagrams skill. Architecture and flow diagrams on an Excalidraw+ canvas with real tech icons, plus the MCP quirks that silently break a diagram.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/excalidraw-diagrams"
+      ]
+    },
+    {
+      "name": "tavily-extract",
+      "description": "Only the tavily-extract skill. Fetch the JS-rendered SPAs and 403-blocked hosts a normal fetcher can't, and flag soft 404s.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/tavily-extract"
+      ]
+    },
+    {
+      "name": "pair-intelligence",
+      "description": "Only the pair-intelligence skill. Consult a second model (Codex or Gemini) to review, advise, brainstorm, research or browse, then judge every claim against the source. Replaces codex-review.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/pair-intelligence"
+      ]
+    },
+    {
+      "name": "reviving-sessions",
+      "description": "Only the reviving-sessions skill. Bring back sessions the Claude desktop app cannot see — adopt CLI and headless sessions into it, fix renames, recover stranded transcripts, and read what an ended session said.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/reviving-sessions"
+      ]
+    },
+    {
+      "name": "generating-video-clips",
+      "description": "Only the generating-video-clips skill. Still to short clip with Gemini Omni, takes reviewed on frame sheets, and mouths lip-synced to your own dialogue with Sync 3 on fal, one speaker per part, frame-exact.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/generating-video-clips"
+      ]
+    },
+    {
+      "name": "producing-animated-episodes",
+      "description": "Only the producing-animated-episodes skill. A voiced, subtitled, animated, lip-synced vertical episode from photos and a script: one episode.json, one engine, human gates at every paid step, timing driven by the real dialogue.",
+      "source": "./",
+      "strict": false,
+      "skills": [
         "./skills/producing-animated-episodes"
       ]
     }

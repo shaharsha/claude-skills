@@ -37,8 +37,10 @@ URL(s) ──▶ Tavily Extract (runs the page's JS, browser-like fetch)
 
 ```bash
 /plugin marketplace add shaharsha/claude-skills
-/plugin install utilities@shaharsha-skills
+/plugin install tavily-extract@shaharsha-skills
 ```
+
+That installs only this skill. For the whole `utilities` bundle, run `/plugin install utilities@shaharsha-skills` instead.
 
 **Any other harness**
 

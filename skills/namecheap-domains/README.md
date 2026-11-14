@@ -31,8 +31,10 @@ Auto-chunks any list larger than 50 (the API's hard cap — `51+` returns `"Only
 
 ```bash
 /plugin marketplace add shaharsha/claude-skills
-/plugin install utilities@shaharsha-skills
+/plugin install namecheap-domains@shaharsha-skills
 ```
+
+That installs only this skill. For the whole `utilities` bundle, run `/plugin install utilities@shaharsha-skills` instead.
 
 **Any other harness**
 

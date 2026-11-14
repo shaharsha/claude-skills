@@ -32,8 +32,11 @@ One-off scripts rediscover each of these. This skill holds the workflow, the app
 
 ```bash
 /plugin marketplace add shaharsha/claude-skills
-/plugin install video-production@shaharsha-skills
+/plugin install producing-animated-episodes@shaharsha-skills
 ```
+
+That installs only this skill. For the whole `video-production` bundle, run `/plugin install video-production@shaharsha-skills` instead.
+
 Or link it: `ln -s "$PWD/claude-skills/skills/producing-animated-episodes" ~/.claude/skills/producing-animated-episodes`.
 
 It drives three sibling skills, which must sit next to it: [image-generation](../image-generation), [elevenlabs-tts](../elevenlabs-tts) and [generating-video-clips](../generating-video-clips).

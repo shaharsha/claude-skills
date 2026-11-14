@@ -18,8 +18,10 @@ Most "bad" design docs aren't bad at writing — they're bad at **triage**. A 20
 
 ```bash
 /plugin marketplace add shaharsha/claude-skills
-/plugin install engineering-decisions@shaharsha-skills
+/plugin install tech-design-doc@shaharsha-skills
 ```
+
+That installs only this skill. For the whole `engineering-decisions` bundle, run `/plugin install engineering-decisions@shaharsha-skills` instead.
 
 **Any other harness**
 
