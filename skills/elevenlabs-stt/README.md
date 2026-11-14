@@ -35,8 +35,10 @@ audio file ──▶ stream_live.py ──▶ wss://…/speech-to-text/realtime 
 
 ```bash
 /plugin marketplace add shaharsha/claude-skills
-/plugin install documents-and-decks@shaharsha-skills
+/plugin install elevenlabs-stt@shaharsha-skills
 ```
+
+That installs only this skill. For the whole `documents-and-decks` bundle, run `/plugin install documents-and-decks@shaharsha-skills` instead.
 
 **Any other harness**
 

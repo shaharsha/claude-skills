@@ -41,8 +41,10 @@ Keep `narration/` and every artifact as siblings next to the deck.
 
 ```bash
 /plugin marketplace add shaharsha/claude-skills
-/plugin install documents-and-decks@shaharsha-skills
+/plugin install self-presenting-decks@shaharsha-skills
 ```
+
+That installs only this skill. For the whole `documents-and-decks` bundle, run `/plugin install documents-and-decks@shaharsha-skills` instead.
 
 **Any other harness**
 

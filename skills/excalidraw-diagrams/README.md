@@ -38,8 +38,10 @@ regions/frames → containers → primary nodes → secondary nodes → labels
 
 ```bash
 /plugin marketplace add shaharsha/claude-skills
-/plugin install brand-and-visuals@shaharsha-skills
+/plugin install excalidraw-diagrams@shaharsha-skills
 ```
+
+That installs only this skill. For the whole `brand-and-visuals` bundle, run `/plugin install brand-and-visuals@shaharsha-skills` instead.
 
 **Any other harness**
 

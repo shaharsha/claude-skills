@@ -39,8 +39,10 @@ scripts.json ──▶ generate_tts.py (eleven_v4, one setting, 429-safe, manife
 
 ```bash
 /plugin marketplace add shaharsha/claude-skills
-/plugin install documents-and-decks@shaharsha-skills
+/plugin install elevenlabs-tts@shaharsha-skills
 ```
+
+That installs only this skill. For the whole `documents-and-decks` bundle, run `/plugin install documents-and-decks@shaharsha-skills` instead.
 
 **Any other harness**
 

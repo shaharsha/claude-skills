@@ -22,10 +22,49 @@ This installs all 26 skills as one plugin. Or pick a subset:
 /plugin install brand-and-visuals@shaharsha-skills      # brand-system + brand-assets + image-generation + excalidraw-diagrams
 /plugin install engineering-decisions@shaharsha-skills  # tech-design-doc + pair-intelligence
 /plugin install building-agents@shaharsha-skills        # prompt-engineer + writing-project-instructions + reviving-sessions
-/plugin install prompts-and-second-opinions@shaharsha-skills  # prompt-engineer + pair-intelligence, nothing else
 /plugin install utilities@shaharsha-skills              # namecheap-domains + office-render + viewing-videos + proton-pass + tavily-extract
 /plugin install video-production@shaharsha-skills       # generating-video-clips + producing-animated-episodes
 ```
+
+Or install one skill by its name:
+
+```bash
+/plugin install pair-intelligence@shaharsha-skills
+```
+
+<details>
+<summary>The install line for each of the 26 skills</summary>
+
+```bash
+/plugin install gdoc-sync@shaharsha-skills
+/plugin install gslides-sync@shaharsha-skills
+/plugin install gsheets@shaharsha-skills
+/plugin install presentation-generator@shaharsha-skills
+/plugin install elevenlabs-tts@shaharsha-skills
+/plugin install elevenlabs-stt@shaharsha-skills
+/plugin install narrating-pptx@shaharsha-skills
+/plugin install deck-to-video@shaharsha-skills
+/plugin install self-presenting-decks@shaharsha-skills
+/plugin install writing-plainly@shaharsha-skills
+/plugin install brand-system@shaharsha-skills
+/plugin install brand-assets@shaharsha-skills
+/plugin install image-generation@shaharsha-skills
+/plugin install prompt-engineer@shaharsha-skills
+/plugin install writing-project-instructions@shaharsha-skills
+/plugin install tech-design-doc@shaharsha-skills
+/plugin install namecheap-domains@shaharsha-skills
+/plugin install office-render@shaharsha-skills
+/plugin install viewing-videos@shaharsha-skills
+/plugin install proton-pass@shaharsha-skills
+/plugin install excalidraw-diagrams@shaharsha-skills
+/plugin install tavily-extract@shaharsha-skills
+/plugin install pair-intelligence@shaharsha-skills
+/plugin install reviving-sessions@shaharsha-skills
+/plugin install generating-video-clips@shaharsha-skills
+/plugin install producing-animated-episodes@shaharsha-skills
+```
+
+</details>
 
 ### Manual (any other harness)
 

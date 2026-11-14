@@ -43,8 +43,10 @@ targeted seek              scene-change sweep              interval sampling
 
 ```bash
 /plugin marketplace add shaharsha/claude-skills
-/plugin install utilities@shaharsha-skills
+/plugin install viewing-videos@shaharsha-skills
 ```
+
+That installs only this skill. For the whole `utilities` bundle, run `/plugin install utilities@shaharsha-skills` instead.
 
 **Any other harness**
 

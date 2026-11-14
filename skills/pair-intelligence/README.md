@@ -48,8 +48,10 @@ review runner, with schema-enforced findings and a provenance sidecar.
 
 ```bash
 /plugin marketplace add shaharsha/claude-skills
-/plugin install engineering-decisions@shaharsha-skills
+/plugin install pair-intelligence@shaharsha-skills
 ```
+
+That installs only this skill. For the whole `engineering-decisions` bundle, run `/plugin install engineering-decisions@shaharsha-skills` instead.
 
 **Any other harness**
 

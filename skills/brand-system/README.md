@@ -45,8 +45,10 @@ The skill codifies the pattern that actually survives:
 
 ```bash
 /plugin marketplace add shaharsha/claude-skills
-/plugin install brand-and-visuals@shaharsha-skills
+/plugin install brand-system@shaharsha-skills
 ```
+
+That installs only this skill. For the whole `brand-and-visuals` bundle, run `/plugin install brand-and-visuals@shaharsha-skills` instead.
 
 **Any other harness**
 
