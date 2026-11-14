@@ -32,7 +32,8 @@ Step 0c (evals, judges, failed runs): also read references/evals.md
         │
         ▼
 Step 0d (framework code → langgraph.md; a coding agent's CLAUDE.md /
-        │  AGENTS.md → the writing-project-instructions skill)
+        │  AGENTS.md → the writing-project-instructions skill;
+        │  an agent harness → agent-harness-patterns.md + a use-cases playbook)
         ▼
 universal layer (≈70%) + provider layer (≈30%)
         │
@@ -77,8 +78,9 @@ There's nothing to run — this is a reference library the agent loads. It fires
 | `references/kimi.md` | Kimi / Moonshot — K3.1 Pro's always-on thinking, fixed sampling, `reasoning_content` replay, MFJS tool schemas, host differences |
 | `references/grok.md` | Grok / xAI — Grok 4.7's encrypted reasoning, sampling values (required on xAI's API, rejected by Bedrock Converse), server-side tools (web/X search), caching keys, compaction |
 | `references/langgraph.md` | LangGraph / LangChain / Deep Agents: layers, context primitives, typed HITL, skill-bound tools, harness profiles, MCP, subagent context modes, eval practice |
-| `references/evals.md` | Evaluating and debugging agents: eval design, eval integrity (answer leakage, visible tests, side effects, milestones), diagnosing a run from its traces, judge prompts and calibration, reporting a judged pass rate |
-| `references/use-cases.md` | Task playbooks: coding and code review, research/RAG, data/SQL, extraction, multimodal |
+| `references/evals.md` | Evaluating and debugging agents: eval design, eval integrity (answer leakage, visible tests, side effects, milestones), diagnosing a run from its traces, judge prompts and calibration, gate classifiers for agent actions, reporting a judged pass rate |
+| `references/agent-harness-patterns.md` | The harness around an agent: act or ask, approvals and who can give them, async work, mid-task steering, compaction prompts, modes, delegation, goal loops, one prompt for several models, helper prompts |
+| `references/use-cases.md` | Task playbooks: coding and code review, app builders, research/RAG, data/SQL, extraction, multimodal, chat assistants, document agents, voice agents, browser agents |
 | `references/model-selection.md` | Intelligence, cost per task, agent rankings, false-premise detection, routing math |
 | `templates/` | Reusable prompt scaffolds |
 

@@ -9,6 +9,7 @@ The thread through all of it: a score tells you *what* broke, not *why*. Read th
 - Eval integrity: keep the answer and the grader out of reach
 - Diagnosing an agent run
 - Writing Evaluation / Judge Prompts
+- Gate classifiers and action reviewers
 - Reporting a judged pass rate
 
 ## Success criteria and eval design
@@ -96,6 +97,49 @@ When using LLMs to evaluate outputs (LLM-as-judge), the prompt design differs fr
 **Anti-pattern — judge prompt overriding the fixture's ground truth.** When fixtures carry explicit specs (e.g. `tools_required: [X, Y]`, `tools_forbidden: [Z]`, `expected_facts: [...]`), the judge prompt should treat those as the ground truth for that fixture — not as suggestions to weigh against its own opinion of what's correct. Concrete failure mode observed in a production bench: the judge prompt included "for procedure/test/dental queries: BOTH tools must be called in parallel" as a general rule. For 7+ adversarial fixtures that explicitly list `tools_required: [get_user_policy]` only (the test is "don't engage the fabricated premise"), the judge applied its own routing override and scored tool_use=0 even though the agent perfectly matched the fixture spec. Fix: remove the override, make the fixture's `tools_required` literally the ground truth. Result: 7 of 7 affected fixtures moved up (+0.8 to +2.2 each) with zero agent change. **When a judge has an opinion about what "should" be true, but the fixture spec says otherwise, the fixture wins** — otherwise the bench measures judge bias, not agent quality.
 
 **Where to look for this**: any judge-prompt clause that begins "for [topic] queries..." or "if the question involves [X], the answer should..." — these are universal overrides that fire across all fixtures regardless of their specific spec. Audit those clauses against fixtures of the matching topic; if some fixtures legitimately need different behavior than the override prescribes, the override is wrong.
+
+## Gate classifiers and action reviewers
+
+A gate classifier is a judge that runs before an action instead of after an output: it allows or blocks a tool call an agent is about to make. Two published designs show how to build one: Anthropic's *How we built Claude Code auto mode* (anthropic.com/engineering), and the guardian review prompts in OpenAI's open-source Codex CLI (`prompts/templates/guardian/` on GitHub). When to ask and who can approve are covered in `agent-harness-patterns.md`.
+
+- **Choose what the classifier sees.** Anthropic shows its classifier only the user's messages and the bare tool-call payloads.
+  - It strips the agent's prose so the agent "can't talk the classifier into making a bad call".
+  - It strips tool results because they are where injected text enters.
+  - With both included, the classifier did worse on Anthropic's set of real overeager actions.
+  - With tool calls alone, it lost the user's intent and blocked actions the user had plainly asked for.
+  - The cost of stripping tool results is provenance: the classifier can't tell whether a target came from a query or was made up.
+
+  That design is for command-style actions whose payload shows their effect. A browser or computer-use click doesn't: a coordinate says nothing about which recipient is selected. Codex's reviewer judges those actions from the observed interface state and selections. Pass that state as evidence that can't grant authorization.
+- **Score separate axes, then derive the verdict.** Codex's reviewer rates the user's authorization (high, medium, low, unknown) and the action's risk (low to critical) separately, then applies written outcome rules. A single "is this OK?" mixes the two and drifts.
+- **Write what not to block next to what to block.** Classifiers over-block what looks scary, so both designs carry explicit exceptions.
+  - Anthropic's exceptions:
+    - installing packages the repository already declares;
+    - standard credential flows;
+    - pushing to the session's own branch.
+  - Codex's exceptions:
+    - a path outside the workspace on its own;
+    - a user-requested `rm -rf` of a target that a read-only check showed is empty. This one needs a reviewer that can see that check's result, which a classifier with tool results stripped can't.
+
+  Anthropic's template checks block rules, then exceptions, then user intent, then decides. Its customizable parts are the environment (what counts as inside the trust boundary), the block rules and the exceptions.
+- **Judge the effect, not the label.**
+  - Evaluate the payload a script writes and then runs.
+  - Treat a chain of commands joined with `&&` as one action.
+  - Evaluate a command assembled by code as the assembled command.
+  - Ignore what the agent says the action is for, and judge a browser click by its result on the actual page.
+- **Say which way missing evidence pushes.** In Codex's reviewer, truncated or omitted content makes the verdict more cautious, but doesn't raise the action's intrinsic risk by itself. Earlier verdicts are context, not precedent.
+- **Use two stages with one prompt.**
+  - Anthropic's first stage is a single-token filter told to err toward blocking; it blocked 8.5% of benign actions.
+  - Only what it flags goes to a second stage, with the same prompt except a final instruction to reason; that brings false blocks down to 0.4%.
+  - Because the inputs match, the second stage reads almost entirely from the cache.
+  - A verdict in the first output token parses fast, but only fits two cases:
+    - a first stage whose flags go to a reasoning pass. Codex's first-pass reviewer is one: it runs alongside the agent without blocking, and a "high" verdict turns on blocking review for later actions;
+    - a model that thinks before it answers.
+
+    Otherwise the model commits before it reasons (SKILL.md, *Output Format*).
+- **Measure both error rates on real data.** Measure false blocks on real traffic, and misses on a set of real overeager actions taken from transcripts. Anthropic's pipeline misses 17% of real overeager actions. Most misses saw the danger but misjudged whether the user's consent covered this action. Prompt changes didn't fix that at an acceptable cost, so keep the riskiest actions behind hard rules in code.
+- **Return a denial the agent can act on.** Send the block back as a tool result with its reason and an instruction to find a safer path, not to route around it. Cap repeated denials, then escalate to a human: Anthropic stops at 3 consecutive or 20 total.
+- **Check hand-offs too.** A subagent sees the orchestrator's instruction as the user's request. Anthropic runs the same gate on the subagent's own calls, checks the task at delegation, and reviews the subagent's actions at return, in case content it read compromised it.
+- **Cheaper gates:** a calibrated decision model (see *Judge repeatability* above) or a framework guard such as LangChain's `AutoModeMiddleware` (`langgraph.md`) can serve as the first stage, with a threshold set on your own labeled actions.
 
 ## Reporting a judged pass rate
 
