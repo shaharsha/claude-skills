@@ -22,6 +22,7 @@ This installs all 26 skills as one plugin. Or pick a subset:
 /plugin install brand-and-visuals@shaharsha-skills      # brand-system + brand-assets + image-generation + excalidraw-diagrams
 /plugin install engineering-decisions@shaharsha-skills  # tech-design-doc + pair-intelligence
 /plugin install building-agents@shaharsha-skills        # prompt-engineer + writing-project-instructions + reviving-sessions
+/plugin install prompts-and-second-opinions@shaharsha-skills  # prompt-engineer + pair-intelligence, nothing else
 /plugin install utilities@shaharsha-skills              # namecheap-domains + office-render + viewing-videos + proton-pass + tavily-extract
 /plugin install video-production@shaharsha-skills       # generating-video-clips + producing-animated-episodes
 ```
