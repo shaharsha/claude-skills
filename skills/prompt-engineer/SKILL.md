@@ -79,11 +79,7 @@ When the prompt targets a model version newer than the one it was written for, t
 
 Before submitting any prompt edit: check for contradictions (if two rules conflict, the model picks arbitrarily — remove one), dangling references (a section, tool or label the prompt names but no longer has), and duplicated rules, and verify clarity (could a colleague with no context follow this prompt unambiguously?).
 
-**Maintaining a prompt in production.** Long-lived harness prompts that serve several models change in a recognizable way:
-- Behavior for a new model goes in a per-model variant, not an edit to shared text. A patch names the shared sentence it overrides and says it takes precedence.
-- Each behavior you add is an experiment: give it a way to be removed, and keep safety text under regression evals. A numeric threshold written into prose that you keep retuning is a sign to remove the behavior or move it into code.
-- Leave out hints for tools the session doesn't have, and update identity and capability claims when the model changes.
-- Judge a rewrite by its rules and their conflicts, not by its length. A leaner prompt with the same rules is not an improvement in itself.
+**Maintaining a prompt in production.** Put behavior for a new model in a per-model variant, not an edit to shared text, and have each patch name the shared sentence it overrides and say it takes precedence. Treat each behavior you add as an experiment you can remove, and keep safety text under regression evals; a numeric threshold in prose that you keep retuning is a sign to remove the behavior or move it into code. Leave out hints for tools the session doesn't have, and update identity and capability claims when the model changes. Judge a rewrite by its rules and their conflicts, not its length.
 
 ## A. Universal Best Practices
 
@@ -262,12 +258,7 @@ Tool responses are context — bloated responses waste tokens and degrade reason
 - **Truncate long text** with a structural outline — return the first N lines plus an outline (headers, sections) so the model can request specific parts. Pick a concrete default ceiling (Claude Code truncates tool output at ~25k tokens) and include guidance text when you truncate.
 - **Explicit absence** — state what is NOT included: `"Does NOT include financial data — use get_project_details."` This prevents hallucinated fields.
 - **Actionable errors** — return specific, actionable error messages, not opaque codes. `"No results for 'XYZ'. Try broader terms or check spelling."` beats `"Error 404"`.
-- **Give each tool a failure contract.** The description says what the tool fails on and what to do next; each error says whether a retry can help:
-  - a transient error gets one retry, but only when repeating the call is safe: the call is read-only or idempotent, carries an idempotency key, or a state check shows the first attempt didn't land (a timed-out payment or send may have gone through);
-  - invalid input gets fixed, then retried;
-  - a denial gets no retry and no workaround: adjust the plan or ask.
-
-  Cap repeated failures of the same call (2-3), then stop and report. A tool whose result arrives later says how completion arrives: when the harness notifies, that there is no need to poll; when it doesn't, which status call to make and how often (`agent-harness-patterns.md`, *Async work and waiting*).
+- **Give each tool a failure contract.** The description says what the tool fails on and what to do next, and each error says whether a retry can help. A transient error gets one retry, but only when repeating is safe: the call is read-only or idempotent, carries an idempotency key, or a state check shows the first attempt didn't land (a timed-out payment may have gone through). Invalid input gets fixed and retried. A denial gets no retry and no workaround: adjust the plan or ask. Cap repeated failures of one call at 2-3, then stop and report. A tool whose result arrives later says how completion arrives: if the harness notifies, there is no need to poll; if not, name the status call and how often to check (`agent-harness-patterns.md`, *Async work and waiting*).
 - **Watch per-tool error rates, not only task success.** A strong agent routes around a broken tool (calling an API directly when your search fails), and the task still passes at several times the time and tokens; only per-tool error rates, turns and cost show it (see `references/evals.md`, *Diagnosing an agent run*).
 - **Trim at the source, and let the model write the API it knows.** LangChain's browser-tool measurements (Nov 2026): capping page snapshots at 8,000 characters *after* the fact just made agents fetch the page again (cost per passed task flat), while a tool that returned a median 117 characters per navigation (vs ~17,000) and calling MCP tools from code (4× cheaper) cut cost; a bespoke tool API passed 5.3 points fewer tasks than Playwright-style code the model already knows; and replacing the agent's fixed sleeps with a wait that ends once the page is quiet (together with structured answers and a model-call timeout) cut median task time from 182 s to 124 s.
 - **Response format parameter** — expose a `format` parameter (`"detailed"` vs `"concise"`) letting agents choose output verbosity. A concise response can be 3x fewer tokens than detailed, saving context for reasoning.
