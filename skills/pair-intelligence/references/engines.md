@@ -2,6 +2,9 @@
 
 `scripts/pair.sh` already handles everything below. Read this when a run fails,
 when you need a flag the script does not expose, or when you call a CLI by hand.
+Gemini measurements dated before 2026-11-17, or undated, were taken on Gemini 4
+Argon, the default until then; the default is now Hydrogen, and most have not been re-run
+on it.
 
 ## Codex (OpenAI)
 
@@ -176,22 +179,32 @@ Tested on the Antigravity CLI (`agy`) 1.4.12 with a Gemini API key, 2026-11-02.
     `GEMINI_API_KEY` (from the environment, else OpenCode's `auth.json`). Never
     combine the two: `modelProvider` switches a Vertex run back to the key.
   Neither secret reaches argv or the output.
-- **Models:** the id carries the effort: `gemini-4-argon-high` (the script adds
-  `-<effort>` to `--model gemini-4-argon`), `gemini-3.8-flash-low`,
-  `gemini-3.1-pro-high`. `agy models` lists them.
+- **Models:** `gemini-4-hydrogen` by default since 2026-11-17. On Artificial
+  Analysis (Intelligence Index v5, pulled that day) it scores 50.8 at `high`
+  for $1.87 a task, against Argon's 50.4 for $4.97, at about 206 output tokens a
+  second against Argon's 89; at `xhigh`, its own extra level, 53.9 for $3.16.
+  `--model gemini-4-carbon` is the strongest (60.0 at `high`, $5.48 a task at
+  the intro price) for a plan worth the extra time; `gemini-4-argon` stays
+  available. The id carries the effort: `gemini-4-hydrogen-high` (the script
+  adds `-<effort>` to `--model gemini-4-hydrogen`); `--effort xhigh` works on
+  Hydrogen only. A smoke test on 2026-11-17 (one small consult through agy, all
+  four right): Hydrogen `high` 26 s, Argon `high` 33 s, Hydrogen `xhigh` 65 s,
+  Carbon `high` 173 s.
 - **Run folders pile up** under `~/.cache/pair-intelligence` (273 by
   2026-11-13). To prune: `find ~/.cache/pair-intelligence -mindepth 1 -maxdepth 1
   -type d -mtime +14 -exec rm -rf {} +` (sessions.json stays).
 - **Cost:** a Gemini run prints `TOKENS=in:N,out:N,cached:N`, and `out` includes
   thinking (the sums matched the billing export to the token on 2026-11-04 and
-  11-05). Argon's list price per 1M tokens is $4 input, $20 output and $0.20
-  cached input; a launch promotion halves it through Nov 30 2026. Over 69 runs
-  on 2026-11-02 to 11-07, at list price, a review cost a median $3.32 (90th
+  11-05). Per 1M tokens, Hydrogen costs $1.50 input, $7.50 output and $0.075
+  cached input, flat; Carbon and Argon list at $4 / $20 / $0.20, halved by a
+  launch promotion through Nov 30 2026. Measured on Argon, over 69 runs on
+  2026-11-02 to 11-07 at list price, a review cost a median $3.32 (90th
   percentile $5.66, highest $10.53; the median read 3.3M input and cached
   tokens) and a consult $1.08 ($3.08). Several engines or rounds per document
   multiply it: a five-page reference panel across sessions came to about
-  $90-104. A Gemini fix-delta round still reads broadly (340K-950K input
-  tokens for a three-finding delta, 2026-11-10): run fix-delta rounds on Codex.
+  $90-104. An Argon fix-delta round still read broadly (340K-950K input
+  tokens for a three-finding delta, 2026-11-10; not yet measured on Hydrogen):
+  run fix-delta rounds on Codex.
 - **What the script sets up:**
   - a private HOME (`~/.local/share/pair-intelligence/agy-home`, `PAIR_AGY_HOME`)
     so your agy settings, login, hooks and MCP servers stay out;
@@ -213,9 +226,9 @@ Tested on the Antigravity CLI (`agy`) 1.4.12 with a Gemini API key, 2026-11-02.
     warning on Codex and OpenCode, whose search nothing can count; reads of local
     files do not count). The prompt states both up front, and asks the model to
     quote a file only with text it read in that turn, with path and line
-    (2026-11-04: a Gemini review quoted plan text that was not there). A
+    (2026-11-04: an Argon review quoted plan text that was not there). A
     review's default `--timeout` is 30 minutes on Gemini (20 on Codex): 4 of 10
-    good Gemini reviews ran past 1000 s. Its decisions land in
+    good Argon reviews ran past 1000 s (2026-11-02/04; Hydrogen is faster). Its decisions land in
     `RUN_DIR/gate.log`;
   - a settings floor under the gate: writes, MCP, URL reads and actuation, and
     the metacharacter pattern denied, so a broken gate still cannot write;
@@ -303,8 +316,8 @@ Traps, each seen in testing:
 ## Gemini, through OpenCode v2 (`--backend opencode`)
 
 The fallback. Same model and key, about three times the input tokens per call
-(OpenCode's system prompt), no web search, and no live browser outside browse.
-In the 2026-11-02 comparison (same model and effort) the two matched on a review,
+(OpenCode's system prompt; measured on Argon), no web search, and no live browser
+outside browse. In the 2026-11-02 comparison (same model and effort, Argon) the two matched on a review,
 a screenshot with five planted defects (both found all five) and a consult.
 OpenCode won research until agy got `pair-fetch`; after that agy read the same
 primary sources (API reference, all six SDK READMEs) and cited them directly.
@@ -315,11 +328,11 @@ Tested on OpenCode 2.2.5 with a Gemini API key.
   desktop app's v2 CLI). The `opencode` on PATH may be the older v1, whose flags
   differ, and both share one database already migrated to v2, so do not drive it
   with v1. Override the path with `PAIR_OPENCODE`.
-- **Models:** `gemini-4-argon` by default (no free tier: about $2 per million input
-  and $10 per million output tokens, set to double on Dec 1 2026);
-  `gemini-3.8-flash` has a free tier and is fast. Effort is the variant:
-  `#low`, `#medium`, `#high`. Argon at low spent no reasoning tokens and got a
-  simple check wrong, so the script defaults to medium or high.
+- **Models:** `gemini-4-hydrogen` by default, as on agy ($1.50 / $7.50 per million
+  tokens; a rate-limited free tier on the API key). Effort is the variant:
+  `#low`, `#medium`, `#high` (`#xhigh` on Hydrogen). Argon at low spent no
+  reasoning tokens and got a simple check wrong, so the script defaults to
+  medium or high.
 - **What the script passes:** `run --standalone --agent pair --format json`, the
   model as `google/<model>#<effort>`, `-f` per image, `-s <id>` to continue a
   session, and the prompt on stdin (an argument would show in `ps`).

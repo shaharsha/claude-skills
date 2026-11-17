@@ -1,5 +1,8 @@
 # Consult: a second opinion on a decision or diagnosis
 
+Gemini measurements here dated before 2026-11-17, or undated, were taken on Gemini
+4 Argon, the default until then (it is now Hydrogen) and not yet re-run on it.
+
 Use it to choose between options, to explain a failure you cannot settle, or to
 check a claim before you build on it. It is lighter than a review: one question,
 one answer, read-only, usually 15 seconds to 2 minutes at the default effort.

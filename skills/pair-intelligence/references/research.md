@@ -1,5 +1,8 @@
 # Research and browse: the web, images and real pages
 
+Gemini measurements here dated before 2026-11-17, or undated, were taken on Gemini
+4 Argon, the default until then (it is now Hydrogen) and not yet re-run on it.
+
 ## Web search
 
 `--mode research` gives the model live web access from an empty temp directory.
@@ -39,8 +42,8 @@ bash scripts/pair.sh --mode consult --image /abs/shot.png --prompt-file /abs/ask
 - Ask for each problem with where it is (coordinates or region), how severe, and
   whether it was seen or inferred, and for what it cannot judge from one image.
   Use the consult mode with `--cwd` set to the image's own folder and `--web off`.
-  Then check: measure the pixels, or look yourself. In testing both
-  engines found every planted defect and invented none.
+  Then check: measure the pixels, or look yourself. In testing (2026-11-02, Gemini
+  on Argon) both engines found every planted defect and invented none.
 - PDFs are not native input. Render pages to PNG or extract the text first, and
   say in the prompt which you did and how reliable the extraction is.
 

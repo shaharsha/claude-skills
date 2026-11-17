@@ -1,5 +1,8 @@
 # Review mode
 
+Gemini measurements here dated before 2026-11-17, or undated, were taken on
+Gemini 4 Argon, the default until then (it is now Hydrogen).
+
 Hand the work to a different model, in a clean context, with no write access,
 and get back a list of claims. Then check each claim against the source and
 decide which ones are real.
@@ -19,10 +22,10 @@ schema (ask for the findings layout in prose; drop the templates' JSON lines), n
 provenance sidecar. Its only command is `pair-fs`, which covers `git diff`, `log`,
 `show` and `cat REV PATH` (a file at a revision) with a fixed set of flags, so
 name the base as usual; `HEAD:path` forms are refused there. A Gemini review
-at high effort took 2 to 6 minutes in testing. For a two-engine review, send the
+at high effort took 2 to 6 minutes in testing (on Argon, 2026-11-02). For a two-engine review, send the
 identical prompt to both and adjudicate the union. `pair.sh` swaps the
 templates' JSON request for a prose one on Gemini, so one prompt file serves
-both. On code diffs Codex alone was usually enough in November 2026 (Gemini
+both. On code diffs Codex alone was usually enough in November 2026 (Gemini, then on Argon,
 mostly overlapped, took 10 to 20 minutes and made up a test name or a file);
 on plans and design questions Gemini found rollout-order and design gaps Codex
 missed, and the disagreement was the useful part.
@@ -331,7 +334,7 @@ whole time. Re-check each finding against the flaw; don't let the flaw stand in
 for a verdict on any of them.
 
 **Check every quote before the finding it supports.** Grep each string the
-reviewer attributes to the artifact. Measured on 2026-11-04: a Gemini review
+reviewer attributes to the artifact. Measured on 2026-11-04: a Gemini (Argon) review
 quoted plan text that was not there ("333 batch runs", a `fromJSON(...)`
 expression), and the two findings resting on those quotes were refuted; its
 observations about the code were real.
