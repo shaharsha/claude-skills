@@ -43,16 +43,19 @@ Read the mode's file before you write the prompt. Images work in any mode: add
 
 ## Pick the engine
 
+Gemini figures in this skill dated before 2026-11-17 were measured on Argon, the
+default until then.
+
 | | `codex` (default) | `gemini` |
 |---|---|---|
-| Model | gpt-6.1-sol | gemini-4-argon, through agy in API-key mode (`--backend opencode` as a fallback) |
+| Model | gpt-6.1-sol | gemini-4-hydrogen (`--model gemini-4-carbon` for the hardest plans), through agy (`--backend opencode` as a fallback) |
 | Read-only | OS sandbox | a default-deny tool gate: it reads only the project, and `pair-fs` (list, find, grep, git) is the only command |
 | Web search | built in | Google search; with `--web live`, `pair-fetch` reads pages |
 | Images | yes | yes |
 | Enforced JSON | `--schema` | no |
 | Live browser | `--domains`, any mode; stays read-only | `--domains`, any mode |
 | Run code | `--runnable` (review, consult): a disposable copy, network off | no |
-| Cost | ChatGPT plan quota | per token: Vertex AI on your GCP project when an agy ADC copy exists, else the API key (Argon has no free tier) |
+| Cost | ChatGPT plan quota | per token: Vertex AI on your GCP project when an agy ADC copy exists, else the API key (Hydrogen $1.50 / $7.50 per 1M; Carbon and Argon cost more and have no free tier) |
 
 Use Codex unless the user names Gemini, Codex is unavailable or rate-limited, or
 you want two lineages. **Both engines:** for a high-stakes review or a contested
@@ -75,7 +78,7 @@ Models, flags and traps per engine: `references/engines.md`.
    for the command and returns its exit code, not a shell `&`: a `( ... ) &` job
    reports done at once and its exit code is lost. Codex usually answers in 1 to
    10 minutes, Gemini takes longer (defaults: 20 minutes for a Gemini consult, 30
-   for a review). **Gemini over a large file or a multi-repo stage: always in the
+   for a review, set when Argon was the default; Hydrogen is faster). **Gemini over a large file or a multi-repo stage: always in the
    background, with `--timeout 1500` or more**; a foreground wait hits a
    harness's 10-minute cap (2026-11-12). The scripts are in this skill's folder,
    `~/.claude/skills/pair-intelligence/scripts/`:

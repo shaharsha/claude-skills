@@ -1,5 +1,8 @@
 # Review evidence and troubleshooting
 
+Gemini measurements here dated before 2026-11-17, or undated, were taken on Gemini
+4 Argon, the default until then (it is now Hydrogen) and not yet re-run on it.
+
 Everyday reviews need only `references/review.md`. Read this when a round looks
 wrong, when you call `codex` by hand, or when rounds are the evidence for a merge
 gate in a shared clone. Each rule here was paid for by a real failure.

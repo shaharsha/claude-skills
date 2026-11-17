@@ -32,7 +32,7 @@ Any mode can add a live browser with `--domains`: a review can open the running
 page and compare it with the code, and the model stays read-only.
 
 Engines: **Codex** (`gpt-6.1-sol`, OS sandbox, web search) and **Gemini**
-(`gemini-4-argon` through the Antigravity CLI `agy`, behind a default-deny tool
+(`gemini-4-hydrogen` through the Antigravity CLI `agy`, behind a default-deny tool
 gate, with Google search; OpenCode as a fallback). Ask one, or both in parallel
 for two independent reads.
 

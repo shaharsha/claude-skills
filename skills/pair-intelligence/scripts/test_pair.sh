@@ -382,7 +382,13 @@ check "agy: the repo's .agents MCP server never starts (control: the fake starts
 check "agy: private HOME with the gate as its hook"  '[[ "$(jq_py "$A" "d[\"home\"]")" == "$T/agyhome" ]] && grep -q "agy_gate.py" "$T/agyhome/.gemini/config/hooks.json"'
 check "agy: key in the environment, not argv"      '[[ "$(jq_py "$A" "d[\"key\"]")" == fake-key-123 && "$(jq_py "$A" "\" \".join(d[\"args\"])")" != *fake-key-123* ]]'
 check "agy: prompt on stdin with the harness block" 'grep -q "2+2" "$LOG/agy-stdin-0.txt" && grep -q "pair-fs" "$LOG/agy-stdin-0.txt" && [[ "$(jq_py "$A" "\" \".join(d[\"args\"])")" != *"2+2"* ]]'
-check "agy: consult model id carries the effort"   '[[ "$(jq_py "$A" "\" \".join(d[\"args\"])")" == *"--model gemini-4-argon-high"* ]]'
+check "agy: consult model id carries the effort, Hydrogen by default"   '[[ "$(jq_py "$A" "\" \".join(d[\"args\"])")" == *"--model gemini-4-hydrogen-high"* ]]'
+out="$(cd "$T/arepo" && FAKE_AGY=ok bash "$P" --engine gemini --backend agy --effort xhigh --prompt-file "$T/prompt.md" 2>&1)"; r1=$?
+x1="$(jq_py "$(last_args agy)" "\" \".join(d[\"args\"])")"
+out="$(cd "$T/arepo" && FAKE_AGY=ok bash "$P" --engine gemini --backend agy --model gemini-4-hydrogen-xhigh --prompt-file "$T/prompt.md" 2>&1)"; r2=$?
+x2="$(jq_py "$(last_args agy)" "\" \".join(d[\"args\"])")"
+bash "$P" --engine gemini --backend agy --model gemini-4-argon --effort xhigh --prompt-file "$T/prompt.md" >/dev/null 2>&1; r3=$?
+check "Gemini xhigh: on Hydrogen as a flag or in the id; refused on other models (64)" '[[ $r1 -eq 0 && "$x1" == *"--model gemini-4-hydrogen-xhigh"* && $r2 -eq 0 && "$x2" == *"--model gemini-4-hydrogen-xhigh"* && "$x2" != *xhigh-* && $r3 -eq 64 ]]'
 check "agy: settings floor denies writes, MCP, URL actions" '[[ "$(cat "$(jq_py "$A" "d[\"args\"][d[\"args\"].index(\"--settings\")+1]")")" == *"write_file(*)"*"execute_url(*)"*"read_url(*)"*"mcp(*)"* ]]'
 check "agy gate (consult): wrapper yes, ls no, repo read yes, /etc no, search yes, fetch no, schedule no, chain no" \
   '[[ "$(dec)" == "auto_approve deny auto_approve deny auto_approve deny deny deny" ]]'

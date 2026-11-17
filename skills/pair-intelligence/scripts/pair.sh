@@ -71,7 +71,8 @@ usage: pair.sh --prompt-file <abs path> [options]
   --resume <label>        Continue a session started with --name
   --label <slug>          Names the run directory (default: <mode>-<engine>)
   --model <id>            Override the model
-  --effort <level>        Codex: low|medium|high|xhigh|max. Gemini: low|medium|high
+  --effort <level>        Codex: low|medium|high|xhigh|max. Gemini: low|medium|high,
+                          and xhigh on Hydrogen
   --web off|cached|live   Web access (default by mode). Codex: its search tool.
                           Gemini/agy: cached = search only, live = search and
                           page fetches. Gemini/OpenCode: anything but off = fetch.
@@ -390,9 +391,12 @@ if [[ "$ENGINE" == "codex" ]]; then
     browse)   : "${EFFORT:=low}";    : "${WEB:=off}" ;;
   esac
 else
-  # Gemini 4 Argon at low effort spent 0 reasoning tokens and got a math check
-  # wrong; keep it at medium or above unless the caller says otherwise.
-  : "${MODEL:=gemini-4-argon}"
+  # Gemini 4 Hydrogen (GA 2026-11-12) by default: on Artificial Analysis v5 it
+  # scores 50.8 at high for $1.87 a task against Argon's 50.4 for $4.97, about
+  # 2.3x faster per token (2026-11-17). --model gemini-4-carbon is the strongest
+  # (60.0 at high) for the hardest plans. Gemini 4 Argon at low effort spent 0
+  # reasoning tokens and got a math check wrong: medium or above by default.
+  : "${MODEL:=gemini-4-hydrogen}"
   case "$MODE" in
     review|consult) : "${EFFORT:=high}" ;;
     *)              : "${EFFORT:=medium}" ;;
@@ -424,12 +428,17 @@ case "$WEB" in off|cached|live|"") ;; *) echo "--web must be off, cached or live
 if [[ "$ENGINE" == "codex" ]]; then
   case "$EFFORT" in low|medium|high|xhigh|max) ;; *) echo "Codex --effort: low|medium|high|xhigh|max" >&2; exit 64 ;; esac
 else
-  case "$EFFORT" in low|medium|high) ;; *) echo "Gemini --effort: low|medium|high" >&2; exit 64 ;; esac
   MODEL="${MODEL#google/}"
-  # agy names a model and its effort together (gemini-4-argon-high).
-  if [[ "$BACKEND" == "agy" ]]; then
-    if [[ "$MODEL" =~ -(low|medium|high)$ ]]; then EFFORT="${BASH_REMATCH[1]}"; else MODEL="$MODEL-$EFFORT"; fi
+  # agy names a model and its effort together (gemini-4-hydrogen-high).
+  if [[ "$BACKEND" == "agy" && "$MODEL" =~ -(low|medium|high|xhigh)$ ]]; then
+    EFFORT="${BASH_REMATCH[1]}"; MODEL="${MODEL%-"$EFFORT"}"
   fi
+  case "$EFFORT" in low|medium|high|xhigh) ;; *) echo "Gemini --effort: low|medium|high (xhigh on Hydrogen)" >&2; exit 64 ;; esac
+  # xhigh exists on Hydrogen only; Carbon and Argon reject it.
+  if [[ "$EFFORT" == xhigh && "$MODEL" != *hydrogen* ]]; then
+    echo "Gemini --effort xhigh: only Gemini 4 Hydrogen has it; use high with $MODEL" >&2; exit 64
+  fi
+  [[ "$BACKEND" == "agy" ]] && MODEL="$MODEL-$EFFORT"
 fi
 : "${LABEL:=$MODE-$ENGINE}"
 LABEL="$(printf '%s' "$LABEL" | tr -c 'A-Za-z0-9._-' '-' | cut -c1-48)"

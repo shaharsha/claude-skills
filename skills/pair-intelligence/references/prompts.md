@@ -1,5 +1,8 @@
 # Review prompt templates
 
+Gemini measurements here dated before 2026-11-17, or undated, were taken on Gemini
+4 Argon, the default until then (it is now Hydrogen) and not yet re-run on it.
+
 Fill the `{{PLACEHOLDERS}}`, write the result to a file, pass it as `--prompt-file`.
 The templates are headed `## Mode: code`, `small change`, `fix delta`, `plan`,
 `code-vs-plan`, `follow-up` and `re-review after fixes`; `codex_review.sh` warns

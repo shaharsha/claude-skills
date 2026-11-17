@@ -1,5 +1,8 @@
 # Ideate: brainstorming over several rounds
 
+Gemini measurements here dated before 2026-11-17, or undated, were taken on Gemini
+4 Argon, the default until then (it is now Hydrogen) and not yet re-run on it.
+
 Two models brainstorming together collapse toward the same ideas unless the
 rounds are structured. Most of the value comes from independent drafts made
 before either side sees the other's; extra rounds after about three add
