@@ -31,7 +31,7 @@ If you see **more than one** family (cross-provider code, comparison work, or a 
 
 ### 0b. Read the matching reference file(s) NOW
 
-- claude → read `${CLAUDE_SKILL_DIR}/references/claude.md`, then the per-model file for every Claude model in scope, including the one you are migrating from (no model ID visible: `claude-opus.md`, Anthropic's default, and say so): `claude-opus.md` (Opus 5.5, Opus 5, Opus 4.8), `claude-fable.md` (Fable 5.2 / 5.1 and Mythos), `claude-sonnet-haiku.md` (Sonnet 5.5, Haiku 5.5, Sonnet 5, Haiku 4.5)
+- claude → read `${CLAUDE_SKILL_DIR}/references/claude.md`, then the per-model file for every Claude model in scope, including the one you are migrating from (no model ID visible: `claude-opus.md`, Anthropic's default, and say so): `claude-opus.md` (Opus 5.5, Opus 5, Opus 4.8), `claude-fable.md` (Fable 5.2 / 5.1 and Mythos), `claude-sonnet-haiku.md` (Sonnet 5.5, Haiku 5.5, Sonnet 5, Haiku 4.5); each holds its model's migration checklists; add `claude-cost.md` when the task is about cost, effort level, budgets or combining models
 - gpt    → read `${CLAUDE_SKILL_DIR}/references/gpt.md`, then `gpt-6.md` when a GPT-6 model other than 6.2 Astra / Sol is in scope (GPT-6.1 Terra, GPT-6 Luna, GPT-6 Astra, GPT-6.1 Sol, GPT-6 Sol - including one you are migrating from), and `gpt-hosts.md` when the model runs on Azure / Microsoft Foundry or AWS Bedrock
 - gemini → read `${CLAUDE_SKILL_DIR}/references/gemini.md`
 - kimi   → read `${CLAUDE_SKILL_DIR}/references/kimi.md`
@@ -302,7 +302,7 @@ For depth on any one provider — including current model versions and migration
 
 Reasoning effort is a **last-mile knob, not a primary quality lever**. Before raising effort, exhaust completeness contracts, verification loops, and tool-use persistence (Section A). Higher effort is not automatically better — it can cause overthinking, especially with contradictory instructions or weak stopping criteria.
 
-As a **cost** knob it's the first one to turn, and the cheapest experiment there is (Anthropic's measured playbook, detailed in `claude.md`; the pattern generalizes): **sweep two or three effort levels on a sample of your own traffic before adding models or architecture** - on research and knowledge work the accuracy-vs-cost curve was nearly flat (low effort gave up 1-3 points for a third to half the cost), while long-horizon coding genuinely bought accuracy with effort. When outcomes are checkable (tests, a verifier), **run everything at low effort and re-run only the failures higher** - same pass rate at about half the cost. Compare models by **cost per solved task on your hardest ~10% of traffic**, not per-token price: a more capable model at low effort often beats a cheaper model at its default. And ask for the answer you'll actually read - a one-line decision format matched a five-section memo's accuracy at a sixth of the output tokens, and in agent loops every output token is re-read as input on each later turn.
+As a **cost** knob it's the first one to turn, and the cheapest experiment there is (Anthropic's measured playbook, detailed in `claude-cost.md`; the pattern generalizes): **sweep two or three effort levels on a sample of your own traffic before adding models or architecture** - on research and knowledge work the accuracy-vs-cost curve was nearly flat (low effort gave up 1-3 points for a third to half the cost), while long-horizon coding genuinely bought accuracy with effort. When outcomes are checkable (tests, a verifier), **run everything at low effort and re-run only the failures higher** - same pass rate at about half the cost. Compare models by **cost per solved task on your hardest ~10% of traffic**, not per-token price: a more capable model at low effort often beats a cheaper model at its default. And ask for the answer you'll actually read - a one-line decision format matched a five-section memo's accuracy at a sixth of the output tokens, and in agent loops every output token is re-read as input on each later turn.
 
 ### Caching
 
@@ -473,7 +473,7 @@ Templates in `${CLAUDE_SKILL_DIR}/templates/`:
 - `tool-description-template.md` — Structured tool description format
 
 Provider deep-dives in `${CLAUDE_SKILL_DIR}/references/` — read the one matching your model family:
-- `claude.md` — Claude (Anthropic API, AWS Bedrock, Vertex AI, Microsoft Foundry), plus per-model files `claude-opus.md`, `claude-fable.md`, `claude-sonnet-haiku.md`
+- `claude.md` — Claude (Anthropic API, AWS Bedrock, Vertex AI, Microsoft Foundry), plus per-model files `claude-opus.md`, `claude-fable.md`, `claude-sonnet-haiku.md` (prompting and migration checklists) and `claude-cost.md` (Anthropic's cost playbook)
 - `gpt.md` — GPT (OpenAI API; shared rules and GPT-6.2), plus `gpt-6.md` (the GPT-6 models before 6.2: Terra, Luna, GPT-6 Astra, earlier Sol) and `gpt-hosts.md` (Azure / Microsoft Foundry, AWS Bedrock)
 - `gemini.md` — Gemini (Gemini API, Vertex AI / Gemini Enterprise Agent Platform)
 - `kimi.md` — Kimi (Moonshot API, Kimi Code, AWS Bedrock, Microsoft Foundry, OpenRouter, self-hosted open weights)

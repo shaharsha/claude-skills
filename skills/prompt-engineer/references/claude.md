@@ -20,7 +20,7 @@ All current models except Haiku 4.5 share a **1M-token context window and 128K m
 - The 5.5-generation API contract (Opus 5.5 + Sonnet 5.5 + Fable 5.1 / 5.2), with Fable 5.2's breaking changes
 - API version `2026-10-21` (sampling params removed everywhere)
 - Effort and thinking (per-model defaults and ladders)
-- Cost and intelligence: Anthropic's measured playbook
+- Cost and intelligence: Anthropic's measured playbook (in `claude-cost.md`)
 - Per-model prompting (read the file for your model): `claude-opus.md`, `claude-fable.md`, `claude-sonnet-haiku.md`
 - Few-shot examples and reasoning in the output
 - Sampling parameters and prefill (removed)
@@ -38,7 +38,7 @@ All current models except Haiku 4.5 share a **1M-token context window and 128K m
 - Code review harnesses
 - Frontend design
 - Vision and computer use
-- Migration checklists
+- Migration checklists (in the per-model files)
 
 ## The 5.5-generation API contract (Opus 5.5 + Sonnet 5.5 + Fable 5.1 / 5.2)
 
@@ -92,16 +92,7 @@ Things that hold across the current models:
 
 ## Cost and intelligence: Anthropic's measured playbook
 
-From *Optimizing for cost and intelligence* (Anthropic-internal benchmarks - directional; measure on your own traffic). In order of what to try:
-
-1. **Turn on caching and trim tokens** - free, and cache reads are routinely the largest single cost component in agent loops (see *Caching*). Defer rarely-used tool definitions behind **tool search** (`defer_loading`): with up to 502 MCP tools attached, full loading nearly doubled cost while deferred loading stayed flat - 45% cheaper at the same accuracy. **Keep data files out of the prompt:** a 1,862-row CSV pasted inline (~91K tokens) got Sonnet 5 to 6/25 correct aggregate answers; uploaded via the Files API and queried with code execution it got 25/25 at ~1/12 the cost.
-2. **Audit prompts against the current model.** Opus 4.8-era prompts cost 36% more per ticket on Opus 5 with no accuracy gain; the audit made Opus 5 14% cheaper *and* lifted accuracy 92% → 97%. Instructions the new model follows too literally ("verify twice", "be maximally thorough", mandatory step scripts) cost money; text that no longer fits (a retired thinking setting, contradictory rules, a hand-rolled `<scratchpad>` fighting native thinking) costs 7-11 accuracy points each. Claude Code ships `/claude-api prompt-audit`, which reports model-mismatched prompt text and proposes a diff; audit tool descriptions and skills too.
-3. **Compare models on cost per *solved* task, and price the tail.** Fable 5.1 at `low` solved 88.6% of a SWE-bench Pro subset at $0.54 per solve vs Sonnet 5's 77.4% at $0.84 - despite 5× the per-token price; but Opus 5 matched Fable 5.1 at the default for ~15% less, so rankings flip by workload. Anthropic's starting suggestion for most agent workloads: the frontier model at `low` effort, raised where it misses. Judge on the hardest ~10% of tasks - failed tasks still bill, then retry.
-4. **Sweep effort before adding architecture.** On research/knowledge-work benchmarks the curve is nearly flat (`low` gave up 1-3 points for a third to half off; the default bought nothing over `medium`); on long-horizon coding, effort genuinely buys accuracy. **Run at low effort and re-run only the failures at a higher setting** when outcomes are checkable - same pass rate at about half the cost (paid for in latency on the failures).
-5. **Budgets and caps do different jobs.** A **task budget** (advisory, the model sees it) cut cost per task 44% for ~3 points on SWE-bench Pro - start near your loop's p90 token use and set it once, on the first request. **`max_tokens`** is only a safety cap - lowering it doesn't lower cost per *solved* task (64k covered all but 2 of ~14,000 turns). On Managed Agents a **session budget** is the hard dollar stop. Set all three.
-6. **Ask for the answer you'll read.** Output tokens cost 5× input and re-enter context every later turn: a one-line `DECISION | LABEL | REASON` triage answer used 39% fewer output tokens than a two-line format and a five-section memo used 6× as many - all at the same accuracy.
-7. **Only then combine models.** **Advisor** (a cheaper executor runs the loop and consults a frontier model via the beta advisor tool): pays when the capability gap is real *and the executor actually consults* - a low-effort executor can stop noticing it's stuck and score below itself alone; prompt for ~one consult before substantive work and one before finishing, and measure the consult rate. **Orchestrator** (frontier lead, cheaper workers): paid off only as insurance against a cost tail on routine work, or for inputs larger than one context window; in every other measured case the lead model alone at lower effort was cheaper. (Anthropic's *Which Claude model should you build with?*, Nov 2026, adds one: an Opus 5.5 lead over up to 25 Sonnet 5.5 workers cost about a third less than Opus 5.5 alone, at about the same score, on a defect search over ~22M tokens of source - work far larger than one window.)
-8. **When a model falls short, escalate in this order** (same post): "1. Check that the model can verify its own work, with a test, a build or a script that calls the endpoint. 2. Raise effort one level. 3. Move to the next model up, starting at a lower effort level than you used on the smaller one." Past `high`, one more effort level can cost as much as a bigger model: on FrontierCode 2.0, Fable 5.2 at `high` scored about level with Opus 5.5 at `max` (45.3% vs 45.5%) for roughly half the cost per task. And if one system runs several models, "build every request for the strictest of them": append-only history, `tool_choice:auto` with strict tools, content blocks read by `type`, and prompts and tool descriptions precise enough for the most literal model - so a step can move tiers without a code change; when the routing rule is simple, let code pick the model.
+Anthropic's order for cutting what a Claude app costs without losing accuracy - caching and trimming first, then a prompt audit, cost per solved task, an effort sweep, budgets, output shape, and only then a second model - is in `claude-cost.md`. Read it before changing effort, adding a budget, or adding an advisor or orchestrator.
 
 ## Per-model prompting (read the file for your model)
 
@@ -109,9 +100,9 @@ The prompting guidance for each model lives in its own file. Read this file in f
 
 | Model | File | Sections |
 |---|---|---|
-| Opus 5.5, Opus 5, Opus 4.8 | `claude-opus.md` | *Prompting Opus 5.5*, *Opus 5 patterns*, *Opus 4.8 specifics* |
-| Fable 5.2 / Mythos 5.2, Fable 5.1 / Mythos 5.1 | `claude-fable.md` | *Prompting Fable 5.2*, *Prompting Fable 5.1* |
-| Sonnet 5.5, Haiku 5.5, Sonnet 5, Haiku 4.5 | `claude-sonnet-haiku.md` | *Prompting Sonnet 5.5*, *Prompting Haiku 5.5*, *Sonnet 5 and Haiku 4.5* |
+| Opus 5.5, Opus 5, Opus 4.8 | `claude-opus.md` | *Prompting Opus 5.5*, *Opus 5 patterns*, *Opus 4.8 specifics*, *Migration checklists* |
+| Fable 5.2 / Mythos 5.2, Fable 5.1 / Mythos 5.1 | `claude-fable.md` | *Prompting Fable 5.2*, *Prompting Fable 5.1*, *Migration checklists* |
+| Sonnet 5.5, Haiku 5.5, Sonnet 5, Haiku 4.5 | `claude-sonnet-haiku.md` | *Prompting Sonnet 5.5*, *Prompting Haiku 5.5*, *Sonnet 5 and Haiku 4.5*, *Migration checklists* |
 
 Use Opus 5.5 by default for hard, open-ended work, Fable 5.2 for the hardest and longest (when Opus 5.5 at higher effort falls short on your evals); drop to **Sonnet 5.5** when turnaround and cost matter more (see `claude-sonnet-haiku.md`); **Haiku 5.5** for high-volume, cost-sensitive, bounded tasks and as a subagent. Sonnet 5 remains served and is Sonnet 5.5's cyber fallback.
 
@@ -244,24 +235,4 @@ High-resolution images (up to 2576px / 3.75MP, coordinates 1:1 with pixels) sinc
 
 ## Migration checklists
 
-**To Opus 5.5 (from Opus 5):** swap to `claude-opus-5-5` → remove every `thinking:{type:"disabled"|"enabled"}` and **set `effort` explicitly** (default is now `medium`; run a sweep - `medium`/`low` often match Opus 5 at `high`) → replace `tool_choice` `any`/`tool` with `auto` + strict tools / Structured Outputs + a prompt line saying when the tool applies → read content blocks by `type` and pass thinking blocks back unmodified → make the history **append-only** (move inject-and-delete reminders to turn-scoped system messages, `system`/`tools` edits to mid-conversation messages; test with `drop_block` + `input_transformations`) → if you render narration between tool calls, set `display:"updates"` → move computer use to `computer_toolset_20260801` (Claude API / Google Cloud) → handle `stop_reason:"refusal"` including the new `bio` and `reasoning_extraction` categories → bump `max_tokens` (thinking counts) → re-baseline cost/latency → then prune: thinking-disabled mitigations, "write out your reasoning" instructions, chat "think carefully" lines, vision workarounds, and Opus 5 concision scaffolding if no longer needed.
-
-**To Opus 5.5 from Opus 4.8 or earlier:** first do the Opus 4.8 → Opus 5 migration (below), minus the option of disabling thinking; then the list above. From 4.7 or earlier, also the 4.7 steps.
-
-**To Fable 5.2 (from Fable 5.1):** swap to `claude-fable-5-2` → if your code builds `messages` itself, test for history edits even if Fable 5.1 never returned the error (older accounts weren't checked; 5.2 checks every account) and make the history append-only → expect every model except Mythos 5.2 to drop 5.2's thinking blocks on a router or fallback switch (Fable 5.1 and Opus 5.5 included) → move `computer_20251124` to `computer_toolset_20260801` (except on Bedrock) → set an advisor's `model` to `claude-fable-5-2` / `claude-mythos-5-2`, in new conversations → pin MCP connector tool lists → check the new, separate rate limit → re-run evals with an effort sweep from `high` → apply `claude-fable.md`, *Prompting Fable 5.2* (review delegation lines, prompt-visible token budgets, think-less lines, hard style rules, accumulated cautions; add the *Finishing work* block (`claude-fable.md`) only if it stops early) → re-price: $8 / $40, cache reads $0.20, fast mode now available.
-
-**To Fable 5.2 (from Opus 5.5):** adaptive thinking and the forced-`tool_choice` 400 carry over. What changes: **30-day retention is required by default** (an org running Opus 5.5 under ZDR gets 400 on every request until a workspace has retention, unless Anthropic authorizes ZDR or AWS's eligible-customer ZDR on Bedrock applies); the prefix check covers every account (Opus 5.5 checks only newer ones), and an unpinned MCP connector tool list that changes between requests counts as an edit on 5.2 but not on Opus 5.5; Opus 5.5 can't read 5.2's thinking blocks, so a fallback to it loses the reasoning; the default effort is `high`, not `medium` - set it explicitly; fast mode only where 5.2 has it (not Managed Agents); CMEK orgs lose structured outputs; $8 / $40 vs $4 / $20 (cache reads $0.20 on both); a separate rate limit with lower token limits per tier; no Priority Tier; the advisor pairing (an Opus 5.5 or Fable 5.1 advisor → 400 under a 5.2 executor). Remove Opus 5.5-era think-less lines ("answer directly without deliberating") - they don't work at `medium`+ on 5.2. Remove Opus 5.5's "treat that answer as done" lines unless you've tested that 5.2 still flags its own mistakes.
-
-**To Fable 5.1 (from Fable 5):** swap to `claude-fable-5-1` → remove forced `tool_choice` → append-only history (same drill) → re-tune effort from `high`, and use per-message effort instead of one level per session → add the per-turn batching nudge in agent loops → set `display:"updates"` and delete "hold findings for the end" lines → audit anti-formatting rules → re-run evals. Retention (30-day) and refusal handling carry over; cache reads are 75% cheaper.
-
-**Opus 4.8 → Opus 5 (previous generation):** thinking is on by default (`disabled` valid only at effort ≤`high`); remove verification/double-check instructions, forced subagent counts, and "don't think" rules; add concision; ZDR-eligible; milder cyber classifiers.
-
-**Opus 4.7 → 4.8:** no breaking changes; re-baseline effort (levels recalibrated), switch history rebuilds to mid-conversation system messages, read `stop_details`, remove forced status updates.
-
-**From Opus 4.6 or earlier** (breaking): remove `temperature`/`top_p`/`top_k`; replace `budget_tokens` thinking with adaptive + `effort`; bump `max_tokens` for the newer tokenizer (~1-1.35×); replace prefill; state instruction scope explicitly where you relied on generalization.
-
-**To Sonnet 5.5 (from Sonnet 5):** swap to `claude-sonnet-5-5` → replace `thinking:{type:"disabled"}` with `between_tools` (and keep effort ≤`high` there) or move to adaptive + a lower effort → replace forced `tool_choice` with `auto` + strict tools and a prompt line saying when the tool applies → make history append-only → move computer use to `computer_toolset_20260801` (Claude API / Google Cloud) → swap advisor models Sonnet 5.5 rejects (Opus 4.7/4.8, Sonnet 5) → set `display:"updates"` if you render between-tool narration (or use `between_tools`) → handle refusals (fallback retries only `cyber`/`frontier_llm`) → re-sweep effort (levels recalibrated) → then adopt what Sonnet 5 lacked: mid-conversation system messages, per-message effort, 512-token cache minimum. Same tokenizer, so token counts don't change.
-
-**To Haiku 5.5 (from Haiku 4.5):** swap to `claude-haiku-5-5` → replace `budget_tokens` thinking with adaptive + `effort` (default `medium`; `disabled` still works at ≤`high`) → raise `max_tokens` for thinking and the ~30% larger tokenizer → remove sampling params and prefill → make history append-only → re-price: the 100K-prompt step, retained earlier-turn thinking, larger image tokens, no Priority Tier → handle `stop_reason:"refusal"` with your own fallback (none server-side) → move computer use to `computer_toolset_20260801` (Claude API / Google Cloud) → keep or add explicit premise-check and search-grounding lines → re-run evals; existing prompts usually carry over.
-
-**To Sonnet 5 (from 4.6):** mostly a model-ID swap - `budget_tokens` gone (adaptive on by default), `effort` defaults to `high` (set it), ~30% more tokens (bump `max_tokens`), sampling params and prefill 400.
+The checklist for each move is in the file of the model you are moving **to**: `claude-opus.md` (to Opus 5.5, and the older Opus steps), `claude-fable.md` (to Fable 5.2 from Fable 5.1 or from Opus 5.5, and to Fable 5.1), `claude-sonnet-haiku.md` (to Sonnet 5.5, Haiku 5.5 and Sonnet 5). Step 0b already has you read the file for the model you are moving from as well.
