@@ -1,11 +1,12 @@
 # Claude Sonnet and Haiku - per-model prompting
 
-Sonnet 5.5 and Haiku 5.5 (current), Sonnet 5 and Haiku 4.5 (previous generation). **Read `claude.md` first, in full**: the API contract, effort and thinking, caching, tools and the migration checklists there apply to every model, and this file assumes them. Step 0b in SKILL.md sends you here.
+Sonnet 5.5 and Haiku 5.5 (current), Sonnet 5 and Haiku 4.5 (previous generation). **Read `claude.md` first, in full**: the API contract, effort and thinking, caching and tools there apply to every model, and this file assumes them. Step 0b in SKILL.md sends you here.
 
 ## Contents
 - Prompting Sonnet 5.5
 - Prompting Haiku 5.5
 - Sonnet 5 (previous generation) and Haiku 4.5
+- Migration checklists (to Sonnet 5.5, Haiku 5.5 and Sonnet 5)
 
 ## Prompting Sonnet 5.5
 
@@ -50,3 +51,13 @@ Existing Sonnet 5 prompts perform well, and *Prompting Claude Sonnet 5* (see *So
 **Claude Sonnet 5** (`claude-sonnet-5`, superseded by Sonnet 5.5) - near-Opus on coding and agentic work; 1M context, 128k output, **$2/$10 (permanent)**, cache reads $0.20, Jan 2026 cutoff. Adaptive thinking **on by default** (omit `thinking`), and unlike the 5.5 generation it *can* be disabled (`thinking:{type:"disabled"}`); `budget_tokens` removed. Defaults to `effort: high` - set it explicitly or expect more latency than you want; `medium` suits most apps. Migration rule of thumb: Sonnet 5 `medium` ≈ Sonnet 4.6 `high`, Sonnet 5 `high` ≈ 4.6 `max` - benchmark by observed thinking length, not effort name. Newer tokenizer (~30% more tokens than Sonnet 4.6), high-res vision. Sonnet 5 is **not** on the 5.5 API contract: forced `tool_choice` and thinking-off still work there. Behavior notes from *Prompting Claude Sonnet 5*: it's **more agentic than 4.6** - reaches for tools and runs self-verification loops more readily - but **with thinking disabled it's less likely to reach for tools or search**, so add an explicit nudge if you run it thinking-off; it calibrates length to task complexity; it gives good progress updates on its own (remove forced "summarize every N tool calls" scaffolding); it follows instructions literally at low effort; its frontend default house style responds to the same fixes as Opus (concrete specs, or propose 4 directions first). Leave `max_tokens` headroom at `high`+ or you can get a response that's almost all thinking and then `stop_reason:"max_tokens"`. Computer use: supports both `computer_toolset_20260801` and the older `computer_20251124`, plus the **browser use toolset** (`browser_toolset_20260801`) on the Claude API / Google Cloud. Prefer Sonnet 5.5 for new work.
 
 **Claude Haiku 4.5** (`claude-haiku-4-5`, `…-20251001`) - fastest model, near-frontier intelligence; 200k context, 64k output, $1/$5, Feb 2025 cutoff. **No adaptive thinking, no `effort`** - use extended thinking (`thinking:{type:"enabled", budget_tokens:N}`, ~16k to start). Excellent for classification, routing, extraction, and batch. Apply the universal budget-model patterns: more explicit instructions, more (simpler) examples, a small bounded tool set, "do the work" separated from "report it." For new work prefer **Haiku 5.5** (see *Prompting Haiku 5.5*); Haiku 4.5 is still active, its earliest retirement date has passed, and a deprecation notice may follow.
+
+## Migration checklists
+
+The shared API contract these steps refer to is in `claude.md`.
+
+**To Sonnet 5.5 (from Sonnet 5):** swap to `claude-sonnet-5-5` → replace `thinking:{type:"disabled"}` with `between_tools` (and keep effort ≤`high` there) or move to adaptive + a lower effort → replace forced `tool_choice` with `auto` + strict tools and a prompt line saying when the tool applies → make history append-only → move computer use to `computer_toolset_20260801` (Claude API / Google Cloud) → swap advisor models Sonnet 5.5 rejects (Opus 4.7/4.8, Sonnet 5) → set `display:"updates"` if you render between-tool narration (or use `between_tools`) → handle refusals (fallback retries only `cyber`/`frontier_llm`) → re-sweep effort (levels recalibrated) → then adopt what Sonnet 5 lacked: mid-conversation system messages, per-message effort, 512-token cache minimum. Same tokenizer, so token counts don't change.
+
+**To Haiku 5.5 (from Haiku 4.5):** swap to `claude-haiku-5-5` → replace `budget_tokens` thinking with adaptive + `effort` (default `medium`; `disabled` still works at ≤`high`) → raise `max_tokens` for thinking and the ~30% larger tokenizer → remove sampling params and prefill → make history append-only → re-price: the 100K-prompt step, retained earlier-turn thinking, larger image tokens, no Priority Tier → handle `stop_reason:"refusal"` with your own fallback (none server-side) → move computer use to `computer_toolset_20260801` (Claude API / Google Cloud) → keep or add explicit premise-check and search-grounding lines → re-run evals; existing prompts usually carry over.
+
+**To Sonnet 5 (from 4.6):** mostly a model-ID swap - `budget_tokens` gone (adaptive on by default), `effort` defaults to `high` (set it), ~30% more tokens (bump `max_tokens`), sampling params and prefill 400.

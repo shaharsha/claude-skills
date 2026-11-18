@@ -1,10 +1,11 @@
 # Claude Fable and Mythos - per-model prompting
 
-Fable 5.2 / Mythos 5.2 (current) and Fable 5.1 / Mythos 5.1 (previous, still served). **Read `claude.md` first, in full**: the API contract, effort and thinking, caching, tools and the migration checklists there apply to every model, and this file assumes them. Step 0b in SKILL.md sends you here.
+Fable 5.2 / Mythos 5.2 (current) and Fable 5.1 / Mythos 5.1 (previous, still served). **Read `claude.md` first, in full**: the API contract, effort and thinking, caching and tools there apply to every model, and this file assumes them. Step 0b in SKILL.md sends you here.
 
 ## Contents
 - Prompting Fable 5.2 (and Mythos 5.2)
 - Prompting Fable 5.1 (and Mythos 5.1)
+- Migration checklists (to Fable 5.2 and to Fable 5.1)
 
 ## Prompting Fable 5.2 (and Mythos 5.2)
 
@@ -69,3 +70,13 @@ Existing Fable 5 prompts perform well; these are the behavior deltas with Anthro
   - **`send_to_user` needs an instruction:** defining the tool isn't enough - without *"Between tool calls, when you have content the user must read verbatim (a partial deliverable, a direct answer to their question), call the send_to_user tool with that content. Use send_to_user only for user-facing content, not for narration or reasoning"* it rarely calls it.
   - **Scaffolding:** separate, fresh-context verifier subagents outperform self-critique on long runs; skills written for older models are often too prescriptive and *degrade* its output - review them; state boundaries explicitly (it can take unrequested actions like drafting emails or defensive git backups).
 - **Retention/fallback:** 30-day retention required (not ZDR-eligible unless Anthropic expressly authorizes). Permitted fallback targets for refusals: Opus 4.8 and Opus 5; fallback credit refunds the cache-switch cost.
+
+## Migration checklists
+
+The shared API contract these steps refer to is in `claude.md`.
+
+**To Fable 5.2 (from Fable 5.1):** swap to `claude-fable-5-2` → if your code builds `messages` itself, test for history edits even if Fable 5.1 never returned the error (older accounts weren't checked; 5.2 checks every account) and make the history append-only → expect every model except Mythos 5.2 to drop 5.2's thinking blocks on a router or fallback switch (Fable 5.1 and Opus 5.5 included) → move `computer_20251124` to `computer_toolset_20260801` (except on Bedrock) → set an advisor's `model` to `claude-fable-5-2` / `claude-mythos-5-2`, in new conversations → pin MCP connector tool lists → check the new, separate rate limit → re-run evals with an effort sweep from `high` → apply `claude-fable.md`, *Prompting Fable 5.2* (review delegation lines, prompt-visible token budgets, think-less lines, hard style rules, accumulated cautions; add the *Finishing work* block (`claude-fable.md`) only if it stops early) → re-price: $8 / $40, cache reads $0.20, fast mode now available.
+
+**To Fable 5.2 (from Opus 5.5):** adaptive thinking and the forced-`tool_choice` 400 carry over. What changes: **30-day retention is required by default** (an org running Opus 5.5 under ZDR gets 400 on every request until a workspace has retention, unless Anthropic authorizes ZDR or AWS's eligible-customer ZDR on Bedrock applies); the prefix check covers every account (Opus 5.5 checks only newer ones), and an unpinned MCP connector tool list that changes between requests counts as an edit on 5.2 but not on Opus 5.5; Opus 5.5 can't read 5.2's thinking blocks, so a fallback to it loses the reasoning; the default effort is `high`, not `medium` - set it explicitly; fast mode only where 5.2 has it (not Managed Agents); CMEK orgs lose structured outputs; $8 / $40 vs $4 / $20 (cache reads $0.20 on both); a separate rate limit with lower token limits per tier; no Priority Tier; the advisor pairing (an Opus 5.5 or Fable 5.1 advisor → 400 under a 5.2 executor). Remove Opus 5.5-era think-less lines ("answer directly without deliberating") - they don't work at `medium`+ on 5.2. Remove Opus 5.5's "treat that answer as done" lines unless you've tested that 5.2 still flags its own mistakes.
+
+**To Fable 5.1 (from Fable 5):** swap to `claude-fable-5-1` → remove forced `tool_choice` → append-only history (same drill) → re-tune effort from `high`, and use per-message effort instead of one level per session → add the per-turn batching nudge in agent loops → set `display:"updates"` and delete "hold findings for the end" lines → audit anti-formatting rules → re-run evals. Retention (30-day) and refusal handling carry over; cache reads are 75% cheaper.

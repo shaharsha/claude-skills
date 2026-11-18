@@ -1,11 +1,12 @@
 # Claude Opus - per-model prompting
 
-Opus 5.5 (current), Opus 5, and Opus 4.8 (previous generations). **Read `claude.md` first, in full**: the API contract, effort and thinking, caching, tools and the migration checklists there apply to every model, and this file assumes them. Step 0b in SKILL.md sends you here.
+Opus 5.5 (current), Opus 5, and Opus 4.8 (previous generations). **Read `claude.md` first, in full**: the API contract, effort and thinking, caching and tools there apply to every model, and this file assumes them. Step 0b in SKILL.md sends you here.
 
 ## Contents
 - Prompting Opus 5.5
 - Opus 5 patterns (still the baseline for Opus 5.5)
 - Opus 4.8 specifics (previous generation)
+- Migration checklists (to Opus 5.5, and the older Opus steps)
 
 ## Prompting Opus 5.5
 
@@ -40,3 +41,17 @@ Still served at $5/$25; prefer Opus 5.5. What differs if you're still on it:
 - Effort ladder: **`xhigh` for coding/agentic**, `high` minimum for intelligence-sensitive work, `medium`/`low` only where measured. Respects effort strictly at the low end (under-thinking risk at `low`; raise effort rather than prompting around it, or add *"This task involves multi-step reasoning. Think carefully through the problem before responding."*). When thinking is off, the model is sensitive to the word "think" - prefer "consider", "evaluate".
 - Calibrates response length to task complexity; spawns fewer subagents; better progress updates than 4.7 (remove forced-status scaffolding).
 - Minimum cacheable prompt 1,024 tokens; Microsoft Foundry caps its context at 200k.
+
+## Migration checklists
+
+The shared API contract these steps refer to is in `claude.md`. Moving to Fable 5.2 from Opus 5.5 is in `claude-fable.md`.
+
+**To Opus 5.5 (from Opus 5):** swap to `claude-opus-5-5` → remove every `thinking:{type:"disabled"|"enabled"}` and **set `effort` explicitly** (default is now `medium`; run a sweep - `medium`/`low` often match Opus 5 at `high`) → replace `tool_choice` `any`/`tool` with `auto` + strict tools / Structured Outputs + a prompt line saying when the tool applies → read content blocks by `type` and pass thinking blocks back unmodified → make the history **append-only** (move inject-and-delete reminders to turn-scoped system messages, `system`/`tools` edits to mid-conversation messages; test with `drop_block` + `input_transformations`) → if you render narration between tool calls, set `display:"updates"` → move computer use to `computer_toolset_20260801` (Claude API / Google Cloud) → handle `stop_reason:"refusal"` including the new `bio` and `reasoning_extraction` categories → bump `max_tokens` (thinking counts) → re-baseline cost/latency → then prune: thinking-disabled mitigations, "write out your reasoning" instructions, chat "think carefully" lines, vision workarounds, and Opus 5 concision scaffolding if no longer needed.
+
+**To Opus 5.5 from Opus 4.8 or earlier:** first do the Opus 4.8 → Opus 5 migration (below), minus the option of disabling thinking; then the list above. From 4.7 or earlier, also the 4.7 steps.
+
+**Opus 4.8 → Opus 5 (previous generation):** thinking is on by default (`disabled` valid only at effort ≤`high`); remove verification/double-check instructions, forced subagent counts, and "don't think" rules; add concision; ZDR-eligible; milder cyber classifiers.
+
+**Opus 4.7 → 4.8:** no breaking changes; re-baseline effort (levels recalibrated), switch history rebuilds to mid-conversation system messages, read `stop_details`, remove forced status updates.
+
+**From Opus 4.6 or earlier** (breaking): remove `temperature`/`top_p`/`top_k`; replace `budget_tokens` thinking with adaptive + `effort`; bump `max_tokens` for the newer tokenizer (~1-1.35×); replace prefill; state instruction scope explicitly where you relied on generalization.

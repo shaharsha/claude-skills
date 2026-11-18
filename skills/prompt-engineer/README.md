@@ -73,9 +73,11 @@ There's nothing to run — this is a reference library the agent loads. It fires
 | Path | What |
 |---|---|
 | `SKILL.md` | The universal layer: system-prompt structure, altitude, tool descriptions, context engineering, anti-patterns, eval design |
-| `references/claude.md` | Claude / Anthropic — current models, the 5.5-generation API contract (incl. Fable 5.2's breaking changes), effort defaults, sampling, thinking, caching, migration checklists |
-| `references/claude-opus.md`, `claude-fable.md`, `claude-sonnet-haiku.md` | Per-model Claude prompting: Opus 5.5 / 5 / 4.8; Fable 5.2 / 5.1 and Mythos; Sonnet 5.5, Haiku 5.5, Sonnet 5, Haiku 4.5 (read with `claude.md`) |
-| `references/gpt.md` | GPT / OpenAI incl. Azure and AWS Bedrock — verbosity, reasoning effort, host contracts, the "stop doing" list |
+| `references/claude.md` | Claude / Anthropic — current models, the 5.5-generation API contract (incl. Fable 5.2's breaking changes), effort defaults, sampling, thinking, caching |
+| `references/claude-opus.md`, `claude-fable.md`, `claude-sonnet-haiku.md` | Per-model Claude prompting: Opus 5.5 / 5 / 4.8; Fable 5.2 / 5.1 and Mythos; Sonnet 5.5, Haiku 5.5, Sonnet 5, Haiku 4.5, each with its migration checklists (read with `claude.md`) |
+| `references/claude-cost.md` | Anthropic's measured cost playbook for Claude: caching, prompt audits, effort sweeps, budgets, output shape, advisor and orchestrator (read with `claude.md`) |
+| `references/gpt.md` | GPT / OpenAI — current models, GPT-6.2's API changes and prompting, verbosity, reasoning effort, caching, the "stop doing" list |
+| `references/gpt-6.md`, `gpt-hosts.md` | Prompting the GPT-6 models before 6.2 (Terra, Luna, GPT-6 Astra, earlier Sol); host request contracts on Azure / Microsoft Foundry and AWS Bedrock (read with `gpt.md`) |
 | `references/gemini.md` | Gemini / Google incl. Vertex — Gemini 4 Carbon, Argon and Hydrogen, the Decisions API, long decode, thought signatures (incl. Gemini 4 prefix binding), caching, thinking cost |
 | `references/kimi.md` | Kimi / Moonshot — K3.1 Pro's always-on thinking, fixed sampling, `reasoning_content` replay, MFJS tool schemas, host differences |
 | `references/grok.md` | Grok / xAI — Grok 4.7's encrypted reasoning, sampling values (required on xAI's API, rejected by Bedrock Converse), server-side tools (web/X search), caching keys, compaction |
