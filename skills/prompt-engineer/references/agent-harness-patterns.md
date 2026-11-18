@@ -37,7 +37,7 @@ Rules marked *field* come from one team that ran 8-10 coding agents in parallel 
 
   Otherwise do the work and say which reading you took. A question asked after the work costs the user no extra round trip, and gives them something concrete to react to. This rule is about understanding the request. Whether an action needs approval is a separate question (*Approvals and authority*).
 - **Finish what isn't blocked, then lead with what is.** When one part needs the user, do the other parts and open the reply with the blocker, so it gets answered first.
-- **Ask for approval of a result, not an intention** (SKILL.md, *Agentic Systems*, the stopping bullet; OpenAI's GPT-6 guidance in `gpt.md`).
+- **Ask for approval of a result, not an intention** (SKILL.md, *Agentic Systems*, the stopping bullet; OpenAI's GPT-6 guidance in `gpt-6.md`).
 - **State your default for a bare request.** Vendors publish opposite defaults:
   - OpenAI's suggested prompt for GPT-6 treats "can you…" and "I want to…" as instructions to do the work.
   - Google's open-source Gemini CLI assumes every request is an inquiry unless it explicitly asks for action. An inquiry gets an answer or a proposal and no changes.
