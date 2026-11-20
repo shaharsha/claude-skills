@@ -43,12 +43,13 @@ Read the mode's file before you write the prompt. Images work in any mode: add
 
 ## Pick the engine
 
-Gemini figures in this skill dated before 2026-11-17 were measured on Argon, the
-default until then.
+This skill's own measurements that name no model were taken on the default of
+their date: for Gemini, Argon before 2026-11-17; for Codex, GPT-6.1 Sol from 2026-09-29,
+GPT-6 Astra from 2026-09-23 and GPT-5.6 Sol before (undated ones too).
 
 | | `codex` (default) | `gemini` |
 |---|---|---|
-| Model | gpt-6.1-sol | gemini-4-hydrogen (`--model gemini-4-carbon` for the hardest plans), through agy (`--backend opencode` as a fallback) |
+| Model | gpt-6.2-sol (`--model gpt-6.1-sol` for security-heavy work it refuses) | gemini-4-hydrogen (`--model gemini-4-carbon` for the hardest plans), through agy (`--backend opencode` as a fallback) |
 | Read-only | OS sandbox | a default-deny tool gate: it reads only the project, and `pair-fs` (list, find, grep, git) is the only command |
 | Web search | built in | Google search; with `--web live`, `pair-fetch` reads pages |
 | Images | yes | yes |

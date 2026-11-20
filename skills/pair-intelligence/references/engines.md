@@ -2,16 +2,29 @@
 
 `scripts/pair.sh` already handles everything below. Read this when a run fails,
 when you need a flag the script does not expose, or when you call a CLI by hand.
-Gemini measurements dated before 2026-11-17, or undated, were taken on Gemini 4
-Argon, the default until then; the default is now Hydrogen, and most have not been re-run
+Gemini measurements that name no model, dated before 2026-11-17 or undated, were
+taken on Gemini 4 Argon, the default until then; the default is now Hydrogen, and most have not been re-run
 on it.
+This skill's own Codex measurements that name no model, dated before 2026-11-21
+or undated, were taken on an earlier default: GPT-6.1 Sol from 2026-09-29,
+GPT-6 Astra from 2026-09-23, GPT-5.6 Sol before. It is now GPT-6.2 Sol.
 
 ## Codex (OpenAI)
 
-Tested on codex-cli 0.165.0, signed in with a ChatGPT plan.
+Tested on codex-cli 0.171.0, signed in with a ChatGPT plan.
 
-- **Model:** `gpt-6.1-sol` by default. Efforts `low` to `max`. Usage counts against
-  the ChatGPT plan's limits, not an API bill.
+- **Model:** `gpt-6.2-sol` by default since 2026-11-21 (GPT-6.1 Sol before).
+  Efforts `low` to `max`. Usage counts against the ChatGPT plan's limits, not an
+  API bill. On Artificial Analysis (Intelligence Index v5) 6.2 Sol scores 54.9
+  at `high` for $0.56 a task, against 6.1 Sol's 50.3 for $0.59, at the same
+  $2 / $10 per 1M; 57.3 at `max` for $1.01. A ChatGPT login needs codex-cli
+  0.166 or later for it: 0.165 answered "The 'gpt-6.2-sol' model is not
+  supported when using Codex with a ChatGPT account". Two things OpenAI reports
+  for the 6.2 models: they leave a known obstacle out of the final answer more
+  often (Codex's own developer prompt, which `codex exec` uses, reduces that,
+  so still check the answer shows it reached the material), and they refuse a
+  wider set of dual-use security work; for a review that probes exploits or
+  attack chains, `--model gpt-6.1-sol`.
 - **What the script passes on every call:** `--json` (events on stdout), `-o` (the
   final answer), `--skip-git-repo-check`, the sandbox as both `-s` and
   `-c sandbox_mode=...` (with denied folders, a permission profile and no `-s`), `approval_policy="never"`, `web_search`

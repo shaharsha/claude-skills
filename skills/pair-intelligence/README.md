@@ -31,7 +31,7 @@ good at all of them and the review-only tooling was in the way every time.
 Any mode can add a live browser with `--domains`: a review can open the running
 page and compare it with the code, and the model stays read-only.
 
-Engines: **Codex** (`gpt-6.1-sol`, OS sandbox, web search) and **Gemini**
+Engines: **Codex** (`gpt-6.2-sol`, OS sandbox, web search) and **Gemini**
 (`gemini-4-hydrogen` through the Antigravity CLI `agy`, behind a default-deny tool
 gate, with Google search; OpenCode as a fallback). Ask one, or both in parallel
 for two independent reads.
@@ -62,7 +62,8 @@ ln -s "$PWD/claude-skills/skills/pair-intelligence" ~/.claude/skills/pair-intell
 
 ## Requirements
 
-- **Codex:** the `codex` CLI on `$PATH`, signed in (tested on 0.165.0).
+- **Codex:** the `codex` CLI on `$PATH`, signed in (tested on 0.171.0). With a
+  ChatGPT login, the default `gpt-6.2-sol` needs 0.166 or later.
 - **Gemini:** the Antigravity CLI `agy` (tested on 1.4.12) with either Vertex AI
   credentials (an `~/.config/gcloud/adc-agy-<project>.json` copy of your ADC file
   whose `quota_project_id` is the project to bill) or a Gemini API key in

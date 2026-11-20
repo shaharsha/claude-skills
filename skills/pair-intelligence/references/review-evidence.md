@@ -1,7 +1,10 @@
 # Review evidence and troubleshooting
 
-Gemini measurements here dated before 2026-11-17, or undated, were taken on Gemini
-4 Argon, the default until then (it is now Hydrogen) and not yet re-run on it.
+Gemini measurements here that name no model, dated before 2026-11-17 or undated,
+were taken on Gemini 4 Argon, the default until then (it is now Hydrogen) and not yet re-run on it.
+This skill's own Codex measurements that name no model, dated before 2026-11-21
+or undated, were taken on an earlier default: GPT-6.1 Sol from 2026-09-29,
+GPT-6 Astra from 2026-09-23, GPT-5.6 Sol before. It is now GPT-6.2 Sol.
 
 Everyday reviews need only `references/review.md`. Read this when a round looks
 wrong, when you call `codex` by hand, or when rounds are the evidence for a merge
@@ -42,7 +45,7 @@ too, exactly as inside the script:
 
 ```bash
 cat /abs/path/prompt.md | codex exec -s read-only \
-  -c 'tools.web_search=true' -m gpt-6.1-sol -c model_reasoning_effort=high \
+  -c 'web_search="live"' -m gpt-6.2-sol -c model_reasoning_effort=high \
   -i shot1.png -i shot2.png > review.md 2>review.log
 ```
 
