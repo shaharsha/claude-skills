@@ -20,7 +20,7 @@ set -euo pipefail
 {
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-MODEL="${CODEX_REVIEW_MODEL:-gpt-6.1-sol}"
+MODEL="${CODEX_REVIEW_MODEL:-gpt-6.2-sol}"
 EFFORT="${CODEX_REVIEW_EFFORT:-high}"
 REPO=""
 PROMPT_FILE=""
@@ -47,7 +47,7 @@ usage: codex_review.sh --repo <dir> --prompt-file <file> [options]
   --resume <label|uuid> Continue an existing reviewer instead of starting fresh.
                         Keeps its context; inherits its read-only sandbox.
   --label <name>        Slug for the output filenames (default: review)
-  --model <id>          Codex model (default: gpt-6.1-sol)
+  --model <id>          Codex model (default: gpt-6.2-sol)
   --effort <level>      low|medium|high|xhigh|max (default: high)
   --schema <file>       JSON Schema for the result (default: bundled findings schema)
   --no-schema           Ask for prose instead of structured findings

@@ -380,9 +380,13 @@ fi
 
 # --- per-mode defaults ----------------------------------------------------------
 # Effort: a consult or brainstorm at Codex's high effort took 2-5 minutes a round
-# in the baseline runs; review keeps high because that is where depth pays.
+# in the baseline runs (GPT-6.1 Sol, 2026-11-01); review keeps high because that
+# is where depth pays.
 if [[ "$ENGINE" == "codex" ]]; then
-  : "${MODEL:=gpt-6.1-sol}"
+  # GPT-6.2 Sol (2026-11-17): 54.9 on Artificial Analysis v5 at high for $0.56 a
+  # task, against 6.1 Sol's 50.3 for $0.59, at the same price per token. A
+  # ChatGPT login needs codex-cli 0.166 or later for it (0.165 refused it).
+  : "${MODEL:=gpt-6.2-sol}"
   case "$MODE" in
     review)   : "${EFFORT:=high}";   : "${WEB:=off}" ;;
     consult)  : "${EFFORT:=medium}"; : "${WEB:=cached}" ;;

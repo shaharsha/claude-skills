@@ -1,7 +1,10 @@
 # Review prompt templates
 
-Gemini measurements here dated before 2026-11-17, or undated, were taken on Gemini
-4 Argon, the default until then (it is now Hydrogen) and not yet re-run on it.
+Gemini measurements here that name no model, dated before 2026-11-17 or undated,
+were taken on Gemini 4 Argon, the default until then (it is now Hydrogen) and not yet re-run on it.
+This skill's own Codex measurements that name no model, dated before 2026-11-21
+or undated, were taken on an earlier default: GPT-6.1 Sol from 2026-09-29,
+GPT-6 Astra from 2026-09-23, GPT-5.6 Sol before. It is now GPT-6.2 Sol.
 
 Fill the `{{PLACEHOLDERS}}`, write the result to a file, pass it as `--prompt-file`.
 The templates are headed `## Mode: code`, `small change`, `fix delta`, `plan`,

@@ -1,7 +1,10 @@
 # Review mode
 
-Gemini measurements here dated before 2026-11-17, or undated, were taken on
-Gemini 4 Argon, the default until then (it is now Hydrogen).
+Gemini measurements here that name no model, dated before 2026-11-17 or undated,
+were taken on Gemini 4 Argon, the default until then (it is now Hydrogen).
+This skill's own Codex measurements that name no model, dated before 2026-11-21
+or undated, were taken on an earlier default: GPT-6.1 Sol from 2026-09-29,
+GPT-6 Astra from 2026-09-23, GPT-5.6 Sol before. It is now GPT-6.2 Sol.
 
 Hand the work to a different model, in a clean context, with no write access,
 and get back a list of claims. Then check each claim against the source and
@@ -187,7 +190,7 @@ scripts/codex_review.sh \
   --name refund-api
 ```
 
-Defaults to `gpt-6.1-sol` at `high` effort, read-only sandbox, structured
+Defaults to `gpt-6.2-sol` at `high` effort, read-only sandbox, structured
 output. `--model`, `--effort` (`low`|`medium`|`high`|`xhigh`|`max`), and
 `--no-schema` override. It writes `.codex-review/<stamp>-<label>.{json,md,log}`
 in the repo, or under `--out-dir`, and prints `REVIEW_MD=<path>` last. `--repo`
