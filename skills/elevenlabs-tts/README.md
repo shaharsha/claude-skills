@@ -61,10 +61,9 @@ ln -s "$PWD/claude-skills/skills/elevenlabs-tts" ~/.claude/skills/elevenlabs-tts
 ## Quick start
 
 ```bash
-# a spoken briefing: one clip named after its topic, checked, ready to send
+# a spoken briefing: one clip named after its topic, ready to send (no transcription check for a known voice)
 #   brief.json: {"rollout-plan-2026-11-06-en": "[Warm, conversational tone] Three decisions today…"}
 python3 scripts/generate_tts.py brief.json VOICE_ID audio/ --prefix ""
-python3 scripts/check_tags_spoken.py brief.json audio/
 
 # several sections joined into one file, with each section's start time printed
 python3 scripts/join_clips.py plan.mp3 audio/part*.mp3 --gap 0.8
@@ -81,7 +80,8 @@ python3 scripts/generate_tts.py scripts.json VOICE_ID audio/ --stability 0.5 [--
 # 3. timings for subtitles / synced visuals
 python3 scripts/align_narration.py scripts.json audio/ alignment/
 
-# a cast of voices with one-word lines: trim to the spoken word, then level the set
+# a cast of voices with one-word lines: check the raw lines, trim to the spoken word, then level the set
+python3 scripts/check_tags_spoken.py lines.json raw/ --prefix ""
 python3 scripts/trim_to_words.py lines.json raw/ trimmed/ --prefix ""
 python3 scripts/level_clips.py trimmed/ leveled/ --target -18     # or: level_clips.py raw/ --report (swallowed words)
 
@@ -124,7 +124,8 @@ python3 scripts/generate_music_and_sfx.py sounds.json audio/
 | `\[[a-zA-Z ]+\]` tag stripper | Alignment drift after the first v4 tag | Strip anything in brackets |
 | Regenerating a few clips at new settings | Audible seam | Regenerate the set; the manifest warns |
 | Size-based error check | Short real clips rejected and re-billed | Check mp3 magic bytes |
-| "It sounds right" | You can't hear | Leak check + durations + a human ear-check |
+| "It sounds right" | You can't hear | Length and pace, the transcription check where it pays, a human ear-check |
+| The transcription check on every briefing | Most of a minute per clip, nothing found | Keep it for a new voice, a cast or an odd pace |
 | ffmpeg from an agent shell without `-nostdin` | Hangs on stdin | `-nostdin`; the bundled scripts set it |
 | A briefing left in `/tmp` as a path | The listener can't play it | Save beside the work; send it as a playable file |
 

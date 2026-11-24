@@ -84,9 +84,8 @@ The most common request: one listener, one file, explaining a plan, a thread, a 
    ```bash
    # brief.json: {"rollout-plan-2026-11-05-he": "[Warm, conversational tone] ..."}
    python3 <this-skill-dir>/scripts/generate_tts.py brief.json VOICE_ID audio/ --prefix "" --language-code he
-   python3 <this-skill-dir>/scripts/check_tags_spoken.py brief.json audio/ --language-code he
    ```
-   The generator prints the clip's length. If it overshoots the target, cut the script, don't speed the audio. Longer than one request, or several sections: generate one clip per section, then join them, which prints each section's start time for the written list:
+   The generator prints the clip's length and pace. If it overshoots the target, cut the script, don't speed the audio. A briefing in a voice from the Voices table goes out after this one command, with no transcription check: on 205 narration clips checked in autumn 2026 it found nothing real, and it adds most of a minute to every clip. Two things bring `check_tags_spoken.py` back (Generate, step 3): the voice is not in the Voices table, or the printed pace is far from that voice's usual (Josh in Hebrew runs 12 to 14 characters a second; under 10 or over 17 is far). Longer than one request, or several sections: generate one clip per section, then join them, which prints each section's start time for the written list:
    ```bash
    python3 <this-skill-dir>/scripts/join_clips.py plan-2026-11-05-he.mp3 audio/part*.mp3 --gap 0.8
    ```
@@ -111,11 +110,21 @@ python3 <this-skill-dir>/scripts/generate_tts.py scripts.json VOICE_ID audio/ \
 - `--stitch` generates sequentially, passing earlier clips' request IDs (`previous_request_ids`) for smoother prosody across boundaries — worth it when clips play back-to-back with no gap (audiobook chapters, one continuous voiceover split for length). Separate slides with a pause between them don't need it.
 - Regenerating one clip later: same settings, and `--seed` if you used one, so it sits closer to its neighbours.
 
-**3. Check what a machine can check:**
+**3. Check what a machine can check, where it pays:**
 ```bash
 python3 <this-skill-dir>/scripts/check_tags_spoken.py scripts.json audio/ [--only 03 07] [--language-code he]
 ```
-`check_tags_spoken.py` flags a clip when a tag word was spoken (`LEAK`), the transcript runs longer than the tag-free script (`EXTRA` — catches a tag spoken in another script's letters), or it runs much shorter even allowing for numbers written as digits (`SHORT` — a dropped sentence). It finds the clips through the manifest, so a `--prefix` given to the generator need not be repeated. It transcribes with Scribe v3 (`scribe_v3`); on 10 Hebrew v4 clips it gave the same ratios as v2 (0.97-1.05, checked 2026-11-13), and `--model scribe_v2` stays available to compare. It costs speech-to-text credits ($0.20 per audio hour); run it on the sample and on a few batch clips, not on every draft. For transcription itself (meetings, talks, subtitles), use elevenlabs-stt.
+
+| What you are making | Run the check on |
+|---|---|
+| A deck or another batch | the sample clip, and later any clip marked `PACE?` |
+| A voice not in the Voices table, or a register new for that voice (whispering, shouting, heavy tags) | one sample clip |
+| A cast, or one-word lines | every raw line: here it catches a word said twice or a line spoken in another language (16 of 56 lines on one cast) |
+| One briefing in a voice from the Voices table | nothing: the length and pace the generator prints are the check |
+
+Each run is a second API round trip of 30 to 60 seconds a clip, so outside these rows it costs time and finds nothing.
+
+`check_tags_spoken.py` flags a clip when a tag word was spoken (`LEAK`), the transcript runs longer than the tag-free script (`EXTRA` — catches a tag spoken in another script's letters), or it runs much shorter even allowing for numbers written as digits (`SHORT` — a dropped sentence). It finds the clips through the manifest, so a `--prefix` given to the generator need not be repeated. It transcribes with Scribe v3 (`scribe_v3`); on 10 Hebrew v4 clips it gave the same ratios as v2 (0.97-1.05, checked 2026-11-13), and `--model scribe_v2` stays available to compare. It costs speech-to-text credits ($0.20 per audio hour). For transcription itself (meetings, talks, subtitles), use elevenlabs-stt.
 
 Reading its numbers: "words said/scripted" sits around 0.92-1.01 on a clean clip. A number-heavy script reads lower (0.75-0.87 on Hebrew decks) because Scribe writes spoken numbers as digits; the script allows for that before calling a clip `SHORT`, and prints a note instead. To confirm nothing was dropped, compare the clip's pace with its neighbours (the generator prints it).
 
@@ -160,7 +169,7 @@ Character work (one voice per character, many short lines) breaks things narrati
 
 - **One model and one stability for the whole cast** (0.4 suited a large comedic cast), with `language_code` set.
 - **Then stop for the ear check.** Generate one sample line per voice, send the files to the human, and wait for their verdict on every voice *before* generating the real lines. A voice that is wrong for its character found after the batch costs the whole batch again.
-- **One-word lines come back dirty**: the word said twice, a sigh or laugh from the tag, a long lead-in. Trim each clip to its spoken words with forced alignment, then level the set:
+- **One-word lines come back dirty**: the word said twice, a sigh or laugh from the tag, a long lead-in. Run `check_tags_spoken.py` on the raw lines first (it flags a repeat or a line spoken in the wrong language), regenerate those, then trim each clip to its spoken words with forced alignment, then level the set:
   ```bash
   python3 <this-skill-dir>/scripts/trim_to_words.py lines.json raw/ trimmed/ --prefix ""
   python3 <this-skill-dir>/scripts/level_clips.py trimmed/ leveled/ --target -18
@@ -217,7 +226,8 @@ Characters (tags included) are billed: `eleven_v4` is $0.08 per 1K at API list p
 | Regenerating a few clips at new settings | Audible seam between clips | Regenerate the whole set; the manifest warns |
 | Size-based "error response" check | Short real clips rejected and paid for again | Check mp3 magic bytes (bundled script) |
 | Firing all requests at once | 429s on most | `--concurrency 4` with backoff |
-| "It sounds right" | You can't hear | Leak check + durations; ear-check by the human |
+| "It sounds right" | You can't hear | Length and pace from the generator, the transcription check where step 3 calls for it; ear-check by the human |
+| The transcription check on every briefing | Most of a minute and a second round trip per clip; nothing real found in 205 narration clips | Skip it for a voice in the Voices table; run it for a new voice, a cast or an odd pace |
 | Professional clone used without v4 fine-tuning | Lower fidelity | Fine-tune it on v4, re-sample (instant clones need nothing) |
 | Picking the key out of a notes file by line number | The file changes; the wrong key or none, silently | `ELEVENLABS_API_KEY` or `~/.config/elevenlabs/api_key`; else match the line's label |
 | ffmpeg run from an agent's shell without `-nostdin` | It waits on stdin and the command never returns | `-nostdin` (or `< /dev/null`); the bundled scripts do it |
