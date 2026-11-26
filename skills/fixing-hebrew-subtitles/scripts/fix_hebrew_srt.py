@@ -186,6 +186,9 @@ def main():
             why.append("unbalanced brackets")
         if any(re.match(r"^[0-9A-Za-z]", plain(l)) and HEB.search(l) for l in body):
             why.append("line starts with a digit or Latin letter")
+        if order == "visual" and any(not HEB.search(plain(l)) and re.search(r"\d", plain(l))
+                                     and re.search(r"^[.,?!…-]|[.,?!…-]$", split_line(plain(l))[1]) for l in body):
+            why.append("number-only line, direction unsure")
         if order == "visual" and MULTI_NUM.search(txt):
             why.append("multi-part number (score, phone, date, time): parts may be in reverse order")
         if why:
