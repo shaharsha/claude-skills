@@ -78,7 +78,8 @@ There's nothing to run — this is a reference library the agent loads. It fires
 | `references/claude-cost.md` | Anthropic's measured cost playbook for Claude: caching, prompt audits, effort sweeps, budgets, output shape, advisor and orchestrator (read with `claude.md`) |
 | `references/gpt.md` | GPT / OpenAI — current models, GPT-6.2's API changes and prompting, verbosity, reasoning effort, caching, the "stop doing" list |
 | `references/gpt-6.md`, `gpt-hosts.md` | Prompting the GPT-6 models before 6.2 (Terra, Luna, GPT-6 Astra, earlier Sol); host request contracts on Azure / Microsoft Foundry and AWS Bedrock (read with `gpt.md`) |
-| `references/gemini.md` | Gemini / Google incl. Vertex — Gemini 4 Carbon, Argon and Hydrogen, the Decisions API, long decode, thought signatures (incl. Gemini 4 prefix binding), caching, thinking cost |
+| `references/gemini.md` | Gemini / Google incl. Vertex - current models, the Interactions API, thinking levels and cost, thought signatures (incl. Gemini 4 prefix binding), long decode, the Decisions API, caching |
+| `references/gemini-4.md` | Per-model prompting and migration checklists for Gemini 4 Carbon, Neon, Hydrogen and Argon (read with `gemini.md`) |
 | `references/kimi.md` | Kimi / Moonshot — K3.1 Pro's always-on thinking, fixed sampling, `reasoning_content` replay, MFJS tool schemas, host differences |
 | `references/grok.md` | Grok / xAI — Grok 4.7's encrypted reasoning, sampling values (required on xAI's API, rejected by Bedrock Converse), server-side tools (web/X search), caching keys, compaction |
 | `references/langgraph.md` | LangGraph / LangChain / Deep Agents: layers, context primitives, typed HITL, skill-bound tools, harness profiles, MCP, subagent context modes, eval practice |
@@ -86,6 +87,7 @@ There's nothing to run — this is a reference library the agent loads. It fires
 | `references/agent-harness-patterns.md` | The harness around an agent: act or ask, approvals and who can give them, async work, mid-task steering, compaction prompts, modes, delegation, goal loops, one prompt for several models, helper prompts |
 | `references/use-cases.md` | Task playbooks: coding and code review, app builders, research/RAG, data/SQL, extraction, multimodal, chat assistants, document agents, voice agents, browser agents |
 | `references/model-selection.md` | Intelligence, cost per task, agent rankings, false-premise detection, routing math |
+| `references/model-selection-refresh.md` | How to re-pull the Artificial Analysis data behind `model-selection.md` (maintainers) |
 | `templates/` | Reusable prompt scaffolds |
 | `SOURCES.md` | For maintainers: where each rule in the agent-harness guidance came from (official docs, vendors' open-source prompts, and public collections of extracted prompts), with commits and line references. The research record behind it is in [`docs/research/prompt-engineer/`](../../docs/research/prompt-engineer/) |
 

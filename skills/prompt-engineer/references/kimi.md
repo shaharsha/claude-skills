@@ -56,11 +56,11 @@ K3.1 Pro, K3.1 Pro Highspeed, and K3 share one contract on the Moonshot API ("`k
 
 ## Effort and thinking cost
 
-The default `max` is the slowest, most token-hungry setting: on Artificial Analysis's Intelligence Index v5 K3.1 Pro uses ~72K output tokens per task (v5 median ~59K), runs at ~31 output tok/s end to end (reasoning tokens and the first-token wait included), and takes ~158 s on average to the first answer token and ~38 minutes per index task (Nov 18 2026), and reviewers report it thinks about twice as much as K3 (`[unverified]`). Moonshot's own Terminal-Bench 4.0 chart puts `max` at ≈65.7% for ≈$5.2/task and `high` at ≈53% for ≈$4.2/task - effort buys real accuracy on long coding, but not cheaply. Practice:
+The default `max` is the slowest, most token-hungry setting: on Artificial Analysis's Intelligence Index v5 K3.1 Pro uses ~72K output tokens per task (v5 median ~59K), runs at ~36 output tok/s end to end (reasoning tokens and the first-token wait included), and takes ~159 s on average to the first answer token and ~33 minutes per index task (Nov 26 2026), and reviewers report it thinks about twice as much as K3 (`[unverified]`). Moonshot's own Terminal-Bench 4.0 chart puts `max` at ≈65.7% for ≈$5.2/task and `high` at ≈53% for ≈$4.2/task - effort buys real accuracy on long coding, but not cheaply. Practice:
 
 - **Pick the effort per workload before the session starts and keep it.** "Switching levels invalidates prefix-cache hits. Decide on the `effort` level before the conversation starts and avoid switching it mid-session." (Effort is injected as a natural-language "thinking-effort" message after the tool declarations, which is why changing it breaks the prefix.)
 - Sweep `low` / `high` / `max` on your own evals (SKILL.md Section C); for chat, extraction, and routine tool use start at `low` or `high`, keep `max` for long-horizon coding and hard research.
-- Effort doesn't fix false-premise acceptance: on BullshitBench, K3 at minimal reasoning pushed back more often (58% clear pushback) than at xhigh (44%). K3.1 Pro's Nov 18 2026 runs went the other way (50% at the benchmark's `none` setting, 60% at `max`), so test it. Prompt for premise checks explicitly.
+- Effort alone doesn't fix false-premise acceptance: on BullshitBench (CSV read Nov 26 2026) K3 gave clear pushback on 72% of prompts at minimal reasoning and 74% at xhigh, and K3.1 Pro on 50% at the benchmark's `none` setting and 60% at `max`. Prompt for premise checks explicitly.
 - A low score on a benchmark is often truncation, not a wrong answer ("Kimi K3 thinks a lot before it answers" - vLLM): Moonshot's benchmarking guide sets `max_tokens` to 128K for reasoning and 256K for coding evals.
 
 ## Prompting K3 / K3.1 Pro
