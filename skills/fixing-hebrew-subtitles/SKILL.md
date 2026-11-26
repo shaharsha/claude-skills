@@ -49,6 +49,8 @@ Python 3.10+ standard library. Checking against a video needs `ffmpeg` and `ffsu
      29-30 should read "29-30 במאי", and the score of the race just shown decides "1-2" vs "2-1". A file
      can reverse some and not others. With no frame to look at, use what you know (real dates) and say so.
      Reverse the groups by hand; leave single numbers alone.
+   - A line of only numbers is flipped like the rest, but some were typed in normal order (numbers show
+     the same on old players). Read it in context: a number dictated and cut off ends with "...".
    - Lines that already ended with punctuation in a visual-order file were probably typed in normal order.
      If the sentence runs into the next cue, its `...` belongs at the end.
    - A cue it says looks like release info ("BluRay / BRRip ... FPS"): run again with `--drop-cue N` added;
