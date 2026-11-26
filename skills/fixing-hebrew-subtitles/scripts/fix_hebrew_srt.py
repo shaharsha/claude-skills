@@ -17,9 +17,9 @@ What it does, in order:
      Players can misdetect Hebrew without the BOM (cp1255 shows as gibberish); without the marks, lines ending in numbers, English or
      punctuation render in the wrong order.
   6. Verifies: same cue count (minus drops), text with marks stripped equals the fixed text, no Hebrew
-     line starts with sentence punctuation. Then prints cues a person should read: unbalanced brackets or
-     a Hebrew line starting with a digit or Latin letter (the visual format scrambles those), and likely
-     release-info cues near the start or end.
+     line starts with sentence punctuation. Then prints cues a person should read: unbalanced brackets, a
+     Hebrew line starting with a digit or Latin letter, multi-part numbers (scores "1-2", phone numbers,
+     dates, times) in a visual-order file, and likely release-info cues near the start or end.
 """
 import argparse
 import re
@@ -85,9 +85,18 @@ def detect_order(cues):
     return ("visual" if starts > ends else "logical"), starts, ends
 
 
+def rtl_line(core):
+    """Hebrew text, or a line of only numbers and punctuation (".750", "...07700"): in a visual-order file
+    both had their punctuation typed at the wrong end. Lines with Latin letters are left alone."""
+    return bool(HEB.search(core) or (re.search(r"\d", core) and not re.search("[A-Za-z]", core)))
+
+
+MULTI_NUM = re.compile(r"\d+\s*[-/:]\s*\d+")
+
+
 def flip(l):
     pre, core, post = split_line(l)
-    if not HEB.search(core):
+    if not rtl_line(core):
         return l
     lead = leading_pun(core)
     rest = core[len(lead):]
@@ -154,7 +163,7 @@ def main():
         problems.append("text changed while writing")
     # A logical line may open with "..." (a sentence continuing from the last cue); a lone . , ? ! may not.
     bad_start = [(i, l) for i, (_, _, body) in enumerate(fixed, 1) for l in body
-                 if HEB.search(l) and re.match(r"^[.,?!:;]", split_line(l)[1].lstrip("‎‏"))
+                 if rtl_line(split_line(l)[1]) and re.match(r"^[.,?!:;]", split_line(l)[1].lstrip("‎‏"))
                  and not re.match(r"^(\.\.\.|…)", split_line(l)[1].lstrip("‎‏"))]
     if bad_start:
         problems.append(f"{len(bad_start)} Hebrew line(s) still start with punctuation, e.g. cue {bad_start[0][0]}: "
@@ -170,18 +179,20 @@ def main():
     suspects = []
     for i, (_, _, body) in enumerate(fixed, 1):
         txt = "\n".join(plain(l) for l in body)
-        if not HEB.search(txt):
+        if not (HEB.search(txt) or re.search(r"\d", txt)):
             continue
         why = []
         if txt.count("(") != txt.count(")") or txt.count("[") != txt.count("]"):
             why.append("unbalanced brackets")
         if any(re.match(r"^[0-9A-Za-z]", plain(l)) and HEB.search(l) for l in body):
             why.append("line starts with a digit or Latin letter")
+        if order == "visual" and MULTI_NUM.search(txt):
+            why.append("multi-part number (score, phone, date, time): parts may be in reverse order")
         if why:
             suspects.append((i, ", ".join(why), " / ".join(body)))
     if suspects:
-        print(f"\ncheck by eye ({len(suspects)} cues; visual-order files can scramble brackets and numbers "
-              f"at a line's edge. Read each; fix wrong ones by hand in {a.out}):")
+        print(f"\ncheck by eye ({len(suspects)} cues; visual-order files can scramble brackets and numbers. "
+              f"Read each; fix wrong ones by hand in {a.out}, keeping the RLE/PDF marks):")
         for i, why, t in suspects[:40]:
             print(f"  cue {i} [{why}]: {t}")
         if len(suspects) > 40:

@@ -26,8 +26,11 @@ Verdict per file:
 The video's audio is extracted once to $HEBREW_SUBS_CACHE (default /tmp/hebrew-subs-sync)/<id>.wav (mono 16 kHz, first audio track), so
 a second run is fast. Needs ffmpeg and ffsubsync (pip install ffsubsync).
 """
+import atexit
 import hashlib
 import os
+import shutil
+import tempfile
 import re
 import subprocess
 import sys
@@ -45,19 +48,31 @@ def duration(path):
     return float(r.stdout.strip())
 
 
+def _extract(cmd_in, out):
+    """Run ffmpeg into a per-process temp name, then move it into place atomically. Two sessions can share
+    the cache: each writes its own .part file, and whichever finishes last replaces an identical file."""
+    part = f"{out}.{os.getpid()}.part.wav"
+    r = run(["ffmpeg", "-nostdin", "-v", "error", "-y", *cmd_in, part])
+    if r.returncode:
+        sys.exit(f"ffmpeg failed: {r.stderr[-500:]}")
+    os.makedirs(os.path.dirname(out), exist_ok=True)  # in case the cache was cleaned meanwhile
+    os.replace(part, out)
+
+
+def cache_dir_for(src):
+    key = hashlib.md5(f"{os.path.abspath(src)}:{os.path.getsize(src)}".encode()).hexdigest()[:10]
+    d = os.path.join(CACHE, key)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
 def audio_for(src):
     if src.lower().endswith(".wav"):
         return src
-    os.makedirs(CACHE, exist_ok=True)
-    key = hashlib.md5(f"{os.path.abspath(src)}:{os.path.getsize(src)}".encode()).hexdigest()[:10]
-    wav = os.path.join(CACHE, f"{key}.wav")
+    wav = os.path.join(cache_dir_for(src), "audio.wav")
     if not os.path.exists(wav):
         print(f"extracting audio once to {wav} (a few minutes for a big file)...", flush=True)
-        r = run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-i", src, "-map", "0:a:0", "-ac", "1", "-ar", "16000",
-                 wav + ".part.wav"])
-        if r.returncode:
-            sys.exit(f"ffmpeg failed: {r.stderr[-500:]}")
-        os.rename(wav + ".part.wav", wav)
+        _extract(["-i", src, "-map", "0:a:0", "-ac", "1", "-ar", "16000"], wav)
     return wav
 
 
@@ -175,14 +190,15 @@ def main():
         return reference_mode(sys.argv[1], sys.argv[2:])
     wav = audio_for(sys.argv[1])
     total = duration(wav)
-    work = os.path.join(CACHE, "work")
-    os.makedirs(work, exist_ok=True)
+    work = tempfile.mkdtemp(prefix="sync_check-")  # per run: parallel sessions never share work files
+    atexit.register(shutil.rmtree, work, True)
     quarters = [(total * q / 4, total * (q + 1) / 4) for q in range(4)]
+    qdir = cache_dir_for(wav)  # quarter clips live in the cache, never next to the user's own files
     qwavs = []
     for q, (a, b) in enumerate(quarters):
-        qw = f"{wav[:-4]}.q{q + 1}.wav"
+        qw = os.path.join(qdir, f"q{q + 1}.wav")
         if not os.path.exists(qw):
-            run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", f"{a:.3f}", "-t", f"{b - a:.3f}", "-i", wav, qw])
+            _extract(["-ss", f"{a:.3f}", "-t", f"{b - a:.3f}", "-i", wav], qw)
         qwavs.append(qw)
 
     print(f"audio: {total / 60:.1f} min\n")

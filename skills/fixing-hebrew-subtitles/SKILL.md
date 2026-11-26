@@ -41,12 +41,21 @@ Python 3.10+ standard library. Checking against a video needs `ffmpeg` and `ffsu
    `verify: OK`; if not, it names the line: fix that line by hand in the output, keeping the RLE/PDF marks
    around the text.
 3. **Read what it lists.**
-   - "check by eye" cues: unbalanced brackets, or lines starting with a digit or Latin letter. The visual
-     format scrambles those; fix any that read wrong.
+   - "check by eye" cues: unbalanced brackets, lines starting with a digit or Latin letter, and
+     multi-part numbers. The visual format scrambles those; fix any that read wrong, keeping the RLE/PDF
+     marks around the text.
+   - Multi-part numbers in a visual-order file (a score "1-2", a date range "30-29 במאי", a phone number
+     in dash-separated groups) often have their parts in reverse order. Read each against the scene: May
+     29-30 should read "29-30 במאי", and the score of the race just shown decides "1-2" vs "2-1". A file
+     can reverse some and not others. With no frame to look at, use what you know (real dates) and say so.
+     Reverse the groups by hand; leave single numbers alone.
    - Lines that already ended with punctuation in a visual-order file were probably typed in normal order.
      If the sentence runs into the next cue, its `...` belongs at the end.
    - A cue it says looks like release info ("BluRay / BRRip ... FPS"): run again with `--drop-cue N` added;
      it overwrites the output. Keep real credits (translator, syncer, "צפייה נעימה").
+   - Order: settle `--shift` and `--drop-cue` first, because each run overwrites the output; make hand
+     edits last, in the final file. `--drop-cue` takes source cue numbers; the check-by-eye list uses the
+     output's numbers, which are the ones you edit.
 4. **Name and place it.** `<video file name without extension>.heb.srt` next to the video (or
    `Title (Year).heb.srt` in a Kodi movie folder). `.heb`, not `.he`.
 5. **Report:** the shift, the sync verdict (or that it is unverified), and anything fixed by hand.
