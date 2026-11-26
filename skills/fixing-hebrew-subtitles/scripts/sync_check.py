@@ -20,10 +20,10 @@ For each subtitle:
 
 Verdict per file:
   "fits as-is"            |offset| < 0.3 s and every quarter within 0.5 s
-  "fits with shift"       one constant offset fixes it; pass it to prepare_for_kodi.py --shift
+  "fits with shift"       one constant offset fixes it; pass it to fix_hebrew_srt.py --shift
   "drifts / cut differs"  quarters disagree: different cut or frame rate; a constant shift is not enough
 
-The video's audio is extracted once to /tmp/ktuvit-sync/<name>.wav (mono 16 kHz, first audio track), so
+The video's audio is extracted once to $HEBREW_SUBS_CACHE (default /tmp/hebrew-subs-sync)/<id>.wav (mono 16 kHz, first audio track), so
 a second run is fast. Needs ffmpeg and ffsubsync (pip install ffsubsync).
 """
 import hashlib
@@ -32,7 +32,7 @@ import re
 import subprocess
 import sys
 
-CACHE = "/tmp/ktuvit-sync"
+CACHE = os.environ.get("HEBREW_SUBS_CACHE", "/tmp/hebrew-subs-sync")  # audio mode only; reference mode writes nothing
 TS = re.compile(r"(\d+):(\d+):(\d+)[,.](\d+)\s*-->\s*(\d+):(\d+):(\d+)[,.](\d+)")
 
 
@@ -162,7 +162,7 @@ def reference_mode(ref_path, cands):
         elif abs(off) < 0.3:
             verdict = "same timing as the reference"
         else:
-            verdict = f"same timing after a shift: prepare_for_kodi.py --shift {off:.1f}"
+            verdict = f"same timing after a shift: fix_hebrew_srt.py --shift {off:.1f}"
         qtxt = "  ".join(f"Q{i + 1} {'n/a' if r is None else f'{r:+.1f}'}" for i, r in enumerate(res))
         print(f"{name}\n  cues {len(cues)}, last ends {ts(cues[-1][1])}\n  offset {off:+.1f} s, overlap {overlap:.0%}"
               f"\n  residual per quarter after shift: {qtxt}\n  -> {verdict}\n")
@@ -217,7 +217,7 @@ def main():
         elif abs(off) < 0.3:
             verdict = "fits as-is"
         else:
-            verdict = f"fits with shift: prepare_for_kodi.py --shift {off:.2f}"
+            verdict = f"fits with shift: fix_hebrew_srt.py --shift {off:.2f}"
         qtxt = "  ".join(f"Q{i + 1} {'n/a' if r is None else f'{r:+.2f}'}" for i, r in enumerate(res))
         print(f"{name}\n  cues {len(cues)}, last ends {ts(cues[-1][1])}\n  offset {off:+.2f} s, scale {scale:.3f}"
               f"\n  residual per quarter after shift: {qtxt}\n  -> {verdict}\n")

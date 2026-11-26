@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
-"""Make a downloaded Hebrew .srt ready for Kodi, without touching its words or (unless asked) its timing.
+"""Make a Hebrew .srt display correctly in Kodi, VLC, Plex and TV players, without touching its words or
+(unless asked) its timing. Works on a subtitle from any source.
 
-  python3 -I prepare_for_kodi.py in.srt "Movie (2013).heb.srt" [--shift 5.04] [--order auto|visual|logical]
+  python3 -I fix_hebrew_srt.py in.srt "Movie (2013).heb.srt" [--shift 5.04] [--order auto|visual|logical]
                                  [--drop-cue N ...]
 
 What it does, in order:
   1. Decodes cp1255 / UTF-8 (with or without BOM) and drops any old RTL control marks.
   2. Fixes punctuation order. Most ktuvit files are "visual": punctuation was typed at the wrong end so
-     it looked right on players without RTL support (".טקסט", "...הפכפכים", "טקסט-"). In Kodi that shows
-     reversed. --order auto (default) detects it; the fix swaps each line's leading and trailing
+     it looked right on players without RTL support (".טקסט", "...הפכפכים", "טקסט-"). A player with
+     proper RTL support (Kodi, VLC, Plex) shows that reversed. --order auto (default) detects it; the fix swaps each line's leading and trailing
      punctuation runs. A file that is already logical is left alone.
   3. Shifts every cue by --shift seconds (positive = later), if given. Get the number from sync_check.py.
   4. Drops cues by number (--drop-cue), e.g. a release-info header cue ("BluRay ... FPS ... אורך").
   5. Writes UTF-8 with BOM, each Hebrew line wrapped in RLE (U+202B) ... PDF (U+202C), after leading tags.
-     Kodi can misdetect Hebrew without the BOM; without the marks, lines ending in numbers, English or
+     Players can misdetect Hebrew without the BOM (cp1255 shows as gibberish); without the marks, lines ending in numbers, English or
      punctuation render in the wrong order.
   6. Verifies: same cue count (minus drops), text with marks stripped equals the fixed text, no Hebrew
      line starts with sentence punctuation. Then prints cues a person should read: unbalanced brackets or
