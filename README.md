@@ -1,6 +1,6 @@
 # claude-skills
 
-Agent skills by [@shaharsha](https://github.com/shaharsha) - 26 production-grade [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills) that work in Claude Code, claude.ai, Codex, Cursor, and any other harness that reads the SKILL.md format.
+Agent skills by [@shaharsha](https://github.com/shaharsha) - 27 production-grade [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills) that work in Claude Code, claude.ai, Codex, Cursor, and any other harness that reads the SKILL.md format.
 
 MIT licensed. Built day-to-day; battle-tested in real projects.
 
@@ -15,14 +15,14 @@ MIT licensed. Built day-to-day; battle-tested in real projects.
 /plugin install shaharsha-skills@shaharsha-skills
 ```
 
-This installs all 26 skills as one plugin. Or pick a subset:
+This installs all 27 skills as one plugin. Or pick a subset:
 
 ```bash
 /plugin install documents-and-decks@shaharsha-skills    # gdoc-sync + gslides-sync + gsheets + presentation-generator + elevenlabs-tts + elevenlabs-stt + narrating-pptx + deck-to-video + self-presenting-decks + writing-plainly
 /plugin install brand-and-visuals@shaharsha-skills      # brand-system + brand-assets + image-generation + excalidraw-diagrams
 /plugin install engineering-decisions@shaharsha-skills  # tech-design-doc + pair-intelligence
 /plugin install building-agents@shaharsha-skills        # prompt-engineer + writing-project-instructions + reviving-sessions
-/plugin install utilities@shaharsha-skills              # namecheap-domains + office-render + viewing-videos + proton-pass + tavily-extract
+/plugin install utilities@shaharsha-skills              # namecheap-domains + office-render + viewing-videos + proton-pass + tavily-extract + downloading-ktuvit-subtitles
 /plugin install video-production@shaharsha-skills       # generating-video-clips + producing-animated-episodes
 ```
 
@@ -33,7 +33,7 @@ Or install one skill by its name:
 ```
 
 <details>
-<summary>The install line for each of the 26 skills</summary>
+<summary>The install line for each of the 27 skills</summary>
 
 ```bash
 /plugin install gdoc-sync@shaharsha-skills
@@ -58,6 +58,7 @@ Or install one skill by its name:
 /plugin install proton-pass@shaharsha-skills
 /plugin install excalidraw-diagrams@shaharsha-skills
 /plugin install tavily-extract@shaharsha-skills
+/plugin install downloading-ktuvit-subtitles@shaharsha-skills
 /plugin install pair-intelligence@shaharsha-skills
 /plugin install reviving-sessions@shaharsha-skills
 /plugin install generating-video-clips@shaharsha-skills
@@ -130,6 +131,7 @@ Each links to its own README — what it does, why it exists, install, and the g
 | [viewing-videos](skills/viewing-videos) | How an agent sees a video: the fewest ffmpeg frames that answer the question, triaged on a contact sheet. |
 | [proton-pass](skills/proton-pass) | Credentials and secrets from the CLI via Proton Pass, with never-print-secrets guardrails. |
 | [tavily-extract](skills/tavily-extract) | Fetch the JS-rendered SPAs and 403-blocked hosts a normal fetcher can't, and flag soft 404s. |
+| [downloading-ktuvit-subtitles](skills/downloading-ktuvit-subtitles) | Hebrew subtitles from ktuvit.me: pick by translator and release, check the fit against the video, and fix punctuation, encoding and RTL for Kodi. |
 
 ### Video production
 
