@@ -6,12 +6,12 @@
   },
   "metadata": {
     "description": "Agent skills by Shahar Shavit for Claude Code, Codex, Cursor, and other Agent-Skills-compatible harnesses",
-    "version": "1.19.0"
+    "version": "1.20.0"
   },
   "plugins": [
     {
       "name": "shaharsha-skills",
-      "description": "All 26 agent skills - gdoc-sync, gslides-sync, gsheets, presentation-generator, elevenlabs-tts, elevenlabs-stt, narrating-pptx, deck-to-video, self-presenting-decks, writing-plainly, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-instructions, tech-design-doc, namecheap-domains, office-render, viewing-videos, proton-pass, excalidraw-diagrams, tavily-extract, pair-intelligence, reviving-sessions, generating-video-clips, producing-animated-episodes",
+      "description": "All 27 agent skills - gdoc-sync, gslides-sync, gsheets, presentation-generator, elevenlabs-tts, elevenlabs-stt, narrating-pptx, deck-to-video, self-presenting-decks, writing-plainly, brand-system, brand-assets, image-generation, prompt-engineer, writing-project-instructions, tech-design-doc, namecheap-domains, office-render, viewing-videos, proton-pass, excalidraw-diagrams, tavily-extract, pair-intelligence, reviving-sessions, generating-video-clips, producing-animated-episodes, downloading-ktuvit-subtitles",
       "source": "./",
       "strict": false,
       "skills": [
@@ -40,7 +40,8 @@
         "./skills/pair-intelligence",
         "./skills/reviving-sessions",
         "./skills/generating-video-clips",
-        "./skills/producing-animated-episodes"
+        "./skills/producing-animated-episodes",
+        "./skills/downloading-ktuvit-subtitles"
       ]
     },
     {
@@ -96,7 +97,7 @@
     },
     {
       "name": "utilities",
-      "description": "Domain availability via Namecheap API; rendering Microsoft Office files (.docx/.pptx/.xlsx) to PDF/images via the real Office apps on macOS; viewing video files (mp4/mov) by extracting the fewest frames that answer the question; managing credentials and secrets via the Proton Pass CLI (pass-cli); plus fetching JavaScript-rendered or bot-blocked web pages that WebFetch can't, via the Tavily Extract API",
+      "description": "Domain availability via Namecheap API; rendering Microsoft Office files (.docx/.pptx/.xlsx) to PDF/images via the real Office apps on macOS; viewing video files (mp4/mov) by extracting the fewest frames that answer the question; managing credentials and secrets via the Proton Pass CLI (pass-cli); plus fetching JavaScript-rendered or bot-blocked web pages that WebFetch can't, via the Tavily Extract API; plus picking, syncing and Kodi-preparing Hebrew subtitles from ktuvit.me",
       "source": "./",
       "strict": false,
       "skills": [
@@ -104,7 +105,8 @@
         "./skills/office-render",
         "./skills/viewing-videos",
         "./skills/proton-pass",
-        "./skills/tavily-extract"
+        "./skills/tavily-extract",
+        "./skills/downloading-ktuvit-subtitles"
       ]
     },
     {
@@ -349,6 +351,15 @@
       "strict": false,
       "skills": [
         "./skills/producing-animated-episodes"
+      ]
+    },
+    {
+      "name": "downloading-ktuvit-subtitles",
+      "description": "Only the downloading-ktuvit-subtitles skill. Hebrew subtitles from ktuvit.me: pick by translator and release, check the fit against the video (or the exact-release sub), and fix punctuation, encoding and RTL for Kodi.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/downloading-ktuvit-subtitles"
       ]
     }
   ]
